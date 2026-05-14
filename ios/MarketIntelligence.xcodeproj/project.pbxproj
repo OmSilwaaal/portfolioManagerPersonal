@@ -1,0 +1,56 @@
+// !$*UTF8*$!
+// =============================================================================
+// project.pbxproj — PLACEHOLDER
+// =============================================================================
+//
+// This is a placeholder file. To set up the real Xcode project, follow these
+// steps:
+//
+//  1. Open Xcode (14.0 or later).
+//  2. Choose File > New > Project.
+//  3. Select "App" under the iOS tab and click Next.
+//  4. Fill in:
+//       Product Name:         MarketIntelligence
+//       Team:                 (your Apple Developer account)
+//       Organization ID:      com.yourname (or your bundle prefix)
+//       Bundle Identifier:    com.yourname.MarketIntelligence
+//       Interface:            SwiftUI
+//       Language:             Swift
+//       Storage:              None (we use UserDefaults; SwiftData can be
+//                             added later)
+//  5. Save the project at:
+//       C:\Users\poper\OneDrive\Documents\application_trading\ios\
+//     This will create MarketIntelligence.xcodeproj alongside the
+//     MarketIntelligence/ source folder.
+//
+//  6. Delete the auto-generated ContentView.swift that Xcode creates.
+//
+//  7. In Xcode, right-click the MarketIntelligence group in the Project
+//     Navigator and choose "Add Files to MarketIntelligence...".
+//     Add ALL .swift files from:
+//       ios/MarketIntelligence/
+//     preserving the folder structure (Config/, Models/, Services/,
+//     ViewModels/, Views/ and its sub-folders).
+//
+//  8. In the project's Build Settings:
+//       - iOS Deployment Target: 16.0
+//       - Swift Language Version: Swift 5
+//
+//  9. In the project's "Signing & Capabilities":
+//       - Add "Push Notifications" capability (for UNUserNotificationCenter)
+//
+// 10. Build & run on a simulator running iOS 16 or later.
+//
+// NOTE: The Charts framework is a system framework — no SPM package needed.
+//       It ships with Xcode 14+ / iOS 16+.
+//
+// =============================================================================
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+	};
+	rootObject = "";
+}

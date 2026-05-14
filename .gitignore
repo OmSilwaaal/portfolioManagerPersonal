@@ -1,0 +1,37 @@
+# Environment files — NEVER commit these
+.env
+*.env
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+web/node_modules/
+backend/node_modules/
+
+# Database
+*.sqlite
+*.db
+
+# Build outputs
+web/dist/
+web/.vite/
+
+# Logs
+npm-debug.log*
+*.log
+
+# iOS build artifacts
+ios/**/DerivedData/
+ios/**/.build/
+ios/**/*.xcuserdata
+ios/**/*.xcworkspace/xcuserdata
+ios/**/Pods/
+ios/**/*.ipa
+ios/**/*.dSYM.zip
+
+# OS
+.DS_Store
+**/.DS_Store
+Thumbs.db
+desktop.ini
