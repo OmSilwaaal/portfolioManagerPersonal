@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { setPreferences, setOnboardingComplete } from '../../store/preferencesSlice'
 import { useSavePreferencesMutation } from '../../api/preferencesApi'
+import { supabase } from '../../utils/supabase/client'
+import { useAuth } from '../../contexts/AuthContext'
 import QuizQuestion from './QuizQuestion'
 import WatchlistBuilder from './WatchlistBuilder'
 
@@ -75,25 +77,64 @@ const QUESTIONS = [
   },
 ]
 
-function SignUpScreen({ onContinue }) {
+// ─── Sign-up screen ───────────────────────────────────────────────────────────
+
+function SignUpScreen({ onNameStored }) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [error, setError] = useState('')
+  const [sent, setSent] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
 
   const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)
   const canSubmit = name.trim().length > 0 && isValidEmail(email)
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!name.trim()) { setError('Please enter your name.'); return }
-    if (!isValidEmail(email)) { setError('Please enter a valid email address.'); return }
+    if (!canSubmit) return
     setError('')
-    onContinue(name.trim(), email.trim().toLowerCase())
+    setSubmitting(true)
+
+    const { error: sbError } = await supabase.auth.signInWithOtp({
+      email: email.trim().toLowerCase(),
+      options: {
+        data: { display_name: name.trim() },
+        emailRedirectTo: `${window.location.origin}/onboarding`,
+      },
+    })
+
+    setSubmitting(false)
+
+    if (sbError) {
+      setError(sbError.message)
+      return
+    }
+
+    onNameStored(name.trim(), email.trim().toLowerCase())
+    setSent(true)
+  }
+
+  if (sent) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] flex flex-col items-center justify-center px-6 text-center">
+        <div className="w-14 h-14 rounded-full bg-[#3b82f6]/10 border border-[#3b82f6]/30 flex items-center justify-center mb-6">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+            <polyline points="22,6 12,13 2,6"/>
+          </svg>
+        </div>
+        <h2 className="text-2xl font-bold text-white mb-2">Check your email</h2>
+        <p className="text-[#6b7280] text-sm max-w-xs">
+          We sent a magic link to <span className="text-[#a1a1aa]">{email}</span>.
+          Click it to continue — no password needed.
+        </p>
+        <p className="text-[#4a4a4a] text-xs mt-6">Didn't get it? Check your spam folder.</p>
+      </div>
+    )
   }
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] flex flex-col items-center justify-center px-6">
-      {/* Logo */}
       <div className="flex items-center gap-2 mb-12">
         <div className="w-8 h-8 bg-[#3b82f6] rounded-lg flex items-center justify-center">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -133,20 +174,18 @@ function SignUpScreen({ onContinue }) {
             />
           </div>
 
-          {error && (
-            <p className="text-red-400 text-xs">{error}</p>
-          )}
+          {error && <p className="text-red-400 text-xs">{error}</p>}
 
           <button
             type="submit"
-            disabled={!canSubmit}
+            disabled={!canSubmit || submitting}
             className={`w-full py-3 rounded-lg font-semibold text-sm transition-all mt-2 ${
-              canSubmit
+              canSubmit && !submitting
                 ? 'bg-[#3b82f6] text-white hover:bg-[#2563eb]'
                 : 'bg-[#1a1a1a] text-[#3a3a3a] cursor-not-allowed'
             }`}
           >
-            Continue →
+            {submitting ? 'Sending...' : 'Continue →'}
           </button>
         </form>
 
@@ -163,13 +202,16 @@ function SignUpScreen({ onContinue }) {
   )
 }
 
+// ─── Main container ───────────────────────────────────────────────────────────
+
 export default function QuizContainer() {
   const navigate = useNavigate()
   const dispatch = useDispatch()
+  const { user } = useAuth()
   const sessionId = useSelector((state) => state.preferences.sessionId)
   const [savePreferences] = useSavePreferencesMutation()
 
-  // -1 = sign-up screen, 0+ = quiz questions
+  // -1 = sign-up, 0+ = quiz question index
   const [stage, setStage] = useState(-1)
   const [current, setCurrent] = useState(0)
   const [answers, setAnswers] = useState({
@@ -183,9 +225,20 @@ export default function QuizContainer() {
   const [transitioning, setTransitioning] = useState(false)
   const [building, setBuilding] = useState(false)
 
-  const handleSignUp = (displayName, email) => {
+  // When Supabase auth fires (user clicked magic link), advance to quiz
+  useEffect(() => {
+    if (user && stage === -1) {
+      const displayName = user.user_metadata?.display_name ?? null
+      const email = user.email ?? null
+      if (displayName || email) {
+        dispatch(setPreferences({ displayName, email }))
+      }
+      setStage(0)
+    }
+  }, [user, stage, dispatch])
+
+  const handleNameStored = (displayName, email) => {
     dispatch(setPreferences({ displayName, email }))
-    setStage(0)
   }
 
   const q = QUESTIONS[current]
@@ -242,7 +295,7 @@ export default function QuizContainer() {
   }
 
   if (stage === -1) {
-    return <SignUpScreen onContinue={handleSignUp} />
+    return <SignUpScreen onNameStored={handleNameStored} />
   }
 
   if (building) {
@@ -259,7 +312,6 @@ export default function QuizContainer() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] flex flex-col">
-      {/* Header: Back + Progress */}
       <div className="flex items-center justify-between px-6 pt-6">
         <button
           onClick={handleBack}
@@ -282,7 +334,6 @@ export default function QuizContainer() {
         <div className="w-10" />
       </div>
 
-      {/* Question area */}
       <div
         className={`flex-1 flex flex-col items-center justify-center px-6 transition-opacity duration-200 ${
           transitioning ? 'opacity-0' : 'opacity-100'
@@ -304,7 +355,6 @@ export default function QuizContainer() {
         )}
       </div>
 
-      {/* Continue button */}
       <div className="px-6 pb-10 flex justify-center">
         <button
           onClick={handleContinue}
