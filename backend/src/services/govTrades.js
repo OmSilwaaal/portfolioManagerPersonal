@@ -4,8 +4,8 @@ const crypto = require('crypto');
 
 const cache = new NodeCache({ stdTTL: 3600 }); // 60 minutes
 const CACHE_KEY = 'gov_trades_all';
-const SOURCE_URL =
-  'https://senate-stock-watcher-data.s3-us-west-2.amazonaws.com/aggregate/all_transactions.json';
+const SENATE_URL = 'https://senate-stock-watcher-data.s3-us-west-2.amazonaws.com/aggregate/all_transactions.json';
+const HOUSE_URL  = 'https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json';
 
 function computeUrgency(disclosureLagDays, amountRange, transactionType) {
   const highAmounts = ['$50,001', '$100,001', '$250,001', '$500,001', '$1,000,001', '$5,000,001'];
@@ -74,9 +74,19 @@ function normalizeTransaction(raw) {
 }
 
 async function fetchAndCache() {
-  const resp = await axios.get(SOURCE_URL, { timeout: 15000 });
-  const raw = Array.isArray(resp.data) ? resp.data : [];
-  const normalized = raw
+  const [senateResp, houseResp] = await Promise.allSettled([
+    axios.get(SENATE_URL, { timeout: 15000 }),
+    axios.get(HOUSE_URL,  { timeout: 15000 }),
+  ]);
+
+  const senateRaw = senateResp.status === 'fulfilled' && Array.isArray(senateResp.value.data)
+    ? senateResp.value.data
+    : [];
+  const houseRaw = houseResp.status === 'fulfilled' && Array.isArray(houseResp.value.data)
+    ? houseResp.value.data.map((r) => ({ ...r, chamber: 'House' }))
+    : [];
+
+  const normalized = [...senateRaw, ...houseRaw]
     .filter((r) => r && (r.ticker || r.asset_description))
     .map(normalizeTransaction)
     .filter((t) => t.ticker && t.ticker !== 'N/A');
