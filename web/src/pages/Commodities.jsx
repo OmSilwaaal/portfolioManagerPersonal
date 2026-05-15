@@ -1,50 +1,103 @@
+import { useState } from 'react'
+import { Link } from 'react-router-dom'
+import { useDispatch, useSelector } from 'react-redux'
 import { useGetCommoditiesQuery } from '../api/commoditiesApi'
-import PaywallBlur from '../components/shared/PaywallBlur'
+import { addStock } from '../store/watchlistSlice'
 
-function CommodityCard({ commodity, isLocked }) {
-  const { commodity: name, symbol, price, unit, changePercent, macroContext } = commodity
+const SECTORS = ['All', 'Energy', 'Metals', 'Agriculture']
+
+function typeBadgeClass(isPositive) {
+  return isPositive ? 'text-green-400 bg-green-400/10' : 'text-red-400 bg-red-400/10'
+}
+
+function CommodityCard({ commodity }) {
+  const dispatch = useDispatch()
+  const watchlistStocks = useSelector((state) => state.watchlist.stocks)
+
+  const {
+    commodity: name,
+    symbol,
+    price,
+    unit,
+    changePercent,
+    macroContext,
+    sector = 'Other',
+    relatedETFs = [],
+  } = commodity
+
   const isPositive = changePercent >= 0
+  const isTracked = watchlistStocks.includes(symbol?.toUpperCase())
+
+  const handleTrack = () => {
+    if (!isTracked) {
+      dispatch(addStock(symbol))
+    }
+  }
 
   return (
-    <PaywallBlur isLocked={isLocked} tier="pro" reason="Unlock all commodity data">
-      <div className="bg-[#141414] border border-[#2a2a2a] rounded-lg p-4 hover:border-[#3a3a3a] transition-colors h-full">
-        <div className="flex items-start justify-between mb-3">
-          <div>
-            <p className="text-white font-semibold text-sm">{name}</p>
-            <p className="text-gray-500 text-xs mt-0.5">{symbol}</p>
-          </div>
-          <span
-            className={`text-xs font-semibold px-2 py-0.5 rounded ${
-              isPositive ? 'text-green-400 bg-green-400/10' : 'text-red-400 bg-red-400/10'
-            }`}
-          >
-            {isPositive ? '+' : ''}
-            {typeof changePercent === 'number' ? changePercent.toFixed(2) : changePercent}%
-          </span>
-        </div>
-
-        <div className="mb-3">
-          <p className="text-white text-2xl font-bold">
-            {typeof price === 'number'
-              ? price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-              : price}
-          </p>
-          <p className="text-gray-500 text-xs">{unit}</p>
-        </div>
-
-        {macroContext && (
-          <p className="text-gray-400 text-xs leading-relaxed border-t border-[#2a2a2a] pt-3">
-            {macroContext}
-          </p>
-        )}
+    <div className="bg-[#141414] border border-[#1f1f1f] rounded-lg p-4 hover:border-[#3a3a3a] transition-colors h-full flex flex-col">
+      <div className="flex items-start justify-between mb-1">
+        <p className="text-white font-semibold text-sm">{name}</p>
+        <button
+          onClick={handleTrack}
+          className={`text-xs font-semibold px-2 py-0.5 rounded border transition-colors shrink-0 ml-2 ${
+            isTracked
+              ? 'text-green-400 bg-green-400/10 border-green-400/20'
+              : 'text-[#a1a1aa] bg-[#1f1f1f] border-[#2a2a2a] hover:text-[#3b82f6] hover:border-[#3b82f6]'
+          }`}
+        >
+          {isTracked ? '✓ Tracked' : '+ Track'}
+        </button>
       </div>
-    </PaywallBlur>
+
+      <div className="flex items-center gap-2 mb-3">
+        <p className="text-[#a1a1aa] text-xs">{symbol} · {sector}</p>
+        <span
+          className={`text-xs font-semibold px-2 py-0.5 rounded ml-auto ${typeBadgeClass(isPositive)}`}
+        >
+          {isPositive ? '+' : ''}
+          {typeof changePercent === 'number' ? changePercent.toFixed(2) : changePercent}%
+        </span>
+      </div>
+
+      <div className="mb-3 border-t border-[#1f1f1f] pt-3">
+        <p className="text-white text-2xl font-bold">
+          {typeof price === 'number'
+            ? price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            : price}
+        </p>
+        <p className="text-[#a1a1aa] text-xs">{unit}</p>
+      </div>
+
+      {macroContext && (
+        <p className="text-[#a1a1aa] text-xs leading-relaxed border-t border-[#1f1f1f] pt-3 mb-3">
+          {macroContext}
+        </p>
+      )}
+
+      {relatedETFs.length > 0 && (
+        <div className="mt-auto border-t border-[#1f1f1f] pt-3">
+          <p className="text-[#a1a1aa] text-xs mb-2">Related ETFs</p>
+          <div className="flex flex-wrap gap-1.5">
+            {relatedETFs.map((etf) => (
+              <Link
+                key={etf}
+                to="/stocks"
+                className="text-xs font-semibold px-2 py-0.5 rounded bg-[#1f1f1f] border border-[#2a2a2a] text-[#a1a1aa] hover:text-[#3b82f6] hover:border-[#3b82f6] transition-colors"
+              >
+                {etf}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
 function SkeletonCard() {
   return (
-    <div className="bg-[#141414] border border-[#2a2a2a] rounded-lg p-4 animate-pulse">
+    <div className="bg-[#141414] border border-[#1f1f1f] rounded-lg p-4 animate-pulse">
       <div className="flex justify-between mb-3">
         <div className="h-4 bg-[#2a2a2a] rounded w-28" />
         <div className="h-4 bg-[#2a2a2a] rounded w-12" />
@@ -58,14 +111,44 @@ function SkeletonCard() {
 
 export default function Commodities() {
   const { data, isLoading, isError } = useGetCommoditiesQuery()
-  const commodities = data?.commodities || []
-  const FREE_LIMIT = 4
+  const [activeSector, setActiveSector] = useState('All')
+
+  const commodities = (data?.commodities || []).map((c) => ({
+    ...c,
+    sector: c.sector || 'Other',
+    relatedETFs: c.relatedETFs || [],
+  }))
+
+  const filtered =
+    activeSector === 'All'
+      ? commodities
+      : commodities.filter((c) => c.sector === activeSector)
+
+  const sectors = activeSector === 'All'
+    ? [...new Set(commodities.map((c) => c.sector))].filter(Boolean)
+    : [activeSector]
 
   return (
     <main className="flex-1 p-5 md:p-8 max-w-5xl mx-auto w-full">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-white">Commodities</h1>
-        <p className="text-gray-400 text-sm mt-1">Live prices with AI macro context</p>
+        <p className="text-[#a1a1aa] text-sm mt-1">Live prices with AI macro context</p>
+      </div>
+
+      <div className="flex flex-wrap gap-2 mb-6">
+        {SECTORS.map((s) => (
+          <button
+            key={s}
+            onClick={() => setActiveSector(s)}
+            className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+              activeSector === s
+                ? 'bg-[#3b82f6] text-white border-[#3b82f6]'
+                : 'bg-[#141414] border border-[#1f1f1f] text-[#a1a1aa] hover:border-[#3b82f6]'
+            }`}
+          >
+            {s}
+          </button>
+        ))}
       </div>
 
       {isError && (
@@ -74,19 +157,53 @@ export default function Commodities() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {isLoading &&
-          [...Array(7)].map((_, i) => <SkeletonCard key={i} />)}
-
-        {!isLoading &&
-          commodities.map((c, i) => (
-            <CommodityCard key={c.symbol} commodity={c} isLocked={i >= FREE_LIMIT} />
+      {isLoading && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[...Array(7)].map((_, i) => (
+            <SkeletonCard key={i} />
           ))}
-      </div>
+        </div>
+      )}
+
+      {!isLoading && !isError && (
+        <>
+          {sectors.map((sector) => {
+            const group = filtered.filter((c) => c.sector === sector)
+            if (group.length === 0) return null
+            return (
+              <div key={sector} className="mb-8">
+                <h2 className="text-xs font-semibold text-[#a1a1aa] uppercase tracking-wider mb-3">
+                  {sector}
+                </h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {group.map((c) => (
+                    <CommodityCard key={c.symbol} commodity={c} />
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+
+          {activeSector === 'All' && commodities.filter((c) => !SECTORS.slice(1).includes(c.sector)).length > 0 && (
+            <div className="mb-8">
+              <h2 className="text-xs font-semibold text-[#a1a1aa] uppercase tracking-wider mb-3">
+                Other
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {commodities
+                  .filter((c) => !SECTORS.slice(1).includes(c.sector))
+                  .map((c) => (
+                    <CommodityCard key={c.symbol} commodity={c} />
+                  ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
 
       {!isLoading && commodities.length === 0 && !isError && (
         <div className="text-center py-12">
-          <p className="text-gray-400 text-sm">No commodity data available.</p>
+          <p className="text-[#a1a1aa] text-sm">No commodity data available.</p>
         </div>
       )}
     </main>

@@ -5,16 +5,21 @@ const cache = new NodeCache({ stdTTL: 3600 }); // 60 minutes
 const BASE_URL = 'https://www.alphavantage.co/query';
 
 const MOCK_COMMODITIES = [
-  { commodity: 'WTI Crude Oil', symbol: 'WTI', price: 78.42, unit: 'USD/barrel', changePercent: -0.8 },
-  { commodity: 'Brent Crude', symbol: 'BRENT', price: 82.15, unit: 'USD/barrel', changePercent: -0.6 },
-  { commodity: 'Gold', symbol: 'GOLD', price: 2345.60, unit: 'USD/troy oz', changePercent: 0.3 },
-  { commodity: 'Silver', symbol: 'SILVER', price: 28.12, unit: 'USD/troy oz', changePercent: 0.5 },
-  { commodity: 'Natural Gas', symbol: 'NATURAL_GAS', price: 2.84, unit: 'USD/MMBtu', changePercent: 1.2 },
-  { commodity: 'Copper', symbol: 'COPPER', price: 4.52, unit: 'USD/lb', changePercent: -0.4 },
-  { commodity: 'Wheat', symbol: 'WHEAT', price: 567.25, unit: 'USd/bu', changePercent: 2.1 },
-  { commodity: 'Corn', symbol: 'CORN', price: 452.75, unit: 'USd/bu', changePercent: -1.1 },
-  { commodity: 'Sugar', symbol: 'SUGAR', price: 22.45, unit: 'USd/lb', changePercent: 0.7 },
-  { commodity: 'Coffee', symbol: 'COFFEE', price: 185.30, unit: 'USd/lb', changePercent: -0.3 },
+  { commodity: 'WTI Crude Oil', symbol: 'WTI', price: 78.42, unit: 'USD/barrel', changePercent: -0.8, sector: 'Energy', relatedETFs: ['USO', 'XLE', 'OIH'] },
+  { commodity: 'Brent Crude', symbol: 'BRENT', price: 82.15, unit: 'USD/barrel', changePercent: -0.6, sector: 'Energy', relatedETFs: ['BNO', 'XLE'] },
+  { commodity: 'Gold', symbol: 'GOLD', price: 2345.60, unit: 'USD/troy oz', changePercent: 0.3, sector: 'Metals', relatedETFs: ['GLD', 'IAU', 'GDX'] },
+  { commodity: 'Silver', symbol: 'SILVER', price: 28.12, unit: 'USD/troy oz', changePercent: 0.5, sector: 'Metals', relatedETFs: ['SLV', 'PSLV'] },
+  { commodity: 'Natural Gas', symbol: 'NATURAL_GAS', price: 2.84, unit: 'USD/MMBtu', changePercent: 1.2, sector: 'Energy', relatedETFs: ['UNG', 'BOIL'] },
+  { commodity: 'Copper', symbol: 'COPPER', price: 4.52, unit: 'USD/lb', changePercent: -0.4, sector: 'Metals', relatedETFs: ['CPER', 'COPX'] },
+  { commodity: 'Wheat', symbol: 'WHEAT', price: 567.25, unit: 'USd/bu', changePercent: 2.1, sector: 'Agriculture', relatedETFs: ['WEAT', 'DBA'] },
+  { commodity: 'Corn', symbol: 'CORN', price: 452.75, unit: 'USd/bu', changePercent: -1.1, sector: 'Agriculture', relatedETFs: ['CORN', 'DBA'] },
+  { commodity: 'Sugar', symbol: 'SUGAR', price: 22.45, unit: 'USd/lb', changePercent: 0.7, sector: 'Agriculture', relatedETFs: ['SGG', 'DBA'] },
+  { commodity: 'Coffee', symbol: 'COFFEE', price: 185.30, unit: 'USd/lb', changePercent: -0.3, sector: 'Agriculture', relatedETFs: ['JO', 'DBA'] },
+  { commodity: 'Platinum', symbol: 'PLATINUM', price: 952.40, unit: 'USD/troy oz', changePercent: -0.2, sector: 'Metals', relatedETFs: ['PPLT'] },
+  { commodity: 'Palladium', symbol: 'PALLADIUM', price: 1124.80, unit: 'USD/troy oz', changePercent: 0.9, sector: 'Metals', relatedETFs: ['PALL'] },
+  { commodity: 'Soybeans', symbol: 'SOYBEANS', price: 1182.50, unit: 'USd/bu', changePercent: -0.5, sector: 'Agriculture', relatedETFs: ['SOYB', 'DBA'] },
+  { commodity: 'Cotton', symbol: 'COTTON', price: 78.35, unit: 'USd/lb', changePercent: 1.4, sector: 'Agriculture', relatedETFs: ['BAL', 'DBA'] },
+  { commodity: 'Cocoa', symbol: 'COCOA', price: 8420.00, unit: 'USD/MT', changePercent: -2.1, sector: 'Agriculture', relatedETFs: ['NIB'] },
 ];
 
 // Maps symbol to Alpha Vantage function parameter
@@ -33,16 +38,16 @@ const SYMBOL_TO_FUNCTION = {
 };
 
 const SYMBOL_META = {
-  WTI: { commodity: 'WTI Crude Oil', unit: 'USD/barrel' },
-  BRENT: { commodity: 'Brent Crude', unit: 'USD/barrel' },
-  NATURAL_GAS: { commodity: 'Natural Gas', unit: 'USD/MMBtu' },
-  COPPER: { commodity: 'Copper', unit: 'USD/lb' },
-  WHEAT: { commodity: 'Wheat', unit: 'USd/bu' },
-  CORN: { commodity: 'Corn', unit: 'USd/bu' },
-  SUGAR: { commodity: 'Sugar', unit: 'USd/lb' },
-  COFFEE: { commodity: 'Coffee', unit: 'USd/lb' },
-  GOLD: { commodity: 'Gold', unit: 'USD/troy oz' },
-  SILVER: { commodity: 'Silver', unit: 'USD/troy oz' },
+  WTI: { commodity: 'WTI Crude Oil', unit: 'USD/barrel', sector: 'Energy', relatedETFs: ['USO', 'XLE', 'OIH'] },
+  BRENT: { commodity: 'Brent Crude', unit: 'USD/barrel', sector: 'Energy', relatedETFs: ['BNO', 'XLE'] },
+  NATURAL_GAS: { commodity: 'Natural Gas', unit: 'USD/MMBtu', sector: 'Energy', relatedETFs: ['UNG', 'BOIL'] },
+  COPPER: { commodity: 'Copper', unit: 'USD/lb', sector: 'Metals', relatedETFs: ['CPER', 'COPX'] },
+  WHEAT: { commodity: 'Wheat', unit: 'USd/bu', sector: 'Agriculture', relatedETFs: ['WEAT', 'DBA'] },
+  CORN: { commodity: 'Corn', unit: 'USd/bu', sector: 'Agriculture', relatedETFs: ['CORN', 'DBA'] },
+  SUGAR: { commodity: 'Sugar', unit: 'USd/lb', sector: 'Agriculture', relatedETFs: ['SGG', 'DBA'] },
+  COFFEE: { commodity: 'Coffee', unit: 'USd/lb', sector: 'Agriculture', relatedETFs: ['JO', 'DBA'] },
+  GOLD: { commodity: 'Gold', unit: 'USD/troy oz', sector: 'Metals', relatedETFs: ['GLD', 'IAU', 'GDX'] },
+  SILVER: { commodity: 'Silver', unit: 'USD/troy oz', sector: 'Metals', relatedETFs: ['SLV', 'PSLV'] },
   ALL_COMMODITIES: { commodity: 'All Commodities Index', unit: 'Index' },
 };
 
@@ -90,6 +95,8 @@ async function getCommodityPrice(commodity) {
       unit: meta.unit,
       changePercent: parseFloat(changePercent.toFixed(2)),
       lastRefreshed: latest.date,
+      sector: meta.sector || null,
+      relatedETFs: meta.relatedETFs || [],
     };
 
     cache.set(cacheKey, result);

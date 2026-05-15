@@ -12,11 +12,14 @@ const alertsRouter = require('./routes/alerts');
 const govTradesRouter = require('./routes/govTrades');
 const commoditiesRouter = require('./routes/commodities');
 const preferencesRouter = require('./routes/preferences');
+const searchRouter = require('./routes/search');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const { sessionMiddleware } = require('./middleware/auth');
 
 // Initialize DB on startup
 require('./db/schema').getDb();
+const { warmCoinList } = require('./services/search');
+warmCoinList();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -58,6 +61,7 @@ app.use('/api/alerts', alertsRouter);
 app.use('/api/gov-trades', govTradesRouter);
 app.use('/api/commodities', commoditiesRouter);
 app.use('/api/preferences', preferencesRouter);
+app.use('/api/search', searchRouter);
 
 // Health check
 app.get('/health', (req, res) => {

@@ -21,6 +21,7 @@ import './api/stocksApi'
 import './api/cryptoApi'
 import './api/feedApi'
 import './api/alertsApi'
+import './api/searchApi'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()

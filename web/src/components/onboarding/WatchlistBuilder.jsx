@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSearchSymbolsQuery } from '../../api/searchApi'
 
 const SUGGESTIONS = {
   Stocks: [
@@ -27,9 +28,42 @@ const SUGGESTIONS = {
   ],
 }
 
+function useDebounce(value, delay) {
+  const [debounced, setDebounced] = useState(value)
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay)
+    return () => clearTimeout(t)
+  }, [value, delay])
+  return debounced
+}
+
+function typeBadge(type) {
+  const t = (type || '').toLowerCase()
+  if (t === 'etf') return 'text-yellow-400 bg-yellow-400/10'
+  if (t === 'crypto') return 'text-[#3b82f6] bg-[#3b82f6]/10'
+  return 'text-[#a1a1aa] bg-[#1f1f1f]'
+}
+
+function typeLabel(type) {
+  const t = (type || '').toLowerCase()
+  if (t === 'etf') return 'ETF'
+  if (t === 'crypto') return 'CRYPTO'
+  return 'STOCK'
+}
+
 export default function WatchlistBuilder({ onUpdate, initialTags = [] }) {
   const [tags, setTags] = useState(initialTags)
   const [input, setInput] = useState('')
+  const debouncedQuery = useDebounce(input.trim(), 350)
+
+  const { data: searchData, isFetching } = useSearchSymbolsQuery(
+    { q: debouncedQuery },
+    { skip: debouncedQuery.length < 2 }
+  )
+
+  const searchResults = searchData?.results || []
+  const showDropdown = debouncedQuery.length >= 2
+  const showGrid = !input.trim()
 
   const addTag = (item) => {
     if (tags.some((t) => t.ticker === item.ticker)) return
@@ -52,26 +86,15 @@ export default function WatchlistBuilder({ onUpdate, initialTags = [] }) {
     }
   }
 
-  const allSuggestions = Object.values(SUGGESTIONS).flat()
-  const filtered = input.trim()
-    ? allSuggestions.filter(
-        (s) =>
-          !tags.some((t) => t.ticker === s.ticker) &&
-          (s.ticker.toLowerCase().includes(input.toLowerCase()) ||
-            s.name.toLowerCase().includes(input.toLowerCase()))
-      )
-    : []
-
   return (
     <div className="w-full max-w-xl">
       <h2 className="text-3xl font-semibold text-white mb-3 text-center">
         Build your watchlist
       </h2>
-      <p className="text-gray-400 text-center mb-6 text-sm">
+      <p className="text-[#a1a1aa] text-center mb-6 text-sm">
         Click suggestions or type a ticker and press Enter
       </p>
 
-      {/* Selected tags */}
       {tags.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-4">
           {tags.map((tag) => (
@@ -91,34 +114,47 @@ export default function WatchlistBuilder({ onUpdate, initialTags = [] }) {
         </div>
       )}
 
-      {/* Search input */}
-      <input
-        type="text"
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder="Search or type a ticker..."
-        className="w-full bg-[#1a1a1a] border border-[#2a2a2a] text-white placeholder-gray-500 rounded-lg px-4 py-3 mb-4 focus:outline-none focus:border-[#3b82f6] text-sm"
-      />
+      <div className="relative mb-4">
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Search or type a ticker..."
+          className="w-full bg-[#1a1a1a] border border-[#2a2a2a] text-white placeholder-gray-500 rounded-lg px-4 py-3 focus:outline-none focus:border-[#3b82f6] text-sm"
+        />
 
-      {/* Autocomplete results */}
-      {filtered.length > 0 && (
-        <div className="mb-4 bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg overflow-hidden">
-          {filtered.slice(0, 6).map((s) => (
-            <button
-              key={s.ticker}
-              onClick={() => addTag(s)}
-              className="w-full text-left px-4 py-2.5 text-sm text-gray-300 hover:bg-[#2a2a2a] hover:text-white border-b border-[#2a2a2a] last:border-b-0"
-            >
-              <span className="font-semibold text-white">{s.ticker}</span>
-              <span className="text-gray-400 ml-2">{s.name}</span>
-            </button>
-          ))}
-        </div>
-      )}
+        {showDropdown && (
+          <div className="absolute top-full left-0 right-0 z-10 mt-1 bg-[#141414] border border-[#1f1f1f] rounded-lg overflow-hidden shadow-lg">
+            {isFetching && (
+              <div className="flex items-center justify-center py-4">
+                <div className="w-4 h-4 border-2 border-[#3b82f6] border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
 
-      {/* Category suggestion grids */}
-      {!input.trim() &&
+            {!isFetching && searchResults.length === 0 && (
+              <p className="text-[#a1a1aa] text-sm text-center py-4">No results</p>
+            )}
+
+            {!isFetching &&
+              searchResults.map((s) => (
+                <button
+                  key={s.ticker}
+                  onClick={() => addTag({ ticker: s.ticker, assetType: s.type || 'stock', name: s.name })}
+                  className="w-full text-left px-4 py-2.5 text-sm text-gray-300 hover:bg-[#1f1f1f] hover:text-white border-b border-[#1f1f1f] last:border-b-0 flex items-center gap-2"
+                >
+                  <span className="font-bold text-white">{s.ticker}</span>
+                  <span className="text-[#a1a1aa] flex-1 truncate">{s.name}</span>
+                  <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${typeBadge(s.type)}`}>
+                    {typeLabel(s.type)}
+                  </span>
+                </button>
+              ))}
+          </div>
+        )}
+      </div>
+
+      {showGrid &&
         Object.entries(SUGGESTIONS).map(([category, items]) => (
           <div key={category} className="mb-4">
             <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">{category}</p>
