@@ -175,4 +175,60 @@ actor APIService {
     func deleteAlert(id: String) async throws {
         try await delete("/alerts/\(id)")
     }
+
+    // MARK: - Gov Trades
+
+    /// Fetches government official trades from public STOCK Act disclosures.
+    func fetchGovTrades(
+        days: Int = 30,
+        chamber: String? = nil,
+        party: String? = nil,
+        ticker: String? = nil
+    ) async throws -> [GovTrade] {
+        var path = "/gov-trades?days=\(days)"
+        if let chamber { path += "&chamber=\(chamber)" }
+        if let party { path += "&party=\(party)" }
+        if let ticker { path += "&ticker=\(ticker)" }
+        struct Response: Decodable { let trades: [GovTrade]; let disclaimer: String }
+        let response: Response = try await get(path)
+        return response.trades
+    }
+
+    /// Fetches aggregate summary stats for government trades.
+    func fetchGovTradesSummary() async throws -> GovTradesSummary {
+        return try await get("/gov-trades/summary")
+    }
+
+    // MARK: - Preferences
+
+    /// Saves onboarding preferences to the backend and returns the server-assigned preferences.
+    func savePreferences(_ prefs: UserPreferences) async throws -> UserPreferences {
+        return try await post("/preferences", body: prefs)
+    }
+
+    /// Fetches previously saved preferences for the given session ID.
+    func fetchPreferences(sessionId: String) async throws -> UserPreferences {
+        return try await get("/preferences/\(sessionId)")
+    }
+
+    // MARK: - Commodities
+
+    /// Fetches current commodity quotes.
+    func fetchCommodities() async throws -> [CommodityQuote] {
+        struct Response: Decodable { let commodities: [CommodityQuote] }
+        let response: Response = try await get("/commodities")
+        return response.commodities
+    }
+}
+
+// MARK: - CommodityQuote
+
+struct CommodityQuote: Codable, Identifiable {
+    var id: String { symbol }
+    let symbol: String
+    let commodity: String
+    let price: Double
+    let unit: String
+    let changePercent: Double
+    let macroContext: String?
 }

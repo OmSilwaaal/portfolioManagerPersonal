@@ -9,17 +9,18 @@ import SwiftUI
 
 @main
 struct MarketIntelligenceApp: App {
-    init() {
-        // Request notification permission on first launch.
-        // Runs asynchronously and respects the system permission dialog.
-        Task {
-            await NotificationService.shared.requestPermission()
-        }
-    }
+    @State private var onboardingComplete = UserDefaults.standard.bool(forKey: "onboardingComplete")
 
     var body: some Scene {
         WindowGroup {
-            TabBarView()
+            if onboardingComplete {
+                TabBarView()
+            } else {
+                OnboardingFlowView()
+            }
+        }
+        .task {
+            await NotificationService.shared.requestPermission()
         }
     }
 }

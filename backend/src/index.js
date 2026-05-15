@@ -9,7 +9,11 @@ const feedRouter = require('./routes/feed');
 const calendarRouter = require('./routes/calendar');
 const portfolioRouter = require('./routes/portfolio');
 const alertsRouter = require('./routes/alerts');
+const govTradesRouter = require('./routes/govTrades');
+const commoditiesRouter = require('./routes/commodities');
+const preferencesRouter = require('./routes/preferences');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
+const { sessionMiddleware } = require('./middleware/auth');
 
 // Initialize DB on startup
 require('./db/schema').getDb();
@@ -23,6 +27,7 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json());
+app.use(sessionMiddleware);
 
 // Rate limiting: 30 requests per minute per IP
 const limiter = rateLimit({
@@ -44,6 +49,9 @@ app.use('/api/feed', feedRouter);
 app.use('/api/calendar', calendarRouter);
 app.use('/api/portfolio', portfolioRouter);
 app.use('/api/alerts', alertsRouter);
+app.use('/api/gov-trades', govTradesRouter);
+app.use('/api/commodities', commoditiesRouter);
+app.use('/api/preferences', preferencesRouter);
 
 // Health check
 app.get('/health', (req, res) => {
