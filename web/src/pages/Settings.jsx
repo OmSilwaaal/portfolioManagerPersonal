@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useSelector, useDispatch } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import { updateWatchlist, resetPreferences } from '../store/preferencesSlice'
-import { useUpdatePreferencesMutation } from '../api/preferencesApi'
+import { supabase } from '../utils/supabase/client'
 
 const CATEGORY_LABELS = {
   stocks: 'US Stocks',
@@ -49,10 +49,10 @@ export default function Settings() {
   const navigate = useNavigate()
   const dispatch = useDispatch()
   const preferences = useSelector((state) => state.preferences)
-  const [updatePreferences] = useUpdatePreferencesMutation()
 
   const [newTicker, setNewTicker] = useState('')
   const [saving, setSaving] = useState(false)
+  const [signingOut, setSigningOut] = useState(false)
 
   const handleAddTicker = (e) => {
     e.preventDefault()
@@ -74,20 +74,22 @@ export default function Settings() {
   }
 
   const persistWatchlist = async (watchlist) => {
-    if (!preferences.sessionId) return
     setSaving(true)
-    try {
-      await updatePreferences({ sessionId: preferences.sessionId, watchlist }).unwrap()
-    } catch (err) {
-      console.log('Watchlist persist error:', err)
-    } finally {
-      setSaving(false)
-    }
+    const { error } = await supabase.auth.updateUser({ data: { watchlist } })
+    if (error) console.log('Watchlist persist error:', error.message)
+    setSaving(false)
   }
 
   const handleRetakeQuiz = () => {
     dispatch(resetPreferences())
     navigate('/onboarding')
+  }
+
+  const handleSignOut = async () => {
+    setSigningOut(true)
+    await supabase.auth.signOut()
+    dispatch(resetPreferences())
+    navigate('/', { replace: true })
   }
 
   return (
@@ -216,7 +218,7 @@ export default function Settings() {
       </section>
 
       {/* Section 3: Notification Preferences (display only) */}
-      <section>
+      <section className="mb-8">
         <h2 className="text-base font-semibold text-white mb-4">Notification Preferences</h2>
         <div className="bg-[#141414] border border-[#2a2a2a] rounded-lg divide-y divide-[#2a2a2a]">
           {[
@@ -233,6 +235,23 @@ export default function Settings() {
         <p className="text-gray-600 text-xs mt-3">
           Notification features are in development and will be available soon.
         </p>
+      </section>
+
+      {/* Section 4: Account */}
+      <section>
+        <h2 className="text-base font-semibold text-white mb-4">Account</h2>
+        <button
+          onClick={handleSignOut}
+          disabled={signingOut}
+          className="w-full flex items-center justify-center gap-2 bg-[#141414] hover:bg-red-500/10 border border-[#2a2a2a] hover:border-red-500/30 text-gray-400 hover:text-red-400 text-sm font-medium py-3 rounded-lg transition-colors"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+          {signingOut ? 'Signing out...' : 'Sign out'}
+        </button>
       </section>
     </main>
   )
