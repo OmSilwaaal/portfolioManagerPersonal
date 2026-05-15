@@ -74,23 +74,21 @@ const navItems = [
 
 export default function Sidebar() {
   return (
-    <aside className="hidden md:flex flex-col w-[240px] flex-shrink-0 min-h-screen bg-[#0f0f0f] dark:bg-[#0f0f0f] bg-white border-r border-[#1f1f1f] dark:border-[#1f1f1f] border-[#e5e7eb]">
-      {/* Logo */}
-      <div className="flex items-center justify-between px-5 py-5 border-b border-[#1f1f1f] dark:border-[#1f1f1f] border-[#e5e7eb]">
+    <aside className="hidden md:flex flex-col w-[240px] flex-shrink-0 min-h-screen bg-[#0f0f0f] border-r border-[#1f1f1f]">
+      <div className="flex items-center justify-between px-5 py-5 border-b border-[#1f1f1f]">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 bg-[#3b82f6] rounded-md flex items-center justify-center">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
             </svg>
           </div>
-          <span className="font-semibold text-white dark:text-white text-[#0f0f0f] text-base">
+          <span className="font-semibold text-white text-base">
             MarketIQ
           </span>
         </div>
         <ThemeToggle />
       </div>
 
-      {/* Nav items */}
       <nav className="flex-1 px-3 py-4 space-y-1">
         {navItems.map((item) => (
           <NavLink
@@ -101,7 +99,7 @@ export default function Sidebar() {
               `flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors ${
                 isActive
                   ? 'text-[#3b82f6] bg-[#3b82f6]/10'
-                  : 'text-[#a1a1aa] hover:text-white dark:hover:text-white hover:text-[#0f0f0f] hover:bg-[#141414] dark:hover:bg-[#141414]'
+                  : 'text-[#a1a1aa] hover:text-white hover:bg-[#141414]'
               }`
             }
           >
@@ -111,8 +109,7 @@ export default function Sidebar() {
         ))}
       </nav>
 
-      {/* Footer */}
-      <div className="px-5 py-4 border-t border-[#1f1f1f] dark:border-[#1f1f1f] border-[#e5e7eb]">
+      <div className="px-5 py-4 border-t border-[#1f1f1f]">
         <p className="text-xs text-[#6b7280]">
           Not financial advice. For educational use only.
         </p>

@@ -13,6 +13,7 @@ import Feed from './pages/Feed'
 import GovTrades from './pages/GovTrades'
 import Commodities from './pages/Commodities'
 import Settings from './pages/Settings'
+import Landing from './pages/Landing'
 
 // Import API modules to register endpoints
 import './api/stocksApi'
@@ -35,8 +36,19 @@ function AppInner() {
 
   return (
     <Routes>
+      {/* Public marketing page — no Sidebar or BottomNav */}
+      <Route path="/" element={<Landing />} />
+
       {/* Onboarding — no Sidebar or BottomNav */}
       <Route path="/onboarding" element={<Onboarding />} />
+
+      {/* /app redirect: send to feed or onboarding based on status */}
+      <Route
+        path="/app"
+        element={
+          onboardingComplete ? <Navigate to="/feed" replace /> : <Navigate to="/onboarding" replace />
+        }
+      />
 
       {/* Main app layout */}
       <Route
@@ -46,13 +58,6 @@ function AppInner() {
             <Sidebar />
             <div className="flex-1 flex flex-col min-h-screen pb-16 md:pb-0">
               <Routes>
-                {/* Root: redirect based on onboarding status */}
-                <Route
-                  path="/"
-                  element={
-                    onboardingComplete ? <Navigate to="/feed" replace /> : <Navigate to="/onboarding" replace />
-                  }
-                />
                 <Route path="/feed" element={<Feed />} />
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/stocks" element={<Stocks />} />
