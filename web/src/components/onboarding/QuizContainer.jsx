@@ -75,12 +75,102 @@ const QUESTIONS = [
   },
 ]
 
+function SignUpScreen({ onContinue }) {
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [error, setError] = useState('')
+
+  const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)
+  const canSubmit = name.trim().length > 0 && isValidEmail(email)
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    if (!name.trim()) { setError('Please enter your name.'); return }
+    if (!isValidEmail(email)) { setError('Please enter a valid email address.'); return }
+    setError('')
+    onContinue(name.trim(), email.trim().toLowerCase())
+  }
+
+  return (
+    <div className="min-h-screen bg-[#0a0a0a] flex flex-col items-center justify-center px-6">
+      {/* Logo */}
+      <div className="flex items-center gap-2 mb-12">
+        <div className="w-8 h-8 bg-[#3b82f6] rounded-lg flex items-center justify-center">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
+          </svg>
+        </div>
+        <span className="font-semibold text-white text-lg tracking-tight">MarketIQ</span>
+      </div>
+
+      <div className="w-full max-w-sm">
+        <h1 className="text-3xl font-bold text-white text-center mb-2">Create your account</h1>
+        <p className="text-[#6b7280] text-center mb-8 text-sm">
+          No password. No credit card. Free forever.
+        </p>
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <div>
+            <label className="block text-sm font-medium text-[#a1a1aa] mb-1.5">Your name</label>
+            <input
+              type="text"
+              autoFocus
+              placeholder="Jane Smith"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full bg-[#0f0f0f] border border-[#2a2a2a] rounded-lg px-4 py-3 text-white placeholder-[#3a3a3a] focus:outline-none focus:border-[#3b82f6] transition-colors text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-[#a1a1aa] mb-1.5">Email address</label>
+            <input
+              type="email"
+              placeholder="jane@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full bg-[#0f0f0f] border border-[#2a2a2a] rounded-lg px-4 py-3 text-white placeholder-[#3a3a3a] focus:outline-none focus:border-[#3b82f6] transition-colors text-sm"
+            />
+          </div>
+
+          {error && (
+            <p className="text-red-400 text-xs">{error}</p>
+          )}
+
+          <button
+            type="submit"
+            disabled={!canSubmit}
+            className={`w-full py-3 rounded-lg font-semibold text-sm transition-all mt-2 ${
+              canSubmit
+                ? 'bg-[#3b82f6] text-white hover:bg-[#2563eb]'
+                : 'bg-[#1a1a1a] text-[#3a3a3a] cursor-not-allowed'
+            }`}
+          >
+            Continue →
+          </button>
+        </form>
+
+        <p className="text-[#4a4a4a] text-xs text-center mt-6">
+          By continuing you agree to our{' '}
+          <span className="text-[#6b7280] underline cursor-pointer">Terms</span>{' '}
+          and{' '}
+          <span className="text-[#6b7280] underline cursor-pointer">Privacy Policy</span>.
+          <br />
+          Not financial advice. For educational use only.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export default function QuizContainer() {
   const navigate = useNavigate()
   const dispatch = useDispatch()
   const sessionId = useSelector((state) => state.preferences.sessionId)
   const [savePreferences] = useSavePreferencesMutation()
 
+  // -1 = sign-up screen, 0+ = quiz questions
+  const [stage, setStage] = useState(-1)
   const [current, setCurrent] = useState(0)
   const [answers, setAnswers] = useState({
     investorType: null,
@@ -92,6 +182,11 @@ export default function QuizContainer() {
   })
   const [transitioning, setTransitioning] = useState(false)
   const [building, setBuilding] = useState(false)
+
+  const handleSignUp = (displayName, email) => {
+    dispatch(setPreferences({ displayName, email }))
+    setStage(0)
+  }
 
   const q = QUESTIONS[current]
 
@@ -117,12 +212,8 @@ export default function QuizContainer() {
         setTransitioning(false)
       }, 200)
     } else {
-      // Final step — save and redirect
       setBuilding(true)
-      const prefs = {
-        sessionId,
-        ...answers,
-      }
+      const prefs = { sessionId, ...answers }
       dispatch(setPreferences({ ...prefs, onboardingComplete: true }))
 
       try {
@@ -145,39 +236,44 @@ export default function QuizContainer() {
         setCurrent((c) => c - 1)
         setTransitioning(false)
       }, 200)
+    } else {
+      setStage(-1)
     }
+  }
+
+  if (stage === -1) {
+    return <SignUpScreen onContinue={handleSignUp} />
   }
 
   if (building) {
     return (
-      <div className="min-h-screen bg-[#0f0f0f] flex flex-col items-center justify-center">
+      <div className="min-h-screen bg-[#0a0a0a] flex flex-col items-center justify-center">
         <div className="text-center">
           <div className="w-12 h-12 border-2 border-[#3b82f6] border-t-transparent rounded-full animate-spin mx-auto mb-6" />
           <p className="text-white text-2xl font-semibold">Building your feed...</p>
-          <p className="text-gray-400 mt-2 text-sm">Personalizing your experience</p>
+          <p className="text-[#6b7280] mt-2 text-sm">Personalizing your experience</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-[#0f0f0f] flex flex-col">
+    <div className="min-h-screen bg-[#0a0a0a] flex flex-col">
       {/* Header: Back + Progress */}
       <div className="flex items-center justify-between px-6 pt-6">
         <button
           onClick={handleBack}
-          className={`text-gray-400 hover:text-white transition-colors text-sm ${current === 0 ? 'invisible' : ''}`}
+          className="text-[#6b7280] hover:text-white transition-colors text-sm"
         >
-          &larr; Back
+          ← Back
         </button>
 
-        {/* Progress dots */}
         <div className="flex gap-2">
           {QUESTIONS.map((_, i) => (
             <div
               key={i}
-              className={`w-2 h-2 rounded-full transition-all ${
-                i === current ? 'bg-[#3b82f6] w-4' : i < current ? 'bg-[#3b82f6]/50' : 'bg-[#2a2a2a]'
+              className={`h-1.5 rounded-full transition-all duration-300 ${
+                i === current ? 'bg-[#3b82f6] w-6' : i < current ? 'bg-[#3b82f6]/40 w-3' : 'bg-[#1f1f1f] w-3'
               }`}
             />
           ))}
@@ -216,7 +312,7 @@ export default function QuizContainer() {
           className={`px-8 py-3 rounded-lg font-medium text-base transition-all ${
             canContinue()
               ? 'bg-[#3b82f6] text-white hover:bg-[#2563eb]'
-              : 'bg-[#1a1a1a] text-gray-600 cursor-not-allowed'
+              : 'bg-[#1a1a1a] text-[#3a3a3a] cursor-not-allowed'
           }`}
         >
           {current === QUESTIONS.length - 1 ? 'Finish' : 'Continue'}

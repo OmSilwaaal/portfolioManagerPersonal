@@ -13,6 +13,8 @@ function getOrCreateSessionId() {
 
 const initialState = {
   sessionId: typeof window !== 'undefined' ? getOrCreateSessionId() : null,
+  displayName: null,
+  email: null,
   investorType: null,
   riskTolerance: null,
   updateFrequency: null,
@@ -29,6 +31,8 @@ const preferencesSlice = createSlice({
     setPreferences(state, action) {
       const p = action.payload
       if (p.sessionId) state.sessionId = p.sessionId
+      if (p.displayName !== undefined) state.displayName = p.displayName
+      if (p.email !== undefined) state.email = p.email
       if (p.investorType !== undefined) state.investorType = p.investorType
       if (p.riskTolerance !== undefined) state.riskTolerance = p.riskTolerance
       if (p.updateFrequency !== undefined) state.updateFrequency = p.updateFrequency
