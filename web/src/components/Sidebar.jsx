@@ -142,22 +142,29 @@ export default function Sidebar() {
         <ThemeToggle />
       </div>
 
-      <nav className="flex-1 px-3 py-4 space-y-1">
+      <nav className="flex-1 px-3 py-4 space-y-0.5">
         {navItems.map((item) => (
           <NavLink
             key={item.path}
             to={item.path}
             end
             className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors ${
+              `relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${
                 isActive
-                  ? 'text-[#3b82f6] bg-[#3b82f6]/10'
-                  : 'text-[#a1a1aa] hover:text-white hover:bg-[#141414]'
+                  ? 'text-white bg-[#1a1a1a]'
+                  : 'text-[#6b7280] hover:text-[#d1d5db] hover:bg-[#141414]'
               }`
             }
           >
-            {item.icon}
-            <span className="font-medium">{item.label}</span>
+            {({ isActive }) => (
+              <>
+                {isActive && (
+                  <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-[#3b82f6] rounded-full" />
+                )}
+                <span className={isActive ? 'text-[#3b82f6]' : ''}>{item.icon}</span>
+                <span className="font-medium">{item.label}</span>
+              </>
+            )}
           </NavLink>
         ))}
       </nav>

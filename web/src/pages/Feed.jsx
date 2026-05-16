@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useSelector } from 'react-redux'
+import { useAuth } from '../contexts/AuthContext'
 import FilterBar from '../components/feed/FilterBar'
 import FeedCard from '../components/feed/FeedCard'
 import { useGetGovTradesQuery } from '../api/govTradesApi'
@@ -20,9 +21,23 @@ function SkeletonCard() {
   )
 }
 
+function greeting() {
+  const h = new Date().getHours()
+  if (h < 12) return 'Good morning'
+  if (h < 17) return 'Good afternoon'
+  return 'Good evening'
+}
+
 export default function Feed() {
   const [activeFilter, setActiveFilter] = useState('all')
   const preferences = useSelector((state) => state.preferences)
+  const { user } = useAuth()
+  const firstName = (
+    user?.user_metadata?.full_name ??
+    user?.user_metadata?.name ??
+    user?.user_metadata?.display_name ??
+    ''
+  ).split(' ')[0]
   const watchedCategories = preferences.watchedCategories || []
 
   // Fetch all data in parallel
@@ -58,8 +73,10 @@ export default function Feed() {
   return (
     <main className="flex-1 p-5 md:p-8 max-w-2xl mx-auto w-full">
       <div className="mb-5">
-        <h1 className="text-2xl font-bold text-white">Your Feed</h1>
-        <p className="text-gray-400 text-sm mt-1">Personalized market intelligence</p>
+        <h1 className="text-2xl font-bold text-white">
+          {greeting()}{firstName ? `, ${firstName}` : ''}
+        </h1>
+        <p className="text-[#6b7280] text-sm mt-1">Here's what's moving the markets today</p>
       </div>
 
       <div className="mb-5">
