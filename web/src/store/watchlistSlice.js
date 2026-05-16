@@ -1,16 +1,16 @@
 import { createSlice } from '@reduxjs/toolkit'
 
-const DEFAULT_STOCKS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA']
-const DEFAULT_CRYPTO = ['BTC', 'ETH', 'SOL', 'DOGE']
-
 const watchlistSlice = createSlice({
   name: 'watchlist',
   initialState: {
-    stocks: DEFAULT_STOCKS,
-    crypto: DEFAULT_CRYPTO,
+    stocks: [],
+    crypto: [],
     selectedTicker: null,
   },
   reducers: {
+    setWatchlistStocks(state, action) {
+      state.stocks = action.payload
+    },
     addStock(state, action) {
       const ticker = action.payload.toUpperCase()
       if (!state.stocks.includes(ticker)) {
@@ -35,6 +35,6 @@ const watchlistSlice = createSlice({
   },
 })
 
-export const { addStock, removeStock, addCrypto, removeCrypto, setSelectedTicker } =
+export const { setWatchlistStocks, addStock, removeStock, addCrypto, removeCrypto, setSelectedTicker } =
   watchlistSlice.actions
 export default watchlistSlice.reducer
