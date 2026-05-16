@@ -1,4 +1,6 @@
 import { NavLink } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
+import { UserAvatar } from './Sidebar'
 
 const tabs = [
   {
@@ -53,6 +55,8 @@ const tabs = [
 ]
 
 export default function BottomNav() {
+  const { user } = useAuth()
+
   return (
     <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-[#0f0f0f] border-t border-[#1f1f1f]">
       <div className="flex items-center justify-around h-16">
@@ -69,8 +73,21 @@ export default function BottomNav() {
               }`
             }
           >
-            {tab.icon}
-            <span className="text-[10px] font-medium">{tab.label}</span>
+            {({ isActive }) =>
+              tab.path === '/settings' && user ? (
+                <>
+                  <div className={`rounded-full ${isActive ? 'ring-2 ring-[#3b82f6]' : ''}`}>
+                    <UserAvatar user={user} size={26} />
+                  </div>
+                  <span className="text-[10px] font-medium">{tab.label}</span>
+                </>
+              ) : (
+                <>
+                  {tab.icon}
+                  <span className="text-[10px] font-medium">{tab.label}</span>
+                </>
+              )
+            }
           </NavLink>
         ))}
       </div>

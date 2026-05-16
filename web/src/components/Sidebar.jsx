@@ -2,6 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
 import { resetPreferences } from '../store/preferencesSlice'
 import { supabase } from '../utils/supabase/client'
+import { useAuth } from '../contexts/AuthContext'
 import ThemeToggle from './ThemeToggle'
 
 const navItems = [
@@ -75,9 +76,49 @@ const navItems = [
   },
 ]
 
+function UserAvatar({ user, size = 32 }) {
+  const meta = user?.user_metadata ?? {}
+  const avatarUrl = meta.avatar_url ?? meta.picture ?? null
+  const name = meta.full_name ?? meta.name ?? meta.display_name ?? user?.email ?? '?'
+  const initials = name
+    .split(' ')
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? '')
+    .join('')
+
+  if (avatarUrl) {
+    return (
+      <img
+        src={avatarUrl}
+        alt={name}
+        width={size}
+        height={size}
+        className="rounded-full object-cover flex-shrink-0"
+        style={{ width: size, height: size }}
+        referrerPolicy="no-referrer"
+      />
+    )
+  }
+  return (
+    <div
+      className="rounded-full bg-[#3b82f6] flex items-center justify-center flex-shrink-0 text-white font-semibold"
+      style={{ width: size, height: size, fontSize: size * 0.38 }}
+    >
+      {initials || '?'}
+    </div>
+  )
+}
+
+export { UserAvatar }
+
 export default function Sidebar() {
   const navigate = useNavigate()
   const dispatch = useDispatch()
+  const { user } = useAuth()
+
+  const meta = user?.user_metadata ?? {}
+  const displayName = meta.full_name ?? meta.name ?? meta.display_name ?? null
+  const email = user?.email ?? null
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
@@ -122,6 +163,19 @@ export default function Sidebar() {
       </nav>
 
       <div className="px-3 py-4 border-t border-[#1f1f1f] space-y-3">
+        {user && (
+          <div className="flex items-center gap-3 px-3 py-2">
+            <UserAvatar user={user} size={34} />
+            <div className="min-w-0">
+              {displayName && (
+                <p className="text-sm font-medium text-white truncate leading-tight">{displayName}</p>
+              )}
+              {email && (
+                <p className="text-xs text-[#6b7280] truncate leading-tight">{email}</p>
+              )}
+            </div>
+          </div>
+        )}
         <button
           onClick={handleSignOut}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm text-[#a1a1aa] hover:text-red-400 hover:bg-red-500/5 transition-colors"
