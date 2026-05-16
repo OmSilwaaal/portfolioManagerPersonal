@@ -4,6 +4,7 @@ import { addStock, removeStock, setSelectedTicker } from '../store/watchlistSlic
 import { useGetStockQuery } from '../api/stocksApi'
 import NewsCard from '../components/NewsCard'
 import StockChart from '../components/StockChart'
+import ProGate from '../components/ProGate'
 
 function StockRow({ ticker, isSelected, onClick }) {
   const { data, isLoading, isError } = useGetStockQuery(ticker)
@@ -99,19 +100,21 @@ function StockRow({ ticker, isSelected, onClick }) {
       {isSelected && (
         <tr>
           <td colSpan={5} className="px-4 pb-4 bg-[#0a0a0a] dark:bg-[#0a0a0a]">
-            <div className="pt-4 space-y-4">
-              <StockChart basePrice={price} />
-              {data?.news && data.news.length > 0 && (
-                <div className="space-y-3">
-                  <h4 className="text-sm font-medium text-[#a1a1aa]">
-                    Recent News for {ticker}
-                  </h4>
-                  {data.news.slice(0, 3).map((item) => (
-                    <NewsCard key={item.id} item={item} />
-                  ))}
-                </div>
-              )}
-            </div>
+            <ProGate label="Full charts & AI news">
+              <div className="pt-4 space-y-4">
+                <StockChart basePrice={price} />
+                {data?.news && data.news.length > 0 && (
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-medium text-[#a1a1aa]">
+                      Recent News for {ticker}
+                    </h4>
+                    {data.news.slice(0, 3).map((item) => (
+                      <NewsCard key={item.id} item={item} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </ProGate>
           </td>
         </tr>
       )}

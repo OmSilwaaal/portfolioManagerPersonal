@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
-import { setPreferences } from './store/preferencesSlice'
+import { setPreferences, setIsPro } from './store/preferencesSlice'
 import { setWatchlistStocks } from './store/watchlistSlice'
 import Sidebar from './components/Sidebar'
 import BottomNav from './components/BottomNav'
@@ -17,6 +17,7 @@ import GovTrades from './pages/GovTrades'
 import Commodities from './pages/Commodities'
 import Settings from './pages/Settings'
 import Landing from './pages/Landing'
+import Pricing from './pages/Pricing'
 
 // Import API modules to register endpoints
 import './api/stocksApi'
@@ -76,6 +77,7 @@ function AppInner() {
         priorityAlerts: meta.priorityAlerts ?? [],
         watchlist: meta.watchlist ?? [],
         onboardingComplete: true,
+        isPro: meta.isPro ?? false,
       }))
 
       // Sync watchlist into watchlistSlice so Stocks page picks up user's tickers
@@ -107,6 +109,7 @@ function AppInner() {
         <Route path="/gov-trades" element={<GovTrades />} />
         <Route path="/commodities" element={<Commodities />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/pricing" element={<Pricing />} />
       </Route>
     </Routes>
   )

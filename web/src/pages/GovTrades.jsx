@@ -1,6 +1,8 @@
 import { useState } from 'react'
+import { useSelector } from 'react-redux'
 import { useGetGovTradesQuery, useGetGovTradesSummaryQuery } from '../api/govTradesApi'
 import GovTradeCard from '../components/gov-trades/GovTradeCard'
+import ProGate from '../components/ProGate'
 
 const DISCLAIMER =
   'This data is sourced from public STOCK Act disclosures. This is not evidence of illegal activity or investment advice.'
@@ -47,7 +49,9 @@ export default function GovTrades() {
     setFilters((f) => ({ ...f, ticker: tickerInput.toUpperCase() }))
   }
 
+  const isPro = useSelector((state) => state.preferences.isPro)
   const trades = data?.trades || []
+  const FREE_TRADE_LIMIT = 5
 
   return (
     <main className="flex-1 p-5 md:p-8 max-w-4xl mx-auto w-full">
@@ -179,9 +183,18 @@ export default function GovTrades() {
 
       {!isLoading && !isError && trades.length > 0 && (
         <div className="space-y-3">
-          {trades.map((trade) => (
+          {trades.slice(0, isPro ? trades.length : FREE_TRADE_LIMIT).map((trade) => (
             <GovTradeCard key={trade.id} trade={trade} />
           ))}
+          {!isPro && trades.length > FREE_TRADE_LIMIT && (
+            <ProGate label="All government trades">
+              <div className="space-y-3">
+                {trades.slice(FREE_TRADE_LIMIT, FREE_TRADE_LIMIT + 3).map((trade) => (
+                  <GovTradeCard key={`locked-${trade.id}`} trade={trade} />
+                ))}
+              </div>
+            </ProGate>
+          )}
         </div>
       )}
     </main>

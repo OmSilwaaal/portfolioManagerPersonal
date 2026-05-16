@@ -22,6 +22,7 @@ const initialState = {
   priorityAlerts: [],
   watchlist: [],
   onboardingComplete: false,
+  isPro: false,
 }
 
 const preferencesSlice = createSlice({
@@ -40,6 +41,10 @@ const preferencesSlice = createSlice({
       if (p.priorityAlerts !== undefined) state.priorityAlerts = p.priorityAlerts
       if (p.watchlist !== undefined) state.watchlist = p.watchlist
       if (p.onboardingComplete !== undefined) state.onboardingComplete = p.onboardingComplete
+      if (p.isPro !== undefined) state.isPro = p.isPro
+    },
+    setIsPro(state, action) {
+      state.isPro = action.payload
     },
     updateWatchlist(state, action) {
       state.watchlist = action.payload
@@ -55,11 +60,12 @@ const preferencesSlice = createSlice({
       state.priorityAlerts = []
       state.watchlist = []
       state.onboardingComplete = false
+      state.isPro = false
     },
   },
 })
 
-export const { setPreferences, updateWatchlist, setOnboardingComplete, resetPreferences } =
+export const { setPreferences, updateWatchlist, setOnboardingComplete, resetPreferences, setIsPro } =
   preferencesSlice.actions
 
 export default preferencesSlice.reducer

@@ -1,5 +1,6 @@
+import { useSelector } from 'react-redux'
 import { useGetCryptoQuery } from '../api/cryptoApi'
-import FreemiumGate from '../components/FreemiumGate'
+import ProGate from '../components/ProGate'
 import StockChart from '../components/StockChart'
 
 const DEFAULT_CRYPTOS = ['BTC', 'ETH', 'SOL', 'DOGE']
@@ -65,10 +66,12 @@ function CryptoCard({ symbol, isLocked }) {
     </div>
   )
 
-  return <FreemiumGate isLocked={isLocked}>{content}</FreemiumGate>
+  if (isLocked) return <ProGate label="Crypto charts">{content}</ProGate>
+  return <>{content}</>
 }
 
 export default function Crypto() {
+  const isPro = useSelector((state) => state.preferences.isPro)
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <header className="flex items-center justify-between px-6 py-4 border-b border-[#1f1f1f] dark:border-[#1f1f1f] border-[#e5e7eb]">
@@ -85,7 +88,7 @@ export default function Crypto() {
               <CryptoCard
                 key={symbol}
                 symbol={symbol}
-                isLocked={index >= 3}
+                isLocked={!isPro && index >= 2}
               />
             ))}
           </div>

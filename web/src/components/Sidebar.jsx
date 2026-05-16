@@ -1,5 +1,5 @@
-import { NavLink, useNavigate } from 'react-router-dom'
-import { useDispatch } from 'react-redux'
+import { NavLink, Link, useNavigate } from 'react-router-dom'
+import { useDispatch, useSelector } from 'react-redux'
 import { resetPreferences } from '../store/preferencesSlice'
 import { supabase } from '../utils/supabase/client'
 import { useAuth } from '../contexts/AuthContext'
@@ -115,6 +115,7 @@ export default function Sidebar() {
   const navigate = useNavigate()
   const dispatch = useDispatch()
   const { user } = useAuth()
+  const isPro = useSelector((state) => state.preferences.isPro)
 
   const meta = user?.user_metadata ?? {}
   const displayName = meta.full_name ?? meta.name ?? meta.display_name ?? null
@@ -170,6 +171,27 @@ export default function Sidebar() {
       </nav>
 
       <div className="px-3 py-4 border-t border-[#1f1f1f] space-y-3">
+        {/* Pro upgrade / badge */}
+        {isPro ? (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#f59e0b]/5 border border-[#f59e0b]/15">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 4l3 12h14l3-12-6 5-4-5-4 5-6-5z"/>
+              <path d="M5 20h14"/>
+            </svg>
+            <span className="text-xs font-bold text-[#f59e0b]">Pro Member</span>
+          </div>
+        ) : (
+          <Link
+            to="/pricing"
+            className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-[#f59e0b]/10 hover:bg-[#f59e0b]/15 border border-[#f59e0b]/20 transition-colors group"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 4l3 12h14l3-12-6 5-4-5-4 5-6-5z"/>
+              <path d="M5 20h14"/>
+            </svg>
+            <span className="text-xs font-bold text-[#f59e0b]">Upgrade to Pro</span>
+          </Link>
+        )}
         {user && (
           <div className="flex items-center gap-3 px-3 py-2">
             <UserAvatar user={user} size={34} />

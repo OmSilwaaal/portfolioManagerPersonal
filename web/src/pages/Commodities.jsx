@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { useGetCommoditiesQuery } from '../api/commoditiesApi'
 import { addStock } from '../store/watchlistSlice'
+import ProGate from '../components/ProGate'
 
 const SECTORS = ['All', 'Energy', 'Metals', 'Agriculture']
 
@@ -109,8 +110,11 @@ function SkeletonCard() {
   )
 }
 
+const FREE_COMMODITY_LIMIT = 3
+
 export default function Commodities() {
   const { data, isLoading, isError } = useGetCommoditiesQuery()
+  const isPro = useSelector((state) => state.preferences.isPro)
   const [activeSector, setActiveSector] = useState('All')
 
   const commodities = (data?.commodities || []).map((c) => ({
@@ -165,41 +169,41 @@ export default function Commodities() {
         </div>
       )}
 
-      {!isLoading && !isError && (
-        <>
-          {sectors.map((sector) => {
-            const group = filtered.filter((c) => c.sector === sector)
-            if (group.length === 0) return null
-            return (
-              <div key={sector} className="mb-8">
-                <h2 className="text-xs font-semibold text-[#a1a1aa] uppercase tracking-wider mb-3">
-                  {sector}
-                </h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {group.map((c) => (
-                    <CommodityCard key={c.symbol} commodity={c} />
-                  ))}
-                </div>
-              </div>
-            )
-          })}
+      {!isLoading && !isError && (() => {
+        let shown = 0
+        const sections = []
 
-          {activeSector === 'All' && commodities.filter((c) => !SECTORS.slice(1).includes(c.sector)).length > 0 && (
-            <div className="mb-8">
-              <h2 className="text-xs font-semibold text-[#a1a1aa] uppercase tracking-wider mb-3">
-                Other
-              </h2>
+        const allGroups = [
+          ...sectors.map((sector) => ({ sector, group: filtered.filter((c) => c.sector === sector) })),
+          ...(activeSector === 'All' ? [{ sector: 'Other', group: commodities.filter((c) => !SECTORS.slice(1).includes(c.sector)) }] : []),
+        ]
+
+        for (const { sector, group } of allGroups) {
+          if (group.length === 0) continue
+          const freeSlice = isPro ? group : group.slice(0, Math.max(0, FREE_COMMODITY_LIMIT - shown))
+          const lockedSlice = isPro ? [] : group.slice(Math.max(0, FREE_COMMODITY_LIMIT - shown))
+          shown += freeSlice.length
+
+          sections.push(
+            <div key={sector} className="mb-8">
+              <h2 className="text-xs font-semibold text-[#a1a1aa] uppercase tracking-wider mb-3">{sector}</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {commodities
-                  .filter((c) => !SECTORS.slice(1).includes(c.sector))
-                  .map((c) => (
-                    <CommodityCard key={c.symbol} commodity={c} />
-                  ))}
+                {freeSlice.map((c) => <CommodityCard key={c.symbol} commodity={c} />)}
               </div>
+              {lockedSlice.length > 0 && (
+                <div className="mt-4">
+                  <ProGate label="All commodities">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {lockedSlice.map((c) => <CommodityCard key={c.symbol} commodity={c} />)}
+                    </div>
+                  </ProGate>
+                </div>
+              )}
             </div>
-          )}
-        </>
-      )}
+          )
+        }
+        return sections
+      })()}
 
       {!isLoading && commodities.length === 0 && !isError && (
         <div className="text-center py-12">

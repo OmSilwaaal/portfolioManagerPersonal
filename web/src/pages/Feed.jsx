@@ -7,6 +7,7 @@ import { useGetGovTradesQuery } from '../api/govTradesApi'
 import { useGetCommoditiesQuery } from '../api/commoditiesApi'
 import { useGetFeedQuery } from '../api/feedApi'
 import { usePersonalizedFeed } from '../hooks/usePersonalizedFeed'
+import ProGate from '../components/ProGate'
 
 function SkeletonCard() {
   return (
@@ -28,9 +29,12 @@ function greeting() {
   return 'Good evening'
 }
 
+const FREE_ITEM_LIMIT = 5
+
 export default function Feed() {
   const [activeFilter, setActiveFilter] = useState('all')
   const preferences = useSelector((state) => state.preferences)
+  const isPro = useSelector((state) => state.preferences.isPro)
   const { user } = useAuth()
   const firstName = (
     user?.user_metadata?.full_name ??
@@ -108,7 +112,7 @@ export default function Feed() {
 
       {!isLoading && filtered.length > 0 && (
         <div className="space-y-3">
-          {filtered.map((item, idx) => (
+          {filtered.slice(0, isPro ? filtered.length : FREE_ITEM_LIMIT).map((item, idx) => (
             <FeedCard
               key={item.id || `feed-${idx}`}
               type={item._feedType || item.type || 'stock'}
@@ -116,6 +120,20 @@ export default function Feed() {
               urgency={item.urgency}
             />
           ))}
+          {!isPro && filtered.length > FREE_ITEM_LIMIT && (
+            <ProGate label="Unlock full feed">
+              <div className="space-y-3">
+                {filtered.slice(FREE_ITEM_LIMIT, FREE_ITEM_LIMIT + 3).map((item, idx) => (
+                  <FeedCard
+                    key={`locked-${idx}`}
+                    type={item._feedType || item.type || 'stock'}
+                    data={item.data || item}
+                    urgency={item.urgency}
+                  />
+                ))}
+              </div>
+            </ProGate>
+          )}
         </div>
       )}
     </main>
