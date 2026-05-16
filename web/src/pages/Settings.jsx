@@ -80,7 +80,8 @@ export default function Settings() {
     setSaving(false)
   }
 
-  const handleRetakeQuiz = () => {
+  const handleRetakeQuiz = async () => {
+    await supabase.auth.updateUser({ data: { onboardingComplete: false } })
     dispatch(resetPreferences())
     navigate('/onboarding')
   }

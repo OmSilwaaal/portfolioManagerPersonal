@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
-import { setPreferences, setOnboardingComplete, resetPreferences } from '../../store/preferencesSlice'
+import { setPreferences, setOnboardingComplete } from '../../store/preferencesSlice'
 import { supabase } from '../../utils/supabase/client'
 import { useAuth } from '../../contexts/AuthContext'
 import QuizQuestion from './QuizQuestion'
@@ -246,13 +246,7 @@ function SignUpScreen({ onNameStored }) {
 export default function QuizContainer() {
   const navigate = useNavigate()
   const dispatch = useDispatch()
-  const { user } = useAuth()
-
-  const handleSignOut = async () => {
-    await supabase.auth.signOut()
-    dispatch(resetPreferences())
-    navigate('/', { replace: true })
-  }
+  const { user, loading } = useAuth()
 
   // -1 = sign-up, 0+ = quiz question index
   const [stage, setStage] = useState(-1)
@@ -337,6 +331,15 @@ export default function QuizContainer() {
     }
   }
 
+  // Wait for Supabase session to resolve before rendering anything
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-[#3b82f6] border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
   if (stage === -1) {
     return <SignUpScreen onNameStored={handleNameStored} />
   }
@@ -357,10 +360,10 @@ export default function QuizContainer() {
     <div className="min-h-screen bg-[#0a0a0a] flex flex-col">
       <div className="flex items-center justify-between px-6 pt-6">
         <button
-          onClick={current > 0 ? handleBack : handleSignOut}
+          onClick={current > 0 ? handleBack : () => navigate('/')}
           className="text-[#6b7280] hover:text-white transition-colors text-sm"
         >
-          {current > 0 ? '← Back' : '← Sign out'}
+          ← Back
         </button>
 
         <div className="flex gap-2">
