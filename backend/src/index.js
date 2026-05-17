@@ -14,7 +14,7 @@ const commoditiesRouter = require('./routes/commodities');
 const preferencesRouter = require('./routes/preferences');
 const searchRouter = require('./routes/search');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
-const { sessionMiddleware } = require('./middleware/auth');
+const { sessionMiddleware, requireAuth, validateTicker } = require('./middleware/auth');
 
 // Initialize DB on startup
 require('./db/schema').getDb();
@@ -24,44 +24,53 @@ warmCoinList();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Middleware
+// ── CORS ──────────────────────────────────────────────────────────────────────
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
   process.env.FRONTEND_URL,
 ].filter(Boolean);
 
-app.use(cors({
-  origin: allowedOrigins,
-  credentials: true,
-}));
-app.use(express.json());
+app.use(cors({ origin: allowedOrigins, credentials: true }));
+app.use(express.json({ limit: '50kb' })); // cap request body size
 app.use(sessionMiddleware);
 
-// Rate limiting: 30 requests per minute per IP
-const limiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 30,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    error: true,
-    message: 'Too many requests. Please wait a moment and try again.',
-  },
-});
-app.use('/api', limiter);
+// ── RATE LIMITERS ─────────────────────────────────────────────────────────────
+function makeLimiter(windowMs, max, message) {
+  return rateLimit({ windowMs, max, standardHeaders: true, legacyHeaders: false, message: { error: true, message } });
+}
 
-// Routes
-app.use('/api/stocks', stocksRouter);
-app.use('/api/crypto', cryptoRouter);
-app.use('/api/feed', feedRouter);
+// Global safety net — 60 req/min per IP across all routes
+const globalLimiter = makeLimiter(60 * 1000, 60, 'Too many requests. Please slow down.');
+
+// Feed: cached for 5 min, so 3 requests per 5 min per IP is plenty
+const feedLimiter = makeLimiter(5 * 60 * 1000, 3, 'Too many feed requests. Try again in a few minutes.');
+
+// Per-ticker AI routes: 10 per minute per IP
+const aiLimiter = makeLimiter(60 * 1000, 10, 'Too many requests. Please wait a moment and try again.');
+
+// Commodities: 3 per minute (each call triggers multiple Claude requests)
+const commoditiesLimiter = makeLimiter(60 * 1000, 3, 'Too many commodities requests. Please wait a moment.');
+
+app.use('/api', globalLimiter);
+
+// ── ROUTES ────────────────────────────────────────────────────────────────────
+
+// AI-heavy routes — require valid Supabase session + tight rate limits
+app.use('/api/feed',        feedLimiter,        requireAuth, feedRouter);
+app.use('/api/stocks',      aiLimiter,          requireAuth, stocksRouter);
+app.use('/api/crypto',      aiLimiter,          requireAuth, cryptoRouter);
+app.use('/api/commodities', commoditiesLimiter, requireAuth, commoditiesRouter);
+app.use('/api/gov-trades',  aiLimiter,          requireAuth, govTradesRouter);
+
+// Lower-cost routes — still require auth to prevent enumeration
+app.use('/api/alerts',      requireAuth, alertsRouter);
+app.use('/api/preferences', requireAuth, preferencesRouter);
+app.use('/api/portfolio',   requireAuth, portfolioRouter);
+
+// Public routes — no auth needed
 app.use('/api/calendar', calendarRouter);
-app.use('/api/portfolio', portfolioRouter);
-app.use('/api/alerts', alertsRouter);
-app.use('/api/gov-trades', govTradesRouter);
-app.use('/api/commodities', commoditiesRouter);
-app.use('/api/preferences', preferencesRouter);
-app.use('/api/search', searchRouter);
+app.use('/api/search',   searchRouter);
 
 // Health check
 app.get('/health', (req, res) => {

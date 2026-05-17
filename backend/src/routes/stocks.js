@@ -3,11 +3,12 @@ const router = express.Router();
 const { getStockQuote, getCompanyProfile } = require('../services/finnhub');
 const { getNewsByTicker } = require('../services/marketaux');
 const { summarizeNewsItem } = require('../services/claude');
+const { validateTicker } = require('../middleware/auth');
 const NodeCache = require('node-cache');
 
 const cache = new NodeCache({ stdTTL: 30 }); // 30s cache for stock quotes
 
-router.get('/:ticker', async (req, res, next) => {
+router.get('/:ticker', validateTicker('ticker'), async (req, res, next) => {
   try {
     const { ticker } = req.params;
     const upperTicker = ticker.toUpperCase();

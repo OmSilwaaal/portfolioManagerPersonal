@@ -3,6 +3,7 @@ const router = express.Router();
 const { getCryptoCandles } = require('../services/finnhub');
 const { getNewsByTicker } = require('../services/marketaux');
 const { summarizeNewsItem } = require('../services/claude');
+const { validateTicker } = require('../middleware/auth');
 const NodeCache = require('node-cache');
 
 const cache = new NodeCache({ stdTTL: 30 });
@@ -18,7 +19,7 @@ const CRYPTO_NAMES = {
   MATIC: 'Polygon',
 };
 
-router.get('/:symbol', async (req, res, next) => {
+router.get('/:symbol', validateTicker('symbol'), async (req, res, next) => {
   try {
     const { symbol } = req.params;
     const upperSymbol = symbol.toUpperCase();

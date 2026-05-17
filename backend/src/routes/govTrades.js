@@ -110,8 +110,14 @@ router.get('/official/:name', async (req, res, next) => {
   }
 });
 
-// POST /api/gov-trades/refresh (internal / admin use)
-router.post('/refresh', async (req, res, next) => {
+// POST /api/gov-trades/refresh — protected by ADMIN_SECRET env var
+router.post('/refresh', (req, res, next) => {
+  const secret = process.env.ADMIN_SECRET;
+  if (!secret || req.headers['x-admin-secret'] !== secret) {
+    return res.status(403).json({ error: true, message: 'Forbidden.' });
+  }
+  next();
+}, async (req, res, next) => {
   try {
     const trades = await refreshGovTradesCache();
     res.json({ message: 'Cache refreshed', count: trades.length });
