@@ -118,111 +118,133 @@ function MockTradeCard() {
 }
 
 /* ─── Sticky scroll video section ────────────────────────────────────────── */
-// VIDEO_START skips the first few seconds of noise at the beginning of the clip
-const VIDEO_START = 1.8
+const VIDEO_START = 1.8  // seconds — skips the noisy opening frames
 
-const PHASES = [
-  { start: 0,    end: 0.28, text: ['The intelligence', 'layer for markets.'] },
-  { start: 0.38, end: 0.62, text: ['AI summaries.', 'Congressional trades.', 'Real-time signals.'] },
-  { start: 0.72, end: 1.0,  text: ['One feed.', 'Everything that matters.'] },
+const PHASE_LINES = [
+  ['The intelligence', 'layer for markets.'],
+  ['AI summaries.', 'Congressional trades.', 'Real-time signals.'],
+  ['One feed.', 'Everything that matters.'],
 ]
 
-function phaseOpacity(progress, start, end) {
-  const fadeLen = 0.08
-  if (progress < start) return 0
-  if (progress < start + fadeLen) return (progress - start) / fadeLen
-  if (progress < end - fadeLen) return 1
-  if (progress < end) return (end - progress) / fadeLen
-  return 0
-}
-
 function ScrollVideoSection() {
-  const sectionRef = useRef(null)
-  const videoRef   = useRef(null)
-  const [progress, setProgress] = useState(0)
+  const sectionRef  = useRef(null)
+  const videoRef    = useRef(null)
+  const targetRef   = useRef(VIDEO_START)   // desired currentTime, updated on scroll
+  const rafRef      = useRef(null)
+  const [phase, setPhase]           = useState(0)      // 0 | 1 | 2  — drives text only
+  const [scrolled, setScrolled]     = useState(false)  // scroll hint visibility
+  const [masked, setMasked]         = useState(true)   // hides the noisy first frame
 
   useEffect(() => {
+    const vid = videoRef.current
+    if (!vid) return
+
+    // Seek to VIDEO_START as soon as metadata is available, then unmask
+    const initVideo = () => {
+      vid.currentTime = VIDEO_START
+      // Small delay so the browser has time to decode the frame before unmasking
+      setTimeout(() => setMasked(false), 250)
+    }
+    if (vid.readyState >= 1) {
+      initVideo()
+    } else {
+      vid.addEventListener('loadedmetadata', initVideo, { once: true })
+    }
+
+    // Scroll → update targetRef only (no setState = no re-render)
     const onScroll = () => {
       const el = sectionRef.current
-      const vid = videoRef.current
       if (!el) return
-
-      const rect     = el.getBoundingClientRect()
-      const scrolled = -rect.top
-      const total    = el.offsetHeight - window.innerHeight
-      const p        = Math.max(0, Math.min(1, scrolled / total))
-      setProgress(p)
-
-      if (vid && vid.duration && !isNaN(vid.duration)) {
-        const range = vid.duration - VIDEO_START
-        vid.currentTime = VIDEO_START + p * range
+      const p = Math.max(0, Math.min(1,
+        -el.getBoundingClientRect().top / (el.offsetHeight - window.innerHeight)
+      ))
+      if (vid.duration && !isNaN(vid.duration)) {
+        targetRef.current = VIDEO_START + p * (vid.duration - VIDEO_START)
       }
+      // Phase: only 3 state updates for the whole scroll
+      setPhase(p < 0.33 ? 0 : p < 0.67 ? 1 : 2)
+      if (p > 0.02) setScrolled(true)
+    }
+
+    // RAF loop: lerp currentTime toward target each frame — smooth, no seek storms
+    const tick = () => {
+      if (vid.duration && !isNaN(vid.duration)) {
+        const diff = targetRef.current - vid.currentTime
+        // Only seek if meaningfully off; lerp factor 0.18 ≈ smooth but responsive
+        if (Math.abs(diff) > 0.04) {
+          vid.currentTime += diff * 0.18
+        }
+      }
+      rafRef.current = requestAnimationFrame(tick)
     }
 
     window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
+    rafRef.current = requestAnimationFrame(tick)
+
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      cancelAnimationFrame(rafRef.current)
+    }
   }, [])
 
-  const showCTA = progress > 0.82
-
   return (
-    <section ref={sectionRef} style={{ height: '230vh' }} className="relative">
+    <section ref={sectionRef} style={{ height: '240vh' }} className="relative">
       <div className="sticky top-0 h-screen overflow-hidden">
-        {/* Video */}
+
+        {/* Black mask — fades out once video has seeked past the noise */}
+        <div
+          className="absolute inset-0 bg-[#0a0a0a] z-20 pointer-events-none"
+          style={{ opacity: masked ? 1 : 0, transition: 'opacity 0.5s ease' }}
+        />
+
         <video
           ref={videoRef}
           className="absolute inset-0 w-full h-full object-cover"
-          muted
-          playsInline
-          preload="auto"
+          muted playsInline preload="auto"
           src="/hero.mp4"
         />
 
-        {/* Dark vignette overlay */}
-        <div className="absolute inset-0 bg-black/55" />
+        <div className="absolute inset-0 bg-black/52 pointer-events-none" />
+        <div className="absolute top-0 inset-x-0 h-48 bg-gradient-to-b from-[#0a0a0a] to-transparent pointer-events-none" />
+        <div className="absolute bottom-0 inset-x-0 h-48 bg-gradient-to-t from-[#0a0a0a] to-transparent pointer-events-none" />
 
-        {/* Edge fades that blend into the page background */}
-        <div className="absolute top-0 inset-x-0 h-40 bg-gradient-to-b from-[#0a0a0a] to-transparent pointer-events-none" />
-        <div className="absolute bottom-0 inset-x-0 h-40 bg-gradient-to-t from-[#0a0a0a] to-transparent pointer-events-none" />
-
-        {/* Text phases */}
-        <div className="absolute inset-0 flex items-center justify-center">
-          {PHASES.map((phase, i) => (
-            <div
-              key={i}
-              className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center"
-              style={{ opacity: phaseOpacity(progress, phase.start, phase.end), transition: 'opacity 0.15s ease' }}
-            >
-              <h2 className="text-4xl sm:text-6xl md:text-7xl font-bold text-white tracking-tight leading-[1.08]">
-                {phase.text.map((line, j) => (
-                  <span key={j} className="block">{line}</span>
-                ))}
-              </h2>
-            </div>
-          ))}
-
-          {/* CTA that appears on the last phase */}
+        {/* Text phases — CSS transition handles the fade, not JS per-frame */}
+        {PHASE_LINES.map((lines, i) => (
           <div
-            className="absolute bottom-24 left-0 right-0 flex justify-center"
-            style={{ opacity: showCTA ? (progress - 0.82) / 0.1 : 0, transition: 'opacity 0.2s ease' }}
+            key={i}
+            className="absolute inset-0 flex items-center justify-center px-6 text-center pointer-events-none"
+            style={{ opacity: i === phase ? 1 : 0, transition: 'opacity 0.65s ease' }}
           >
-            <Link
-              to="/onboarding"
-              className="bg-white hover:bg-gray-100 text-[#0a0a0a] font-bold px-8 py-4 rounded-xl text-sm tracking-wide transition-colors"
-            >
-              Get started free
-            </Link>
+            <h2 className="text-5xl sm:text-6xl md:text-7xl font-bold text-white tracking-tight leading-[1.06]">
+              {lines.map((line, j) => (
+                <span key={j} className="block">{line}</span>
+              ))}
+            </h2>
           </div>
+        ))}
+
+        {/* CTA — appears on phase 2 via CSS transition */}
+        <div
+          className="absolute bottom-20 inset-x-0 flex justify-center z-10"
+          style={{ opacity: phase === 2 ? 1 : 0, transition: 'opacity 0.65s ease' }}
+        >
+          <Link
+            to="/onboarding"
+            className="bg-white hover:bg-gray-100 text-[#0a0a0a] font-bold px-8 py-4 rounded-xl text-sm tracking-wide transition-colors"
+          >
+            Get started free
+          </Link>
         </div>
 
-        {/* Scroll hint — fades out as user starts scrolling */}
+        {/* Scroll hint — fades once user starts scrolling */}
         <div
-          className="absolute bottom-10 left-0 right-0 flex flex-col items-center gap-2"
-          style={{ opacity: Math.max(0, 1 - progress * 8), transition: 'opacity 0.2s' }}
+          className="absolute bottom-10 inset-x-0 flex flex-col items-center gap-2 pointer-events-none"
+          style={{ opacity: scrolled ? 0 : 1, transition: 'opacity 0.6s ease' }}
         >
           <span className="text-white/30 text-xs tracking-widest uppercase">Scroll</span>
           <div className="w-px h-8 bg-gradient-to-b from-white/30 to-transparent animate-pulse" />
         </div>
+
       </div>
     </section>
   )
