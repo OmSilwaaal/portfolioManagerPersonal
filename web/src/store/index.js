@@ -9,6 +9,7 @@ import preferencesReducer from './preferencesSlice'
 import '../api/govTradesApi'
 import '../api/commoditiesApi'
 import '../api/preferencesApi'
+import '../api/groupsApi'
 
 export const store = configureStore({
   reducer: {

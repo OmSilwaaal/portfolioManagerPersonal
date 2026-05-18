@@ -100,6 +100,39 @@ function initSchema() {
       rawJson TEXT,
       fetchedAt TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS groups (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      name        TEXT    NOT NULL,
+      description TEXT    NOT NULL DEFAULT '',
+      color       TEXT    NOT NULL DEFAULT '#e2e8f0',
+      emoji       TEXT    NOT NULL DEFAULT '',
+      code        TEXT    NOT NULL UNIQUE,
+      createdBy   TEXT    NOT NULL,
+      createdAt   TEXT    NOT NULL DEFAULT (datetime('now')),
+      updatedAt   TEXT    NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS group_members (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      groupId     INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+      userId      TEXT    NOT NULL,
+      displayName TEXT,
+      email       TEXT,
+      role        TEXT    NOT NULL DEFAULT 'member' CHECK(role IN ('admin','member')),
+      joinedAt    TEXT    NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(groupId, userId)
+    );
+
+    CREATE TABLE IF NOT EXISTS group_posts (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      groupId     INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+      authorId    TEXT    NOT NULL,
+      authorName  TEXT,
+      content     TEXT    NOT NULL,
+      type        TEXT    NOT NULL DEFAULT 'post' CHECK(type IN ('post','announcement','notification')),
+      createdAt   TEXT    NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 }
 

@@ -17,6 +17,9 @@ import GovTrades from './pages/GovTrades'
 import Commodities from './pages/Commodities'
 import Settings from './pages/Settings'
 import PaperTrading from './pages/PaperTrading'
+import Groups from './pages/Groups'
+import GroupDetail from './pages/GroupDetail'
+import CreateGroup from './pages/CreateGroup'
 import Landing from './pages/Landing'
 import Pricing from './pages/Pricing'
 
@@ -108,6 +111,9 @@ function AppInner() {
         <Route path="/copy-trading" element={<CopyTrading />} />
         <Route path="/alerts" element={<Alerts />} />
         <Route path="/paper-trading" element={<PaperTrading />} />
+        <Route path="/groups" element={<Groups />} />
+        <Route path="/groups/new" element={<CreateGroup />} />
+        <Route path="/groups/:id" element={<GroupDetail />} />
         <Route path="/gov-trades" element={<GovTrades />} />
         <Route path="/commodities" element={<Commodities />} />
         <Route path="/settings" element={<Settings />} />
