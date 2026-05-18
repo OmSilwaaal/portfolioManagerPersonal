@@ -62,7 +62,8 @@ export default function Groups() {
       const result = await joinGroup({ code: code.trim().toUpperCase() }).unwrap()
       navigate(`/groups/${result.id}`)
     } catch (err) {
-      setJoinError(err?.data?.error ?? 'Invalid code. Please try again.')
+      const msg = err?.data?.message ?? (typeof err?.data?.error === 'string' ? err.data.error : null) ?? err?.error ?? 'Invalid code. Please try again.'
+      setJoinError(msg)
     }
   }
 

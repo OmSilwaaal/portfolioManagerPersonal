@@ -31,7 +31,8 @@ export default function CreateGroup() {
       const result = await createGroup({ name: name.trim(), description: description.trim(), color, emoji }).unwrap()
       navigate(`/groups/${result.id}`)
     } catch (err) {
-      setError(err?.data?.error ?? 'Something went wrong.')
+      const msg = err?.data?.message ?? (typeof err?.data?.error === 'string' ? err.data.error : null) ?? err?.error ?? `Error ${err?.status ?? ''}`.trim() || 'Something went wrong.'
+      setError(msg)
     }
   }
 

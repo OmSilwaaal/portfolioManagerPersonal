@@ -1,7 +1,12 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
 import { supabase } from '../utils/supabase/client'
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+// VITE_API_URL already includes /api (e.g. https://backend.railway.app/api)
+// Strip trailing /api if present so we can append the correct path ourselves
+const _viteApiUrl = import.meta.env.VITE_API_URL ?? ''
+const API_BASE = _viteApiUrl
+  ? _viteApiUrl.replace(/\/api\/?$/, '')
+  : 'http://localhost:3001'
 
 export const paperTradingApi = createApi({
   reducerPath: 'paperTradingApi',

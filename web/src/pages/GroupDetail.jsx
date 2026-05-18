@@ -157,7 +157,7 @@ export default function GroupDetail() {
       setContent('')
       setPostType('post')
     } catch (err) {
-      setPostError(err?.data?.error ?? 'Failed to post.')
+      setPostError(err?.data?.message ?? (typeof err?.data?.error === 'string' ? err.data.error : null) ?? 'Failed to post.')
     }
   }
 

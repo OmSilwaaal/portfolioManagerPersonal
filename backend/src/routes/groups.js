@@ -39,7 +39,7 @@ router.get('/', requireAuth, (req, res) => {
 router.post('/', requireAuth, (req, res) => {
   const db = getDb()
   const { name, description = '', color = '#e2e8f0', emoji = '' } = req.body
-  if (!name?.trim()) return res.status(400).json({ error: 'Group name is required.' })
+  if (!name?.trim()) return res.status(400).json({ error: true, message: 'Group name is required.' })
 
   const code = generateCode(db)
   const displayName = req.user.user_metadata?.full_name ?? req.user.email ?? req.user.id
@@ -60,10 +60,10 @@ router.post('/', requireAuth, (req, res) => {
 router.post('/join', requireAuth, (req, res) => {
   const db = getDb()
   const { code } = req.body
-  if (!code?.trim()) return res.status(400).json({ error: 'Code is required.' })
+  if (!code?.trim()) return res.status(400).json({ error: true, message: 'Code is required.' })
 
   const group = db.prepare('SELECT * FROM groups WHERE code = ?').get(code.trim().toUpperCase())
-  if (!group) return res.status(404).json({ error: 'Invalid group code.' })
+  if (!group) return res.status(404).json({ error: true, message: 'Invalid group code.' })
 
   if (isMember(db, group.id, req.user.id)) {
     return res.json({ ...group, role: db.prepare('SELECT role FROM group_members WHERE groupId = ? AND userId = ?').get(group.id, req.user.id).role, alreadyMember: true })
@@ -82,10 +82,10 @@ router.get('/:id', requireAuth, (req, res) => {
   const db = getDb()
   const groupId = Number(req.params.id)
 
-  if (!isMember(db, groupId, req.user.id)) return res.status(403).json({ error: 'Not a member of this group.' })
+  if (!isMember(db, groupId, req.user.id)) return res.status(403).json({ error: true, message: 'Not a member of this group.' })
 
   const group = db.prepare('SELECT * FROM groups WHERE id = ?').get(groupId)
-  if (!group) return res.status(404).json({ error: 'Group not found.' })
+  if (!group) return res.status(404).json({ error: true, message: 'Group not found.' })
 
   const member = db.prepare('SELECT role FROM group_members WHERE groupId = ? AND userId = ?').get(groupId, req.user.id)
   const members = db.prepare('SELECT * FROM group_members WHERE groupId = ? ORDER BY role DESC, joinedAt ASC').all(groupId)
@@ -99,10 +99,10 @@ router.patch('/:id', requireAuth, (req, res) => {
   const db = getDb()
   const groupId = Number(req.params.id)
 
-  if (!isAdmin(db, groupId, req.user.id)) return res.status(403).json({ error: 'Admin only.' })
+  if (!isAdmin(db, groupId, req.user.id)) return res.status(403).json({ error: true, message: 'Admin only.' })
 
   const group = db.prepare('SELECT * FROM groups WHERE id = ?').get(groupId)
-  if (!group) return res.status(404).json({ error: 'Group not found.' })
+  if (!group) return res.status(404).json({ error: true, message: 'Group not found.' })
 
   const { name, description, color, emoji } = req.body
   db.prepare(`
@@ -123,14 +123,14 @@ router.post('/:id/posts', requireAuth, (req, res) => {
   const db = getDb()
   const groupId = Number(req.params.id)
 
-  if (!isMember(db, groupId, req.user.id)) return res.status(403).json({ error: 'Not a member.' })
+  if (!isMember(db, groupId, req.user.id)) return res.status(403).json({ error: true, message: 'Not a member.' })
 
   const { content, type = 'post' } = req.body
-  if (!content?.trim()) return res.status(400).json({ error: 'Content is required.' })
-  if (!['post', 'announcement', 'notification'].includes(type)) return res.status(400).json({ error: 'Invalid post type.' })
+  if (!content?.trim()) return res.status(400).json({ error: true, message: 'Content is required.' })
+  if (!['post', 'announcement', 'notification'].includes(type)) return res.status(400).json({ error: true, message: 'Invalid post type.' })
 
   if ((type === 'announcement' || type === 'notification') && !isAdmin(db, groupId, req.user.id)) {
-    return res.status(403).json({ error: 'Only admins can post announcements.' })
+    return res.status(403).json({ error: true, message: 'Only admins can post announcements.' })
   }
 
   const authorName = req.user.user_metadata?.full_name ?? req.user.email ?? req.user.id
@@ -148,10 +148,10 @@ router.delete('/:id/posts/:postId', requireAuth, (req, res) => {
   const postId = Number(req.params.postId)
 
   const post = db.prepare('SELECT * FROM group_posts WHERE id = ? AND groupId = ?').get(postId, groupId)
-  if (!post) return res.status(404).json({ error: 'Post not found.' })
+  if (!post) return res.status(404).json({ error: true, message: 'Post not found.' })
 
   if (post.authorId !== req.user.id && !isAdmin(db, groupId, req.user.id)) {
-    return res.status(403).json({ error: 'Cannot delete this post.' })
+    return res.status(403).json({ error: true, message: 'Cannot delete this post.' })
   }
 
   db.prepare('DELETE FROM group_posts WHERE id = ?').run(postId)
@@ -164,13 +164,13 @@ router.patch('/:id/members/:userId', requireAuth, (req, res) => {
   const groupId = Number(req.params.id)
   const targetUserId = req.params.userId
 
-  if (!isAdmin(db, groupId, req.user.id)) return res.status(403).json({ error: 'Admin only.' })
-  if (targetUserId === req.user.id) return res.status(400).json({ error: 'Cannot change your own role.' })
+  if (!isAdmin(db, groupId, req.user.id)) return res.status(403).json({ error: true, message: 'Admin only.' })
+  if (targetUserId === req.user.id) return res.status(400).json({ error: true, message: 'Cannot change your own role.' })
 
   const { role } = req.body
-  if (!['admin', 'member'].includes(role)) return res.status(400).json({ error: 'Invalid role.' })
+  if (!['admin', 'member'].includes(role)) return res.status(400).json({ error: true, message: 'Invalid role.' })
 
-  if (!isMember(db, groupId, targetUserId)) return res.status(404).json({ error: 'Member not found.' })
+  if (!isMember(db, groupId, targetUserId)) return res.status(404).json({ error: true, message: 'Member not found.' })
 
   db.prepare('UPDATE group_members SET role = ? WHERE groupId = ? AND userId = ?').run(role, groupId, targetUserId)
   res.json({ success: true })
@@ -184,14 +184,14 @@ router.delete('/:id/members/:userId', requireAuth, (req, res) => {
   const isSelf = targetUserId === req.user.id
 
   if (!isSelf && !isAdmin(db, groupId, req.user.id)) {
-    return res.status(403).json({ error: 'Cannot remove this member.' })
+    return res.status(403).json({ error: true, message: 'Cannot remove this member.' })
   }
 
   if (isSelf && isAdmin(db, groupId, req.user.id)) {
     const adminCount = db.prepare(
       'SELECT COUNT(*) AS c FROM group_members WHERE groupId = ? AND role = ?'
     ).get(groupId, 'admin').c
-    if (adminCount <= 1) return res.status(400).json({ error: 'You are the only admin. Transfer admin to someone else before leaving.' })
+    if (adminCount <= 1) return res.status(400).json({ error: true, message: 'You are the only admin. Transfer admin to someone else before leaving.' })
   }
 
   db.prepare('DELETE FROM group_members WHERE groupId = ? AND userId = ?').run(groupId, targetUserId)
