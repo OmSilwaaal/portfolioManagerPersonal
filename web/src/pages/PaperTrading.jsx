@@ -85,6 +85,8 @@ import {
   useGetTransactionsQuery,
   usePurchaseCashMutation,
 } from '../api/paperTradingApi'
+import { useGetStockQuery } from '../api/stocksApi'
+import TradingViewChart from '../components/TradingViewChart'
 
 /* ─── Style constants ─────────────────────────────────────────────────────── */
 const glassStyle = {
@@ -115,6 +117,72 @@ const fmtTime = (iso) => {
   return `${Math.floor(diff / 86400000)}d ago`
 }
 
+/* ─── Expanded stock detail ───────────────────────────────────────────────── */
+function ExpandedStockRow({ ticker, onBuy }) {
+  const { data, isLoading } = useGetStockQuery(ticker)
+
+  const fmtStat = (n) =>
+    n == null ? '—' : n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+  const fmtVol = (n) => {
+    if (n == null) return '—'
+    if (n >= 1e9) return `${(n / 1e9).toFixed(2)}B`
+    if (n >= 1e6) return `${(n / 1e6).toFixed(2)}M`
+    if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`
+    return n.toLocaleString()
+  }
+
+  const change = data?.change ?? 0
+  const changePct = data?.changePercent ?? 0
+  const positive = change >= 0
+
+  const stats = [
+    { label: 'Price',       value: data?.price != null ? `$${fmtStat(data.price)}` : '—' },
+    { label: 'Change',      value: data ? `${positive ? '+' : ''}${fmtStat(change)} (${positive ? '+' : ''}${fmtStat(changePct)}%)` : '—', color: positive ? 'text-emerald-400' : 'text-red-400' },
+    { label: 'Open',        value: data?.open != null ? `$${fmtStat(data.open)}` : '—' },
+    { label: 'Prev Close',  value: data?.previousClose != null ? `$${fmtStat(data.previousClose)}` : '—' },
+    { label: 'Day High',    value: data?.high != null ? `$${fmtStat(data.high)}` : '—' },
+    { label: 'Day Low',     value: data?.low != null ? `$${fmtStat(data.low)}` : '—' },
+    { label: 'Volume',      value: fmtVol(data?.volume) },
+    { label: 'Market Cap',  value: data?.marketCap != null ? `$${fmtVol(data.marketCap * 1e6)}` : '—' },
+  ]
+
+  return (
+    <div className="px-4 pb-4 border-b" style={{ borderColor: 'rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.015)' }}>
+      {isLoading ? (
+        <div className="animate-pulse py-4 space-y-2">
+          <div className="h-40 bg-white/6 rounded-xl" />
+          <div className="grid grid-cols-4 gap-2 mt-3">
+            {Array.from({ length: 8 }).map((_, i) => <div key={i} className="h-8 bg-white/6 rounded" />)}
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="pt-3 pb-3 rounded-xl overflow-hidden" style={{ height: 300 }}>
+            <TradingViewChart ticker={ticker} />
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1">
+            {stats.map(({ label, value, color }) => (
+              <div key={label} className="rounded-lg px-3 py-2" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                <p className="text-[10px] uppercase tracking-widest text-white/30 mb-0.5">{label}</p>
+                <p className={`text-xs font-semibold tabular-nums ${color ?? 'text-white/80'}`}>{value}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 flex justify-end">
+            <button
+              onClick={onBuy}
+              className="px-4 py-2 rounded-lg text-xs font-semibold bg-white text-[#0a0a0a] hover:bg-white/90 transition-colors"
+            >
+              Buy {ticker}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 /* ─── Main page ───────────────────────────────────────────────────────────── */
 export default function PaperTrading() {
   const { unlocked, unlock } = useAccessCode()
@@ -139,6 +207,9 @@ export default function PaperTrading() {
   const [tradeShares, setTradeShares] = useState(1)
   const [tradeError, setTradeError] = useState('')
   const [tradeLoading, setTradeLoading] = useState(false)
+
+  /* Expanded ticker state */
+  const [expandedTicker, setExpandedTicker] = useState(null)
 
   /* Cash modal state */
   const [cashModal, setCashModal] = useState(false)
@@ -277,26 +348,47 @@ export default function PaperTrading() {
                     <div className="h-7 bg-white/8 rounded-lg w-14" />
                   </div>
                 ))
-              ) : (tradableStocks ?? []).map((stock, i, arr) => (
-                <div
-                  key={stock.ticker}
-                  className="flex items-center justify-between px-4 py-3 hover:bg-white/[0.03] transition-colors border-b last:border-0"
-                  style={{ borderColor: 'rgba(255,255,255,0.06)' }}
-                >
-                  <div className="flex flex-col min-w-0 flex-1 mr-3">
-                    <span className="font-bold text-white text-sm">{stock.ticker}</span>
-                    <span className="text-xs text-white/40 truncate">{stock.companyName}</span>
+              ) : (tradableStocks ?? []).map((stock) => {
+                const isExpanded = expandedTicker === stock.ticker
+                return (
+                  <div key={stock.ticker} className="border-b last:border-0" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+                    <div
+                      className="flex items-center justify-between px-4 py-3 hover:bg-white/[0.03] transition-colors cursor-pointer"
+                      onClick={() => setExpandedTicker(isExpanded ? null : stock.ticker)}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-3">
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24"
+                          fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="2.5"
+                          strokeLinecap="round" strokeLinejoin="round"
+                          className="flex-shrink-0 transition-transform duration-200"
+                          style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}
+                        >
+                          <polyline points="9 18 15 12 9 6"/>
+                        </svg>
+                        <div className="flex flex-col min-w-0">
+                          <span className="font-bold text-white text-sm">{stock.ticker}</span>
+                          <span className="text-xs text-white/40 truncate">{stock.companyName}</span>
+                        </div>
+                      </div>
+                      <span className="text-sm text-white/70 tabular-nums mr-4">${fmt(stock.price)}</span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); openBuyModal(stock) }}
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium text-white/70 hover:text-white transition-colors border"
+                        style={{ borderColor: 'rgba(255,255,255,0.20)' }}
+                      >
+                        Buy
+                      </button>
+                    </div>
+                    {isExpanded && (
+                      <ExpandedStockRow
+                        ticker={stock.ticker}
+                        onBuy={() => openBuyModal(stock)}
+                      />
+                    )}
                   </div>
-                  <span className="text-sm text-white/70 tabular-nums mr-4">${fmt(stock.price)}</span>
-                  <button
-                    onClick={() => openBuyModal(stock)}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium text-white/70 hover:text-white transition-colors border"
-                    style={{ borderColor: 'rgba(255,255,255,0.20)' }}
-                  >
-                    Buy
-                  </button>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
 
