@@ -1,7 +1,7 @@
 import { useSelector } from 'react-redux'
 import { useGetCryptoQuery } from '../api/cryptoApi'
 import ProGate from '../components/ProGate'
-import StockChart from '../components/StockChart'
+import TradingViewChart from '../components/TradingViewChart'
 
 const DEFAULT_CRYPTOS = ['BTC', 'ETH', 'SOL', 'DOGE']
 
@@ -52,10 +52,7 @@ function CryptoCard({ symbol, isLocked }) {
           <p className="text-2xl font-semibold text-white dark:text-white text-[#0f0f0f] mb-3">
             ${(data.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
-          <StockChart
-            data={data.candles}
-            basePrice={data.price}
-          />
+          <TradingViewChart ticker={symbol} />
           {data.volume24h && (
             <p className="text-xs text-[#6b7280] mt-2">
               24h Volume: {data.volume24h.toLocaleString(undefined, { maximumFractionDigits: 0 })}

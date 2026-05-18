@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import { addStock, removeStock, setSelectedTicker } from '../store/watchlistSlice'
 import { useGetStockQuery } from '../api/stocksApi'
 import NewsCard from '../components/NewsCard'
-import StockChart from '../components/StockChart'
+import TradingViewChart from '../components/TradingViewChart'
 import ProGate from '../components/ProGate'
 
 function StockRow({ ticker, isSelected, onClick }) {
@@ -102,7 +102,7 @@ function StockRow({ ticker, isSelected, onClick }) {
           <td colSpan={5} className="px-4 pb-4 bg-[#0a0a0a] dark:bg-[#0a0a0a]">
             <ProGate label="Full charts & AI news">
               <div className="pt-4 space-y-4">
-                <StockChart basePrice={price} />
+                <TradingViewChart ticker={ticker} />
                 {data?.news && data.news.length > 0 && (
                   <div className="space-y-3">
                     <h4 className="text-sm font-medium text-[#a1a1aa]">
