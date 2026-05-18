@@ -139,13 +139,17 @@ function drawToCanvas(canvas, img) {
   ctx.drawImage(img, (cw - sw) / 2, (ch - sh) / 2, sw, sh)
 }
 
+const MIN_PHASE_DWELL_MS = 800 // min ms a phase must show before advancing forward
+
 function ScrollVideoSection() {
-  const sectionRef     = useRef(null)
-  const canvasRef      = useRef(null)
-  const framesRef      = useRef([])          // Image[] — preloaded frames
-  const targetRef      = useRef(0)           // float frame index (updated on scroll, no re-render)
-  const currentRef     = useRef(0)           // float frame index (lerped in RAF)
-  const rafRef         = useRef(null)
+  const sectionRef          = useRef(null)
+  const canvasRef           = useRef(null)
+  const framesRef           = useRef([])          // Image[] — preloaded frames
+  const targetRef           = useRef(0)           // float frame index (updated on scroll, no re-render)
+  const currentRef          = useRef(0)           // float frame index (lerped in RAF)
+  const rafRef              = useRef(null)
+  const phaseRef            = useRef(0)           // current phase without re-render
+  const lastPhaseChangeRef  = useRef(0)           // timestamp of last phase change
   const [phase, setPhase]       = useState(0)
   const [scrolled, setScrolled] = useState(false)
   const [ready, setReady]       = useState(false) // first frame loaded
@@ -223,8 +227,18 @@ function ScrollVideoSection() {
         -el.getBoundingClientRect().top / (el.offsetHeight - window.innerHeight)
       ))
       targetRef.current = p * (TOTAL_FRAMES - 1)
-      // Only 3 React state updates for the whole scroll — no per-frame re-renders
-      setPhase(p < 0.33 ? 0 : p < 0.67 ? 1 : 2)
+
+      const desired = p < 0.33 ? 0 : p < 0.67 ? 1 : 2
+      if (desired !== phaseRef.current) {
+        const advancing = desired > phaseRef.current
+        // When going forward, enforce minimum dwell so text isn't skipped on fast scroll.
+        // When scrolling back, update immediately so it feels responsive.
+        if (!advancing || Date.now() - lastPhaseChangeRef.current >= MIN_PHASE_DWELL_MS) {
+          phaseRef.current = desired
+          lastPhaseChangeRef.current = Date.now()
+          setPhase(desired)
+        }
+      }
       if (p > 0.015) setScrolled(true)
     }
     window.addEventListener('scroll', onScroll, { passive: true })
