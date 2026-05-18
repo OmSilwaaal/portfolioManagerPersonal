@@ -61,22 +61,22 @@ app.use('/api', globalLimiter);
 // ── ROUTES ────────────────────────────────────────────────────────────────────
 
 // AI-heavy routes — require valid Supabase session + tight rate limits
-app.use('/api/feed',        feedLimiter,        requireAuth, feedRouter);
-app.use('/api/stocks',      aiLimiter,          requireAuth, stocksRouter);
-app.use('/api/crypto',      aiLimiter,          requireAuth, cryptoRouter);
+app.use('/api/feed', feedLimiter, requireAuth, feedRouter);
+app.use('/api/stocks', aiLimiter, requireAuth, stocksRouter);
+app.use('/api/crypto', aiLimiter, requireAuth, cryptoRouter);
 app.use('/api/commodities', commoditiesLimiter, requireAuth, commoditiesRouter);
-app.use('/api/gov-trades',  aiLimiter,          requireAuth, govTradesRouter);
+app.use('/api/gov-trades', aiLimiter, requireAuth, govTradesRouter);
 
 // Lower-cost routes — still require auth to prevent enumeration
-app.use('/api/alerts',      requireAuth, alertsRouter);
+app.use('/api/alerts', requireAuth, alertsRouter);
 app.use('/api/preferences', requireAuth, preferencesRouter);
-app.use('/api/portfolio',   requireAuth, portfolioRouter);
+app.use('/api/portfolio', requireAuth, portfolioRouter);
 
 // Public routes — no auth needed
-app.use('/api/calendar',      calendarRouter);
-app.use('/api/search',        searchRouter);
+app.use('/api/calendar', calendarRouter);
+app.use('/api/search', searchRouter);
 app.use('/api/paper-trading', paperTradingRouter);
-app.use('/api/groups', requireAuth, groupsRouter);
+app.use('/api/groups', groupsRouter);
 
 // Health check
 app.get('/health', (req, res) => {
@@ -92,3 +92,4 @@ app.listen(PORT, () => {
 });
 
 module.exports = app;
+
