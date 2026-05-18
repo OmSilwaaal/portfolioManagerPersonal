@@ -1,138 +1,73 @@
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 
-/* ─────────────────────────────────────────────
-   Inline SVG icon helpers
-───────────────────────────────────────────── */
+/* ─── Icons ──────────────────────────────────────────────────────────────── */
 function IconBuilding() {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
-      <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
     </svg>
   )
 }
-
 function IconBrain() {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 2a4 4 0 0 1 4 4 4 4 0 0 1 2 7.46V18a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-4.54A4 4 0 0 1 8 6a4 4 0 0 1 4-4z"/>
       <path d="M12 6v6M9 9h6"/>
     </svg>
   )
 }
-
 function IconBell() {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-      <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
     </svg>
   )
 }
-
 function IconFeed() {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-      <polyline points="9 22 9 12 15 12 15 22"/>
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
     </svg>
   )
 }
-
 function IconCalendar() {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-      <line x1="16" y1="2" x2="16" y2="6"/>
-      <line x1="8" y1="2" x2="8" y2="6"/>
-      <line x1="3" y1="10" x2="21" y2="10"/>
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
     </svg>
   )
 }
-
-function IconCommodities() {
+function IconChart() {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 3v18h18"/>
-      <path d="M18 9l-5 5-4-4-3 3"/>
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 3v18h18"/><path d="M18 9l-5 5-4-4-3 3"/>
     </svg>
   )
 }
 
-/* ─────────────────────────────────────────────
-   Data
-───────────────────────────────────────────── */
+/* ─── Data ───────────────────────────────────────────────────────────────── */
 const features = [
-  {
-    icon: <IconBuilding />,
-    title: 'Congressional Trades',
-    description:
-      'Track every STOCK Act disclosure in real time. Know what senators and representatives are buying before the market reacts.',
-  },
-  {
-    icon: <IconBrain />,
-    title: 'AI Market Summaries',
-    description:
-      'Claude AI distills hundreds of news items into plain-English urgency-scored briefs. No jargon, no noise.',
-  },
-  {
-    icon: <IconBell />,
-    title: 'Price Alerts',
-    description:
-      'Set threshold alerts on any stock or crypto. Get notified the moment a price crosses your target.',
-  },
-  {
-    icon: <IconFeed />,
-    title: 'Personalized Feed',
-    description:
-      'Tell us your interests once. Get a ranked feed of everything that matters to your portfolio.',
-  },
-  {
-    icon: <IconCalendar />,
-    title: 'Macro Calendar',
-    description:
-      'Fed decisions, earnings, economic data — surfaced with AI impact analysis before they move markets.',
-  },
-  {
-    icon: <IconCommodities />,
-    title: 'Commodities',
-    description:
-      'Oil, gold, wheat, natural gas — with macro context generated by Claude AI.',
-  },
-]
-
-const stats = [
-  { label: '10,000+ STOCK Act trades tracked' },
-  { label: '~60% AI cost reduction via prompt caching' },
-  { label: 'Free to start' },
+  { icon: <IconBuilding />, title: 'Congressional Trades', description: 'Track every STOCK Act disclosure in real time. Know what senators and representatives are buying before the market reacts.' },
+  { icon: <IconBrain />,    title: 'AI Market Summaries',  description: 'Claude AI distills hundreds of news items into plain-English urgency-scored briefs. No jargon, no noise.' },
+  { icon: <IconBell />,     title: 'Price Alerts',         description: 'Set threshold alerts on any stock or crypto. Get notified the moment a price crosses your target.' },
+  { icon: <IconFeed />,     title: 'Personalized Feed',    description: 'Tell us your interests once. Get a ranked feed of everything that matters to your portfolio.' },
+  { icon: <IconCalendar />, title: 'Macro Calendar',       description: 'Fed decisions, earnings, economic data — surfaced with AI impact analysis before they move markets.' },
+  { icon: <IconChart />,    title: 'Commodities',          description: 'Oil, gold, wheat, natural gas — with macro context generated by Claude AI.' },
 ]
 
 const steps = [
-  {
-    number: '01',
-    title: 'Answer 6 questions',
-    description: 'We personalize your feed based on your investment style.',
-  },
-  {
-    number: '02',
-    title: 'Connect your watchlist',
-    description: 'Add the tickers you care about.',
-  },
-  {
-    number: '03',
-    title: 'Get your intelligence briefing',
-    description: 'Urgency-scored feed, ready every morning.',
-  },
+  { number: '01', title: 'Answer 6 questions',       description: 'We personalize your feed based on your investment style.' },
+  { number: '02', title: 'Connect your watchlist',   description: 'Add the tickers you care about.' },
+  { number: '03', title: 'Get your intelligence briefing', description: 'Urgency-scored feed, ready every morning.' },
 ]
 
-/* ─────────────────────────────────────────────
-   Logo (reusable within this page)
-───────────────────────────────────────────── */
+/* ─── Logo ───────────────────────────────────────────────────────────────── */
 function Logo() {
   return (
     <div className="flex items-center gap-2">
-      <div className="w-7 h-7 bg-[#3b82f6] rounded-md flex items-center justify-center flex-shrink-0">
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <div className="w-7 h-7 bg-white rounded-md flex items-center justify-center flex-shrink-0">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0a0a0a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
         </svg>
       </div>
@@ -141,202 +76,275 @@ function Logo() {
   )
 }
 
-/* ─────────────────────────────────────────────
-   Mock trade card (Section 5)
-───────────────────────────────────────────── */
+/* ─── Mock trade card ────────────────────────────────────────────────────── */
 function MockTradeCard() {
   return (
-    <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-5 max-w-sm w-full">
-      {/* Header */}
+    <div className="bg-[#0f0f0f] border border-white/8 rounded-xl p-5 max-w-sm w-full">
       <div className="flex items-start justify-between gap-2 mb-1">
         <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 mt-0.5 bg-blue-500" />
+          <span className="w-2 h-2 rounded-full flex-shrink-0 mt-0.5 bg-white/40" />
           <div>
             <span className="text-white font-semibold text-sm">Sen. Nancy Pelosi</span>
             <div className="flex items-center gap-2 mt-0.5">
-              <span className="text-gray-400 text-xs">Senate</span>
-              <span className="text-gray-500 text-xs">&middot; Democrat</span>
+              <span className="text-white/40 text-xs">Senate · Democrat</span>
             </div>
           </div>
         </div>
-        {/* Urgency badge */}
-        <span className="text-xs font-semibold px-2 py-0.5 rounded bg-red-500/15 text-red-400 uppercase tracking-wide">
+        <span className="text-xs font-semibold px-2 py-0.5 rounded bg-white/8 text-white/60 uppercase tracking-wide border border-white/10">
           High
         </span>
       </div>
-
-      <div className="border-t border-[#2a2a2a] my-3" />
-
-      {/* Trade row */}
+      <div className="border-t border-white/6 my-3" />
       <div className="flex items-center justify-between gap-3 mb-1">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-bold px-2 py-0.5 rounded bg-green-500/10 text-green-400">
-            PURCHASE
-          </span>
+          <span className="text-xs font-bold px-2 py-0.5 rounded bg-white/8 text-white/70 border border-white/10">PURCHASE</span>
           <span className="text-white font-bold">NVDA</span>
-          <span className="text-gray-400 text-xs truncate max-w-[100px]">NVIDIA Corp.</span>
+          <span className="text-white/40 text-xs truncate max-w-[100px]">NVIDIA Corp.</span>
         </div>
-        <span className="text-gray-300 text-sm font-medium">$1M–$5M</span>
+        <span className="text-white/70 text-sm font-medium">$1M–$5M</span>
       </div>
-
-      <div className="flex items-center gap-2 text-xs text-gray-400 mt-1">
-        <span>Traded 2 days ago</span>
-        <span className="text-amber-400">&middot; Disclosed 31 days after trade ⚠</span>
+      <div className="flex items-center gap-2 text-xs text-white/30 mt-1">
+        <span>Traded 2 days ago · Disclosed 31 days after ⚠</span>
       </div>
-
-      <div className="border-t border-[#2a2a2a] my-3" />
-
-      <p className="text-gray-400 text-xs leading-relaxed">
+      <div className="border-t border-white/6 my-3" />
+      <p className="text-white/40 text-xs leading-relaxed">
         High urgency: Pelosi's purchase of NVDA aligns with Senate Commerce Committee activity surrounding AI chip export policy. Pattern suggests informed positioning ahead of regulatory announcements.
       </p>
-
       <div className="mt-3">
-        <span className="text-[10px] text-gray-600 uppercase tracking-wider">STOCK Act disclosure</span>
+        <span className="text-[10px] text-white/20 uppercase tracking-wider">STOCK Act disclosure</span>
       </div>
     </div>
   )
 }
 
-/* ─────────────────────────────────────────────
-   Main Landing component
-───────────────────────────────────────────── */
+/* ─── Sticky scroll video section ────────────────────────────────────────── */
+// VIDEO_START skips the first few seconds of noise at the beginning of the clip
+const VIDEO_START = 1.8
+
+const PHASES = [
+  { start: 0,    end: 0.28, text: ['The intelligence', 'layer for markets.'] },
+  { start: 0.38, end: 0.62, text: ['AI summaries.', 'Congressional trades.', 'Real-time signals.'] },
+  { start: 0.72, end: 1.0,  text: ['One feed.', 'Everything that matters.'] },
+]
+
+function phaseOpacity(progress, start, end) {
+  const fadeLen = 0.08
+  if (progress < start) return 0
+  if (progress < start + fadeLen) return (progress - start) / fadeLen
+  if (progress < end - fadeLen) return 1
+  if (progress < end) return (end - progress) / fadeLen
+  return 0
+}
+
+function ScrollVideoSection() {
+  const sectionRef = useRef(null)
+  const videoRef   = useRef(null)
+  const [progress, setProgress] = useState(0)
+
+  useEffect(() => {
+    const onScroll = () => {
+      const el = sectionRef.current
+      const vid = videoRef.current
+      if (!el) return
+
+      const rect     = el.getBoundingClientRect()
+      const scrolled = -rect.top
+      const total    = el.offsetHeight - window.innerHeight
+      const p        = Math.max(0, Math.min(1, scrolled / total))
+      setProgress(p)
+
+      if (vid && vid.duration && !isNaN(vid.duration)) {
+        const range = vid.duration - VIDEO_START
+        vid.currentTime = VIDEO_START + p * range
+      }
+    }
+
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
+  const showCTA = progress > 0.82
+
+  return (
+    <section ref={sectionRef} style={{ height: '230vh' }} className="relative">
+      <div className="sticky top-0 h-screen overflow-hidden">
+        {/* Video */}
+        <video
+          ref={videoRef}
+          className="absolute inset-0 w-full h-full object-cover"
+          muted
+          playsInline
+          preload="auto"
+          src="/hero.mp4"
+        />
+
+        {/* Dark vignette overlay */}
+        <div className="absolute inset-0 bg-black/55" />
+
+        {/* Edge fades that blend into the page background */}
+        <div className="absolute top-0 inset-x-0 h-40 bg-gradient-to-b from-[#0a0a0a] to-transparent pointer-events-none" />
+        <div className="absolute bottom-0 inset-x-0 h-40 bg-gradient-to-t from-[#0a0a0a] to-transparent pointer-events-none" />
+
+        {/* Text phases */}
+        <div className="absolute inset-0 flex items-center justify-center">
+          {PHASES.map((phase, i) => (
+            <div
+              key={i}
+              className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center"
+              style={{ opacity: phaseOpacity(progress, phase.start, phase.end), transition: 'opacity 0.15s ease' }}
+            >
+              <h2 className="text-4xl sm:text-6xl md:text-7xl font-bold text-white tracking-tight leading-[1.08]">
+                {phase.text.map((line, j) => (
+                  <span key={j} className="block">{line}</span>
+                ))}
+              </h2>
+            </div>
+          ))}
+
+          {/* CTA that appears on the last phase */}
+          <div
+            className="absolute bottom-24 left-0 right-0 flex justify-center"
+            style={{ opacity: showCTA ? (progress - 0.82) / 0.1 : 0, transition: 'opacity 0.2s ease' }}
+          >
+            <Link
+              to="/onboarding"
+              className="bg-white hover:bg-gray-100 text-[#0a0a0a] font-bold px-8 py-4 rounded-xl text-sm tracking-wide transition-colors"
+            >
+              Get started free
+            </Link>
+          </div>
+        </div>
+
+        {/* Scroll hint — fades out as user starts scrolling */}
+        <div
+          className="absolute bottom-10 left-0 right-0 flex flex-col items-center gap-2"
+          style={{ opacity: Math.max(0, 1 - progress * 8), transition: 'opacity 0.2s' }}
+        >
+          <span className="text-white/30 text-xs tracking-widest uppercase">Scroll</span>
+          <div className="w-px h-8 bg-gradient-to-b from-white/30 to-transparent animate-pulse" />
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/* ─── Main Landing ───────────────────────────────────────────────────────── */
 export default function Landing() {
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white font-sans">
 
-      {/* ── 1. NAV ── */}
-      <header className="sticky top-0 z-50 bg-[#0a0a0a]/90 backdrop-blur border-b border-white/5">
+      {/* ── NAV ── */}
+      <header className="sticky top-0 z-50 bg-[#0a0a0a]/80 backdrop-blur-md border-b border-white/5">
         <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
           <Logo />
           <Link
             to="/onboarding"
-            className="bg-[#3b82f6] hover:bg-[#2563eb] text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+            className="bg-white hover:bg-gray-100 text-[#0a0a0a] text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
           >
             Get started free
           </Link>
         </div>
       </header>
 
-      {/* ── 2. HERO ── */}
-      <section className="max-w-6xl mx-auto px-6 pt-24 pb-28 text-center">
-        {/* Tag line */}
-        <p className="text-xs font-medium tracking-[0.18em] text-[#6b7280] uppercase mb-6">
+      {/* ── HERO ── */}
+      <section className="max-w-6xl mx-auto px-6 pt-28 pb-20 text-center">
+        <p className="text-xs font-medium tracking-[0.2em] text-white/25 uppercase mb-7">
           Stock Act&nbsp;&nbsp;·&nbsp;&nbsp;AI Summaries&nbsp;&nbsp;·&nbsp;&nbsp;Real-Time Alerts
         </p>
-
-        {/* Headline */}
-        <h1 className="text-4xl sm:text-5xl font-bold text-white leading-[1.15] tracking-tight mb-5">
+        <h1 className="text-5xl sm:text-6xl font-bold text-white leading-[1.1] tracking-tight mb-6">
           The intelligence layer<br className="hidden sm:block" /> for markets.
         </h1>
-
-        {/* Sub-headline */}
-        <p className="text-lg text-[#a1a1aa] max-w-xl mx-auto mb-10 leading-relaxed">
-          Track congressional trades, AI-summarized news, and real-time price alerts — all in one feed.
+        <p className="text-lg text-white/40 max-w-lg mx-auto mb-12 leading-relaxed">
+          Congressional trades, AI-summarized news, and real-time price alerts — in one ranked feed.
         </p>
-
-        {/* CTAs */}
-        <div className="flex items-center justify-center gap-4 flex-wrap mb-14">
+        <div className="flex items-center justify-center gap-3 flex-wrap">
           <Link
             to="/onboarding"
-            className="bg-[#3b82f6] hover:bg-[#2563eb] text-white font-semibold px-6 py-3 rounded-lg text-sm transition-colors"
+            className="bg-white hover:bg-gray-100 text-[#0a0a0a] font-semibold px-6 py-3 rounded-lg text-sm transition-colors"
           >
             Start for free
           </Link>
           <a
-            href="#how-it-works"
-            className="border border-white/15 hover:border-white/30 text-[#a1a1aa] hover:text-white font-medium px-6 py-3 rounded-lg text-sm transition-colors"
+            href="#features"
+            className="border border-white/12 hover:border-white/25 text-white/50 hover:text-white/80 font-medium px-6 py-3 rounded-lg text-sm transition-colors"
           >
             See how it works
           </a>
         </div>
-
-        {/* Social proof stats */}
-        <div className="flex items-center justify-center gap-0 flex-wrap divide-x divide-white/10">
-          {stats.map((stat, i) => (
-            <span key={i} className="px-5 text-xs text-[#6b7280] font-medium first:pl-0 last:pr-0">
-              {stat.label}
-            </span>
-          ))}
-        </div>
       </section>
 
-      {/* ── 3. FEATURES GRID ── */}
-      <section className="max-w-6xl mx-auto px-6 pb-28">
-        <h2 className="text-2xl font-bold text-white text-center mb-3 tracking-tight">
-          Everything the market knows. In one place.
+      {/* ── STICKY SCROLL VIDEO ── */}
+      <ScrollVideoSection />
+
+      {/* ── FEATURES GRID ── */}
+      <section id="features" className="max-w-6xl mx-auto px-6 py-28">
+        <p className="text-xs font-medium tracking-[0.2em] text-white/25 uppercase text-center mb-4">Features</p>
+        <h2 className="text-3xl font-bold text-white text-center mb-3 tracking-tight">
+          Everything the market knows.
         </h2>
-        <p className="text-[#6b7280] text-sm text-center mb-12">
+        <p className="text-white/35 text-sm text-center mb-14">
           Built for investors who want signal, not noise.
         </p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-px bg-white/5 rounded-2xl overflow-hidden border border-white/5">
           {features.map((feature) => (
             <div
               key={feature.title}
-              className="group bg-[#0f0f0f] border border-[#1f1f1f] hover:border-[#3b82f6]/40 rounded-xl p-6 transition-colors duration-200"
+              className="bg-[#0a0a0a] hover:bg-[#0f0f0f] p-7 transition-colors group"
             >
-              <div className="text-[#3b82f6] mb-4">{feature.icon}</div>
+              <div className="text-white/30 group-hover:text-white/60 mb-4 transition-colors">{feature.icon}</div>
               <h3 className="text-white font-semibold text-sm mb-2">{feature.title}</h3>
-              <p className="text-[#6b7280] text-sm leading-relaxed">{feature.description}</p>
+              <p className="text-white/35 text-sm leading-relaxed">{feature.description}</p>
             </div>
           ))}
         </div>
       </section>
 
-      {/* ── 4. HOW IT WORKS ── */}
+      {/* ── HOW IT WORKS ── */}
       <section id="how-it-works" className="max-w-6xl mx-auto px-6 pb-28">
-        <h2 className="text-2xl font-bold text-white text-center mb-3 tracking-tight">
+        <p className="text-xs font-medium tracking-[0.2em] text-white/25 uppercase text-center mb-4">Process</p>
+        <h2 className="text-3xl font-bold text-white text-center mb-3 tracking-tight">
           Up and running in minutes.
         </h2>
-        <p className="text-[#6b7280] text-sm text-center mb-14">
+        <p className="text-white/35 text-sm text-center mb-16">
           No complicated setup. Just answers and a watchlist.
         </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 relative">
-          {/* Connector line — desktop only */}
-          <div className="hidden md:block absolute top-7 left-[calc(16.66%+2rem)] right-[calc(16.66%+2rem)] h-px bg-white/5 z-0" />
-
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-px bg-white/5 rounded-2xl overflow-hidden border border-white/5">
           {steps.map((step, i) => (
-            <div key={i} className="relative z-10 flex flex-col items-center text-center px-4">
-              <div className="w-14 h-14 rounded-full bg-[#0f0f0f] border border-[#2a2a2a] flex items-center justify-center mb-5">
-                <span className="text-[#3b82f6] font-bold text-sm font-mono">{step.number}</span>
-              </div>
+            <div key={i} className="bg-[#0a0a0a] p-8 flex flex-col">
+              <span className="text-white/15 font-mono font-bold text-4xl mb-6 block">{step.number}</span>
               <h3 className="text-white font-semibold text-sm mb-2">{step.title}</h3>
-              <p className="text-[#6b7280] text-sm leading-relaxed max-w-[220px]">{step.description}</p>
+              <p className="text-white/35 text-sm leading-relaxed">{step.description}</p>
             </div>
           ))}
         </div>
       </section>
 
-      {/* ── 5. GOV TRADES HIGHLIGHT ── */}
-      <section className="w-full bg-[#0f0f0f] border-y border-white/5 py-24 mb-0">
+      {/* ── GOV TRADES HIGHLIGHT ── */}
+      <section className="border-y border-white/5 py-24">
         <div className="max-w-6xl mx-auto px-6">
           <div className="flex flex-col lg:flex-row items-center gap-16">
-
-            {/* Left — copy */}
             <div className="flex-1 lg:max-w-[480px]">
-              <span className="text-xs font-medium tracking-[0.18em] text-[#3b82f6] uppercase mb-4 block">
+              <p className="text-xs font-medium tracking-[0.2em] text-white/25 uppercase mb-5">
                 STOCK Act Transparency
-              </span>
-              <h2 className="text-3xl sm:text-4xl font-bold text-white leading-[1.2] tracking-tight mb-5">
-                Follow the money.<br /> Literally.
+              </p>
+              <h2 className="text-3xl sm:text-4xl font-bold text-white leading-[1.15] tracking-tight mb-5">
+                Follow the money.<br />Literally.
               </h2>
-              <p className="text-[#a1a1aa] text-base leading-relaxed mb-8">
-                Members of Congress are required to disclose stock trades within 45 days. MarketIQ ingests every STOCK Act filing and surfaces them with AI-generated context — so you can see which committees overlap with the traded ticker, and how urgent the signal is.
+              <p className="text-white/40 text-base leading-relaxed mb-8">
+                Members of Congress must disclose stock trades within 45 days. MarketIQ ingests every STOCK Act filing and surfaces them with AI-generated context — so you know which committee overlaps with the traded ticker, and how urgent the signal is.
               </p>
               <Link
                 to="/onboarding"
-                className="inline-flex items-center gap-2 bg-[#3b82f6] hover:bg-[#2563eb] text-white font-semibold px-5 py-2.5 rounded-lg text-sm transition-colors"
+                className="inline-flex items-center gap-2 bg-white hover:bg-gray-100 text-[#0a0a0a] font-semibold px-5 py-2.5 rounded-lg text-sm transition-colors"
               >
                 Start tracking congressional trades
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="5" y1="12" x2="19" y2="12"/>
-                  <polyline points="12 5 19 12 12 19"/>
+                  <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
                 </svg>
               </Link>
             </div>
-
-            {/* Right — mock card */}
             <div className="flex-1 flex justify-center lg:justify-end w-full">
               <MockTradeCard />
             </div>
@@ -344,47 +352,39 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── 6. CTA BANNER ── */}
+      {/* ── CTA BANNER ── */}
       <section className="max-w-6xl mx-auto px-6 py-28 text-center">
-        <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight mb-4">
+        <p className="text-xs font-medium tracking-[0.2em] text-white/25 uppercase mb-6">Get started</p>
+        <h2 className="text-4xl sm:text-5xl font-bold text-white tracking-tight mb-4 leading-tight">
           Ready to trade smarter?
         </h2>
-        <p className="text-[#6b7280] text-base mb-10">
-          Get started free — no credit card required.
+        <p className="text-white/35 text-base mb-12">
+          Free to start — no credit card required.
         </p>
         <Link
           to="/onboarding"
-          className="inline-block bg-[#3b82f6] hover:bg-[#2563eb] text-white font-semibold px-8 py-3.5 rounded-lg text-sm transition-colors"
+          className="inline-block bg-white hover:bg-gray-100 text-[#0a0a0a] font-bold px-8 py-4 rounded-xl text-sm tracking-wide transition-colors"
         >
           Get started free
         </Link>
       </section>
 
-      {/* ── 7. FOOTER ── */}
+      {/* ── FOOTER ── */}
       <footer className="border-t border-white/5 bg-[#0a0a0a]">
         <div className="max-w-6xl mx-auto px-6 py-10">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
-            {/* Left */}
             <div>
               <Logo />
-              <p className="text-xs text-[#4b5563] mt-2 ml-0.5">
-                Not financial advice. For educational use only.
-              </p>
+              <p className="text-xs text-white/15 mt-2">Not financial advice. For educational use only.</p>
             </div>
-
-            {/* Right — links */}
             <div className="flex items-center gap-6">
-              <a href="#" className="text-[#6b7280] hover:text-white text-sm transition-colors">GitHub</a>
-              <a href="#" className="text-[#6b7280] hover:text-white text-sm transition-colors">Privacy</a>
-              <a href="#" className="text-[#6b7280] hover:text-white text-sm transition-colors">Support</a>
+              <a href="#" className="text-white/25 hover:text-white/60 text-sm transition-colors">GitHub</a>
+              <a href="#" className="text-white/25 hover:text-white/60 text-sm transition-colors">Privacy</a>
+              <a href="#" className="text-white/25 hover:text-white/60 text-sm transition-colors">Support</a>
             </div>
           </div>
-
-          {/* Bottom line */}
           <div className="mt-8 pt-6 border-t border-white/5 text-center">
-            <p className="text-xs text-[#4b5563]">
-              &copy; 2026 MarketIQ. Built with Claude AI.
-            </p>
+            <p className="text-xs text-white/15">&copy; 2026 MarketIQ. Built with Claude AI.</p>
           </div>
         </div>
       </footer>
