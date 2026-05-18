@@ -117,8 +117,9 @@ function MockTradeCard() {
   )
 }
 
-/* ─── Sticky scroll video section ────────────────────────────────────────── */
-const VIDEO_START = 1.8  // seconds — skips the noisy opening frames
+/* ─── Canvas frame-scrub section ─────────────────────────────────────────── */
+const TOTAL_FRAMES = 227
+const FRAME_URL = (i) => `/frames/ezgif-frame-${String(i + 1).padStart(3, '0')}.jpg`
 
 const PHASE_LINES = [
   ['The intelligence', 'layer for markets.'],
@@ -126,94 +127,135 @@ const PHASE_LINES = [
   ['One feed.', 'Everything that matters.'],
 ]
 
+function drawToCanvas(canvas, img) {
+  if (!canvas || !img || !img.complete) return
+  const ctx = canvas.getContext('2d')
+  const cw = canvas.width, ch = canvas.height
+  const iw = img.naturalWidth, ih = img.naturalHeight
+  if (!iw || !ih) return
+  // object-fit: cover — scale to fill, centre-crop
+  const scale = Math.max(cw / iw, ch / ih)
+  const sw = iw * scale, sh = ih * scale
+  ctx.drawImage(img, (cw - sw) / 2, (ch - sh) / 2, sw, sh)
+}
+
 function ScrollVideoSection() {
-  const sectionRef  = useRef(null)
-  const videoRef    = useRef(null)
-  const targetRef   = useRef(VIDEO_START)   // desired currentTime, updated on scroll
-  const rafRef      = useRef(null)
-  const [phase, setPhase]           = useState(0)      // 0 | 1 | 2  — drives text only
-  const [scrolled, setScrolled]     = useState(false)  // scroll hint visibility
-  const [masked, setMasked]         = useState(true)   // hides the noisy first frame
+  const sectionRef     = useRef(null)
+  const canvasRef      = useRef(null)
+  const framesRef      = useRef([])          // Image[] — preloaded frames
+  const targetRef      = useRef(0)           // float frame index (updated on scroll, no re-render)
+  const currentRef     = useRef(0)           // float frame index (lerped in RAF)
+  const rafRef         = useRef(null)
+  const [phase, setPhase]       = useState(0)
+  const [scrolled, setScrolled] = useState(false)
+  const [ready, setReady]       = useState(false) // first frame loaded
 
+  // ── Size canvas to viewport ──────────────────────────────────────────────
+  const sizeCanvas = () => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    canvas.width  = window.innerWidth
+    canvas.height = window.innerHeight
+    // Redraw current frame after resize
+    const f = framesRef.current[Math.round(currentRef.current)]
+    if (f) drawToCanvas(canvas, f)
+  }
+
+  // ── Preload frames ───────────────────────────────────────────────────────
   useEffect(() => {
-    const vid = videoRef.current
-    if (!vid) return
+    sizeCanvas()
+    window.addEventListener('resize', sizeCanvas)
 
-    // Seek to VIDEO_START as soon as metadata is available, then unmask
-    const initVideo = () => {
-      vid.currentTime = VIDEO_START
-      // Small delay so the browser has time to decode the frame before unmasking
-      setTimeout(() => setMasked(false), 250)
-    }
-    if (vid.readyState >= 1) {
-      initVideo()
-    } else {
-      vid.addEventListener('loadedmetadata', initVideo, { once: true })
+    const frames = new Array(TOTAL_FRAMES)
+    framesRef.current = frames
+    let firstDone = false
+
+    for (let i = 0; i < TOTAL_FRAMES; i++) {
+      const img = new Image()
+      img.src = FRAME_URL(i)
+      img.onload = () => {
+        frames[i] = img
+        // Show first frame immediately — reveals the canvas
+        if (i === 0 && !firstDone) {
+          firstDone = true
+          drawToCanvas(canvasRef.current, img)
+          setReady(true)
+        }
+      }
     }
 
-    // Scroll → update targetRef only (no setState = no re-render)
+    return () => window.removeEventListener('resize', sizeCanvas)
+  }, []) // eslint-disable-line
+
+  // ── RAF animation loop ───────────────────────────────────────────────────
+  useEffect(() => {
+    let lastDrawn = -1
+
+    const tick = () => {
+      const diff = targetRef.current - currentRef.current
+      // Lerp toward target; factor 0.2 = snappy but smooth
+      if (Math.abs(diff) > 0.1) {
+        currentRef.current += diff * 0.2
+      } else {
+        currentRef.current = targetRef.current
+      }
+
+      const idx = Math.round(currentRef.current)
+      if (idx !== lastDrawn) {
+        const img = framesRef.current[idx]
+        if (img) drawToCanvas(canvasRef.current, img)
+        lastDrawn = idx
+      }
+
+      rafRef.current = requestAnimationFrame(tick)
+    }
+
+    rafRef.current = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(rafRef.current)
+  }, [])
+
+  // ── Scroll → target frame ────────────────────────────────────────────────
+  useEffect(() => {
     const onScroll = () => {
       const el = sectionRef.current
       if (!el) return
       const p = Math.max(0, Math.min(1,
         -el.getBoundingClientRect().top / (el.offsetHeight - window.innerHeight)
       ))
-      if (vid.duration && !isNaN(vid.duration)) {
-        targetRef.current = VIDEO_START + p * (vid.duration - VIDEO_START)
-      }
-      // Phase: only 3 state updates for the whole scroll
+      targetRef.current = p * (TOTAL_FRAMES - 1)
+      // Only 3 React state updates for the whole scroll — no per-frame re-renders
       setPhase(p < 0.33 ? 0 : p < 0.67 ? 1 : 2)
-      if (p > 0.02) setScrolled(true)
+      if (p > 0.015) setScrolled(true)
     }
-
-    // RAF loop: lerp currentTime toward target each frame — smooth, no seek storms
-    const tick = () => {
-      if (vid.duration && !isNaN(vid.duration)) {
-        const diff = targetRef.current - vid.currentTime
-        // Only seek if meaningfully off; lerp factor 0.18 ≈ smooth but responsive
-        if (Math.abs(diff) > 0.04) {
-          vid.currentTime += diff * 0.18
-        }
-      }
-      rafRef.current = requestAnimationFrame(tick)
-    }
-
     window.addEventListener('scroll', onScroll, { passive: true })
-    rafRef.current = requestAnimationFrame(tick)
-
-    return () => {
-      window.removeEventListener('scroll', onScroll)
-      cancelAnimationFrame(rafRef.current)
-    }
+    return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
   return (
-    <section ref={sectionRef} style={{ height: '240vh' }} className="relative">
-      <div className="sticky top-0 h-screen overflow-hidden">
+    // Tall section = lots of scroll runway → smooth, unhurried frame progression
+    <section ref={sectionRef} style={{ height: '320vh' }} className="relative">
+      <div className="sticky top-0 h-screen overflow-hidden bg-[#0a0a0a]">
 
-        {/* Black mask — fades out once video has seeked past the noise */}
-        <div
-          className="absolute inset-0 bg-[#0a0a0a] z-20 pointer-events-none"
-          style={{ opacity: masked ? 1 : 0, transition: 'opacity 0.5s ease' }}
+        {/* Canvas — frames drawn here */}
+        <canvas
+          ref={canvasRef}
+          className="absolute inset-0 w-full h-full"
+          style={{ opacity: ready ? 1 : 0, transition: 'opacity 0.4s ease' }}
         />
 
-        <video
-          ref={videoRef}
-          className="absolute inset-0 w-full h-full object-cover"
-          muted playsInline preload="auto"
-          src="/hero.mp4"
-        />
+        {/* Dark overlay so text is readable */}
+        <div className="absolute inset-0 bg-black/45 pointer-events-none" />
 
-        <div className="absolute inset-0 bg-black/52 pointer-events-none" />
-        <div className="absolute top-0 inset-x-0 h-48 bg-gradient-to-b from-[#0a0a0a] to-transparent pointer-events-none" />
-        <div className="absolute bottom-0 inset-x-0 h-48 bg-gradient-to-t from-[#0a0a0a] to-transparent pointer-events-none" />
+        {/* Top + bottom fades blend into page background */}
+        <div className="absolute top-0 inset-x-0 h-44 bg-gradient-to-b from-[#0a0a0a] to-transparent pointer-events-none" />
+        <div className="absolute bottom-0 inset-x-0 h-44 bg-gradient-to-t from-[#0a0a0a] to-transparent pointer-events-none" />
 
-        {/* Text phases — CSS transition handles the fade, not JS per-frame */}
+        {/* Text phases — pure CSS transitions, no per-frame JS */}
         {PHASE_LINES.map((lines, i) => (
           <div
             key={i}
             className="absolute inset-0 flex items-center justify-center px-6 text-center pointer-events-none"
-            style={{ opacity: i === phase ? 1 : 0, transition: 'opacity 0.65s ease' }}
+            style={{ opacity: i === phase ? 1 : 0, transition: 'opacity 0.7s ease' }}
           >
             <h2 className="text-5xl sm:text-6xl md:text-7xl font-bold text-white tracking-tight leading-[1.06]">
               {lines.map((line, j) => (
@@ -223,10 +265,10 @@ function ScrollVideoSection() {
           </div>
         ))}
 
-        {/* CTA — appears on phase 2 via CSS transition */}
+        {/* CTA on final phase */}
         <div
           className="absolute bottom-20 inset-x-0 flex justify-center z-10"
-          style={{ opacity: phase === 2 ? 1 : 0, transition: 'opacity 0.65s ease' }}
+          style={{ opacity: phase === 2 ? 1 : 0, transition: 'opacity 0.7s ease' }}
         >
           <Link
             to="/onboarding"
@@ -236,7 +278,7 @@ function ScrollVideoSection() {
           </Link>
         </div>
 
-        {/* Scroll hint — fades once user starts scrolling */}
+        {/* Scroll hint */}
         <div
           className="absolute bottom-10 inset-x-0 flex flex-col items-center gap-2 pointer-events-none"
           style={{ opacity: scrolled ? 0 : 1, transition: 'opacity 0.6s ease' }}
