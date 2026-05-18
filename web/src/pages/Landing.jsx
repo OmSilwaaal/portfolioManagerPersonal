@@ -41,11 +41,77 @@ const NAV_SECTIONS = [
 
 /* ─── Liquid glass style ─────────────────────────────────────────────────── */
 const glassStyle = {
-  background: 'linear-gradient(135deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.03) 100%)',
-  backdropFilter: 'blur(24px) saturate(160%)',
-  WebkitBackdropFilter: 'blur(24px) saturate(160%)',
-  border: '1px solid rgba(255,255,255,0.10)',
-  boxShadow: '0 8px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.10)',
+  background: 'linear-gradient(145deg, rgba(255,255,255,0.13) 0%, rgba(255,255,255,0.05) 50%, rgba(255,255,255,0.10) 100%)',
+  backdropFilter: 'blur(32px) saturate(200%)',
+  WebkitBackdropFilter: 'blur(32px) saturate(200%)',
+  border: '1px solid rgba(255,255,255,0.18)',
+  boxShadow: [
+    '0 16px 48px rgba(0,0,0,0.55)',
+    'inset 0 1px 0 rgba(255,255,255,0.22)',
+    'inset 0 -1px 0 rgba(255,255,255,0.06)',
+    'inset 1px 0 0 rgba(255,255,255,0.10)',
+  ].join(', '),
+}
+
+/* ─── Scroll-reactive light orb ─────────────────────────────────────────── */
+function ScrollLight() {
+  const lightRef = useRef(null)
+  const posRef   = useRef({ x: 50, y: 12 })
+  const targetRef = useRef({ x: 50, y: 12 })
+  const rafRef   = useRef(null)
+
+  useEffect(() => {
+    const onScroll = () => {
+      const maxScroll = document.body.scrollHeight - window.innerHeight
+      const p = maxScroll > 0 ? window.scrollY / maxScroll : 0
+      // Light descends from 12 % → 88 % as the user scrolls to the bottom
+      targetRef.current.y = 12 + p * 76
+    }
+
+    const onMouse = (e) => {
+      // Drifts 35 %–65 % horizontally following the cursor
+      targetRef.current.x = 35 + (e.clientX / window.innerWidth) * 30
+    }
+
+    const tick = () => {
+      const cur = posRef.current
+      const tgt = targetRef.current
+      // Smooth lerp — slow enough to feel weighted
+      cur.x += (tgt.x - cur.x) * 0.035
+      cur.y += (tgt.y - cur.y) * 0.035
+
+      if (lightRef.current) {
+        lightRef.current.style.background = [
+          `radial-gradient(ellipse 800px 600px at ${cur.x.toFixed(2)}% ${cur.y.toFixed(2)}%,`,
+          ' rgba(255,255,255,0.07) 0%,',
+          ' rgba(255,255,255,0.025) 38%,',
+          ' transparent 68%)',
+        ].join('')
+      }
+      rafRef.current = requestAnimationFrame(tick)
+    }
+
+    window.addEventListener('scroll',    onScroll, { passive: true })
+    window.addEventListener('mousemove', onMouse,  { passive: true })
+    rafRef.current = requestAnimationFrame(tick)
+
+    return () => {
+      window.removeEventListener('scroll',    onScroll)
+      window.removeEventListener('mousemove', onMouse)
+      cancelAnimationFrame(rafRef.current)
+    }
+  }, [])
+
+  return (
+    <div
+      ref={lightRef}
+      className="fixed inset-0 pointer-events-none"
+      style={{
+        zIndex: 1,
+        background: 'radial-gradient(ellipse 800px 600px at 50% 12%, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.025) 38%, transparent 68%)',
+      }}
+    />
+  )
 }
 
 /* ─── Dot sidebar nav ────────────────────────────────────────────────────── */
@@ -65,25 +131,17 @@ function SidebarNav({ active }) {
             aria-label={s.label}
             className="group flex items-center gap-3"
           >
-            {/* Label — slides in on hover */}
-            <span
-              className="text-[11px] tracking-widest uppercase text-white/0 group-hover:text-white/40 transition-all duration-200 whitespace-nowrap"
-            >
+            <span className="text-[11px] tracking-widest uppercase text-white/0 group-hover:text-white/40 transition-all duration-200 whitespace-nowrap">
               {s.label}
             </span>
-            {/* Ball */}
             <span
               className="block rounded-full transition-all duration-300 flex-shrink-0"
               style={{
-                width:  isActive ? 10 : 7,
-                height: isActive ? 10 : 7,
-                background: isActive
-                  ? 'rgba(255,255,255,0.9)'
-                  : 'transparent',
-                border: isActive
-                  ? '1.5px solid rgba(255,255,255,0.9)'
-                  : '1.5px solid rgba(255,255,255,0.30)',
-                boxShadow: isActive ? '0 0 8px rgba(255,255,255,0.5)' : 'none',
+                width:      isActive ? 10 : 7,
+                height:     isActive ? 10 : 7,
+                background: isActive ? 'rgba(255,255,255,0.9)' : 'transparent',
+                border:     isActive ? '1.5px solid rgba(255,255,255,0.9)' : '1.5px solid rgba(255,255,255,0.30)',
+                boxShadow:  isActive ? '0 0 10px rgba(255,255,255,0.6), 0 0 24px rgba(255,255,255,0.2)' : 'none',
               }}
             />
           </button>
@@ -111,11 +169,13 @@ function Logo() {
 function MockTradeCard() {
   return (
     <div className="rounded-2xl p-5 max-w-sm w-full relative overflow-hidden" style={glassStyle}>
-      {/* Specular top edge */}
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent pointer-events-none" />
+      {/* Specular edges */}
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/40 to-transparent pointer-events-none" />
+      <div className="absolute inset-y-0 left-0 w-px bg-gradient-to-b from-white/20 via-white/10 to-transparent pointer-events-none" />
+
       <div className="flex items-start justify-between gap-2 mb-1">
         <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full flex-shrink-0 mt-0.5 bg-white/40" />
+          <span className="w-2 h-2 rounded-full flex-shrink-0 mt-0.5 bg-white/50" />
           <div>
             <span className="text-white font-semibold text-sm">Sen. Nancy Pelosi</span>
             <div className="flex items-center gap-2 mt-0.5">
@@ -123,14 +183,14 @@ function MockTradeCard() {
             </div>
           </div>
         </div>
-        <span className="text-xs font-semibold px-2 py-0.5 rounded bg-white/8 text-white/60 uppercase tracking-wide border border-white/10">
+        <span className="text-xs font-semibold px-2 py-0.5 rounded bg-white/10 text-white/70 uppercase tracking-wide border border-white/15">
           High
         </span>
       </div>
-      <div className="border-t border-white/6 my-3" />
+      <div className="border-t border-white/10 my-3" />
       <div className="flex items-center justify-between gap-3 mb-1">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-bold px-2 py-0.5 rounded bg-white/8 text-white/70 border border-white/10">PURCHASE</span>
+          <span className="text-xs font-bold px-2 py-0.5 rounded bg-white/10 text-white/70 border border-white/15">PURCHASE</span>
           <span className="text-white font-bold">NVDA</span>
           <span className="text-white/40 text-xs truncate max-w-[100px]">NVIDIA Corp.</span>
         </div>
@@ -139,12 +199,12 @@ function MockTradeCard() {
       <div className="flex items-center gap-2 text-xs text-white/30 mt-1">
         <span>Traded 2 days ago · Disclosed 31 days after ⚠</span>
       </div>
-      <div className="border-t border-white/6 my-3" />
-      <p className="text-white/40 text-xs leading-relaxed">
+      <div className="border-t border-white/10 my-3" />
+      <p className="text-white/45 text-xs leading-relaxed">
         High urgency: Pelosi's purchase of NVDA aligns with Senate Commerce Committee activity surrounding AI chip export policy. Pattern suggests informed positioning ahead of regulatory announcements.
       </p>
       <div className="mt-3">
-        <span className="text-[10px] text-white/20 uppercase tracking-wider">STOCK Act disclosure</span>
+        <span className="text-[10px] text-white/25 uppercase tracking-wider">STOCK Act disclosure</span>
       </div>
     </div>
   )
@@ -286,7 +346,6 @@ function ScrollVideoSection() {
           </div>
         ))}
 
-        {/* CTA on final phase — no "free" */}
         <div
           className="absolute bottom-20 inset-x-0 flex justify-center z-10"
           style={{ opacity: phase === 2 ? 1 : 0, transition: 'opacity 0.7s ease' }}
@@ -333,10 +392,13 @@ export default function Landing() {
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white font-sans">
 
+      {/* Global scroll-reactive light — sits above background, below all content */}
+      <ScrollLight />
+
       <SidebarNav active={activeSection} />
 
       {/* ── NAV ── */}
-      <header className="sticky top-0 z-50 bg-[#0a0a0a]/80 backdrop-blur-md border-b border-white/5">
+      <header className="sticky top-0 z-50 backdrop-blur-md border-b border-white/5" style={{ background: 'rgba(10,10,10,0.75)' }}>
         <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
           <Logo />
           <Link
@@ -349,31 +411,38 @@ export default function Landing() {
       </header>
 
       {/* ── STICKY SCROLL VIDEO ── */}
-      <div id="section-hero">
+      <div id="section-hero" style={{ position: 'relative', zIndex: 2 }}>
         <ScrollVideoSection />
       </div>
 
       {/* ── FEATURES ── */}
-      <section id="section-features" className="max-w-6xl mx-auto px-6 py-20">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <section id="section-features" className="max-w-6xl mx-auto px-6 py-20" style={{ position: 'relative', zIndex: 2 }}>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
           {features.map((feature) => (
             <div
               key={feature.title}
               className="rounded-2xl p-7 relative overflow-hidden group transition-all duration-300 hover:scale-[1.02]"
               style={glassStyle}
             >
-              {/* Specular top edge */}
-              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
-              <div className="text-white/40 group-hover:text-white/70 mb-4 transition-colors">{feature.icon}</div>
-              <h3 className="text-white font-semibold text-sm mb-2">{feature.title}</h3>
-              <p className="text-white/40 text-sm leading-relaxed">{feature.description}</p>
+              {/* Top specular line */}
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/45 to-transparent pointer-events-none" />
+              {/* Left edge catch */}
+              <div className="absolute inset-y-0 left-0 w-px bg-gradient-to-b from-white/25 via-white/10 to-transparent pointer-events-none" />
+              {/* Inner corner glow */}
+              <div className="absolute top-0 left-0 w-24 h-24 bg-white/[0.04] rounded-br-full pointer-events-none" />
+
+              <div className="relative">
+                <div className="text-white/50 group-hover:text-white/80 mb-4 transition-colors duration-300">{feature.icon}</div>
+                <h3 className="text-white font-semibold text-sm mb-2">{feature.title}</h3>
+                <p className="text-white/45 text-sm leading-relaxed">{feature.description}</p>
+              </div>
             </div>
           ))}
         </div>
       </section>
 
       {/* ── GOV TRADES HIGHLIGHT ── */}
-      <section id="section-gov-trades" className="border-y border-white/5 py-24">
+      <section id="section-gov-trades" className="border-y border-white/5 py-24" style={{ position: 'relative', zIndex: 2 }}>
         <div className="max-w-6xl mx-auto px-6">
           <div className="flex flex-col lg:flex-row items-center gap-16">
             <div className="flex-1 lg:max-w-[480px]">
@@ -404,7 +473,7 @@ export default function Landing() {
       </section>
 
       {/* ── CTA ── */}
-      <section id="section-cta" className="max-w-6xl mx-auto px-6 py-20 text-center">
+      <section id="section-cta" className="max-w-6xl mx-auto px-6 py-20 text-center" style={{ position: 'relative', zIndex: 2 }}>
         <h2 className="text-3xl font-bold text-white tracking-tight mb-3">
           The market doesn't wait.
         </h2>
@@ -420,7 +489,7 @@ export default function Landing() {
       </section>
 
       {/* ── FOOTER ── */}
-      <footer className="border-t border-white/5 bg-[#0a0a0a]">
+      <footer className="border-t border-white/5 bg-[#0a0a0a]" style={{ position: 'relative', zIndex: 2 }}>
         <div className="max-w-6xl mx-auto px-6 py-10">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
             <div>
