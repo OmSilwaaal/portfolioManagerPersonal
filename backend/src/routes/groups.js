@@ -65,6 +65,12 @@ router.post('/', requireAuth, async (req, res) => {
     const { name, description = '', color = '#e2e8f0', emoji = '' } = req.body
     if (!name?.trim()) return res.status(400).json({ error: true, message: 'Group name is required.' })
 
+    const { count: ownedCount } = await supabase
+      .from('groups')
+      .select('*', { count: 'exact', head: true })
+      .eq('created_by', req.user.id)
+    if (ownedCount >= 10) return res.status(400).json({ error: true, message: 'You can only create up to 10 groups.' })
+
     const code = await generateCode()
     const displayName = req.user.user_metadata?.full_name ?? req.user.email ?? req.user.id
 
@@ -195,6 +201,7 @@ router.post('/:id/posts', requireAuth, async (req, res) => {
 
     const { content, type = 'post' } = req.body
     if (!content?.trim()) return res.status(400).json({ error: true, message: 'Content is required.' })
+    if (content.length > 2000) return res.status(400).json({ error: true, message: 'Post content cannot exceed 2000 characters.' })
     if (!['post', 'announcement', 'notification'].includes(type)) {
       return res.status(400).json({ error: true, message: 'Invalid post type.' })
     }

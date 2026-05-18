@@ -76,7 +76,7 @@ app.use('/api/portfolio', requireAuth, portfolioRouter);
 app.use('/api/calendar', calendarRouter);
 app.use('/api/search', searchRouter);
 app.use('/api/paper-trading', paperTradingRouter);
-app.use('/api/groups', groupsRouter);
+app.use('/api/groups', requireAuth, groupsRouter);
 
 // Health check
 app.get('/health', (req, res) => {
