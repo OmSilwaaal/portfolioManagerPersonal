@@ -416,7 +416,7 @@ export default function Landing() {
       </div>
 
       {/* ── FEATURES ── */}
-      <section id="section-features" className="max-w-6xl mx-auto px-6 py-20" style={{ position: 'relative', zIndex: 2 }}>
+      <section id="section-features" className="max-w-6xl mx-auto px-6 py-14" style={{ position: 'relative', zIndex: 2 }}>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
           {features.map((feature) => (
             <div
@@ -442,38 +442,22 @@ export default function Landing() {
       </section>
 
       {/* ── GOV TRADES HIGHLIGHT ── */}
-      <section id="section-gov-trades" className="border-y border-white/5 py-24" style={{ position: 'relative', zIndex: 2 }}>
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="flex flex-col lg:flex-row items-center gap-16">
-            <div className="flex-1 lg:max-w-[480px]">
-              <p className="text-xs font-medium tracking-[0.2em] text-white/25 uppercase mb-5">
-                STOCK Act Transparency
-              </p>
-              <h2 className="text-3xl sm:text-4xl font-bold text-white leading-[1.15] tracking-tight mb-5">
-                Follow the money.<br />Literally.
-              </h2>
-              <p className="text-white/40 text-base leading-relaxed mb-8">
-                Members of Congress must disclose stock trades within 45 days. MarketIQ ingests every STOCK Act filing and surfaces them with AI-generated context — so you know which committee overlaps with the traded ticker, and how urgent the signal is.
-              </p>
-              <Link
-                to="/onboarding"
-                className="inline-flex items-center gap-2 bg-white hover:bg-gray-100 text-[#0a0a0a] font-semibold px-5 py-2.5 rounded-lg text-sm transition-colors"
-              >
-                Start tracking congressional trades
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
-                </svg>
-              </Link>
-            </div>
-            <div className="flex-1 flex justify-center lg:justify-end w-full">
-              <MockTradeCard />
-            </div>
+      <section id="section-gov-trades" className="border-y border-white/5 py-16" style={{ position: 'relative', zIndex: 2 }}>
+        <div className="max-w-6xl mx-auto px-6 flex flex-col items-center text-center gap-8">
+          <div>
+            <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight mb-2">
+              Follow the money.
+            </h2>
+            <p className="text-white/35 text-sm">
+              Every congressional trade, surfaced with AI context.
+            </p>
           </div>
+          <MockTradeCard />
         </div>
       </section>
 
       {/* ── CTA ── */}
-      <section id="section-cta" className="max-w-6xl mx-auto px-6 py-20 text-center" style={{ position: 'relative', zIndex: 2 }}>
+      <section id="section-cta" className="max-w-6xl mx-auto px-6 py-16 text-center" style={{ position: 'relative', zIndex: 2 }}>
         <h2 className="text-3xl font-bold text-white tracking-tight mb-3">
           The market doesn't wait.
         </h2>
