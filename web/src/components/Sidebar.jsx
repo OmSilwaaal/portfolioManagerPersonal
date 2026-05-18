@@ -3,14 +3,13 @@ import { useDispatch, useSelector } from 'react-redux'
 import { resetPreferences } from '../store/preferencesSlice'
 import { supabase } from '../utils/supabase/client'
 import { useAuth } from '../contexts/AuthContext'
-import ThemeToggle from './ThemeToggle'
 
 const navItems = [
   {
     path: '/feed',
     label: 'Feed',
     icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
         <polyline points="9 22 9 12 15 12 15 22"/>
       </svg>
@@ -20,7 +19,7 @@ const navItems = [
     path: '/stocks',
     label: 'Stocks',
     icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>
       </svg>
     ),
@@ -29,7 +28,7 @@ const navItems = [
     path: '/crypto',
     label: 'Crypto',
     icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="10"/>
         <path d="M9.5 8h3a2 2 0 0 1 0 4h-3v4M9.5 8V6M12.5 8V6M9.5 16v2M12.5 16v2"/>
       </svg>
@@ -39,7 +38,7 @@ const navItems = [
     path: '/gov-trades',
     label: 'Gov Trades',
     icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
         <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
       </svg>
@@ -49,7 +48,7 @@ const navItems = [
     path: '/commodities',
     label: 'Commodities',
     icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M3 3v18h18"/><path d="M18 9l-5 5-4-4-3 3"/>
       </svg>
     ),
@@ -58,7 +57,7 @@ const navItems = [
     path: '/alerts',
     label: 'Alerts',
     icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
         <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
       </svg>
@@ -68,7 +67,7 @@ const navItems = [
     path: '/settings',
     label: 'Settings',
     icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="3"/>
         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
       </svg>
@@ -101,7 +100,7 @@ function UserAvatar({ user, size = 32 }) {
   }
   return (
     <div
-      className="rounded-full bg-[#3b82f6] flex items-center justify-center flex-shrink-0 text-white font-semibold"
+      className="rounded-full bg-white/10 border border-white/15 flex items-center justify-center flex-shrink-0 text-white font-semibold"
       style={{ width: size, height: size, fontSize: size * 0.38 }}
     >
       {initials || '?'}
@@ -128,21 +127,26 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="hidden md:flex flex-col w-[240px] flex-shrink-0 min-h-screen bg-[#0f0f0f] border-r border-[#1f1f1f]">
-      <div className="flex items-center justify-between px-5 py-5 border-b border-[#1f1f1f]">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 bg-[#3b82f6] rounded-md flex items-center justify-center">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
-            </svg>
-          </div>
-          <span className="font-semibold text-white text-base">
-            MarketIQ
-          </span>
+    <aside
+      className="hidden md:flex flex-col w-[220px] flex-shrink-0 min-h-screen border-r"
+      style={{
+        background: 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)',
+        backdropFilter: 'blur(24px)',
+        WebkitBackdropFilter: 'blur(24px)',
+        borderColor: 'rgba(255,255,255,0.08)',
+      }}
+    >
+      {/* Logo */}
+      <div className="flex items-center gap-2.5 px-5 py-5 border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+        <div className="w-7 h-7 bg-white rounded-md flex items-center justify-center flex-shrink-0">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0a0a0a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
+          </svg>
         </div>
-        <ThemeToggle />
+        <span className="font-semibold text-white text-base tracking-tight">MarketIQ</span>
       </div>
 
+      {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-0.5">
         {navItems.map((item) => (
           <NavLink
@@ -150,74 +154,90 @@ export default function Sidebar() {
             to={item.path}
             end
             className={({ isActive }) =>
-              `relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${
+              `relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
                 isActive
-                  ? 'text-white bg-[#1a1a1a]'
-                  : 'text-[#6b7280] hover:text-[#d1d5db] hover:bg-[#141414]'
+                  ? 'text-white'
+                  : 'text-white/35 hover:text-white/70 hover:bg-white/[0.04]'
               }`
             }
+            style={({ isActive }) => isActive ? {
+              background: 'rgba(255,255,255,0.07)',
+              backdropFilter: 'blur(8px)',
+            } : {}}
           >
             {({ isActive }) => (
               <>
                 {isActive && (
-                  <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-[#3b82f6] rounded-full" />
+                  <span
+                    className="absolute left-0 top-1/2 -translate-y-1/2 w-[2.5px] h-4 rounded-full"
+                    style={{ background: 'rgba(255,255,255,0.8)' }}
+                  />
                 )}
-                <span className={isActive ? 'text-[#3b82f6]' : ''}>{item.icon}</span>
-                <span className="font-medium">{item.label}</span>
+                <span className={isActive ? 'text-white' : ''}>{item.icon}</span>
+                <span>{item.label}</span>
               </>
             )}
           </NavLink>
         ))}
       </nav>
 
-      <div className="px-3 py-4 border-t border-[#1f1f1f] space-y-3">
-        {/* Pro upgrade / badge */}
+      {/* Footer */}
+      <div className="px-3 py-4 space-y-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
         {isPro ? (
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#f59e0b]/5 border border-[#f59e0b]/15">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <div
+            className="flex items-center gap-2 px-3 py-2 rounded-lg"
+            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)' }}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M2 4l3 12h14l3-12-6 5-4-5-4 5-6-5z"/>
               <path d="M5 20h14"/>
             </svg>
-            <span className="text-xs font-bold text-[#f59e0b]">Pro Member</span>
+            <span className="text-xs font-semibold text-white/70 tracking-wide">Pro Member</span>
           </div>
         ) : (
           <Link
             to="/pricing"
-            className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-[#f59e0b]/10 hover:bg-[#f59e0b]/15 border border-[#f59e0b]/20 transition-colors group"
+            className="flex items-center gap-2 px-3 py-2.5 rounded-lg transition-all duration-150 group"
+            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.10)' }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.09)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M2 4l3 12h14l3-12-6 5-4-5-4 5-6-5z"/>
               <path d="M5 20h14"/>
             </svg>
-            <span className="text-xs font-bold text-[#f59e0b]">Upgrade to Pro</span>
+            <span className="text-xs font-semibold text-white/60 tracking-wide">Upgrade to Pro</span>
           </Link>
         )}
+
         {user && (
           <div className="flex items-center gap-3 px-3 py-2">
-            <UserAvatar user={user} size={34} />
+            <UserAvatar user={user} size={32} />
             <div className="min-w-0">
               {displayName && (
-                <p className="text-sm font-medium text-white truncate leading-tight">{displayName}</p>
+                <p className="text-sm font-medium text-white/80 truncate leading-tight">{displayName}</p>
               )}
               {email && (
-                <p className="text-xs text-[#6b7280] truncate leading-tight">{email}</p>
+                <p className="text-[11px] text-white/30 truncate leading-tight">{email}</p>
               )}
             </div>
           </div>
         )}
+
         <button
           onClick={handleSignOut}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm text-[#a1a1aa] hover:text-red-400 hover:bg-red-500/5 transition-colors"
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-white/30 hover:text-white/60 hover:bg-white/[0.04] transition-all duration-150"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
             <polyline points="16 17 21 12 16 7"/>
             <line x1="21" y1="12" x2="9" y2="12"/>
           </svg>
           <span className="font-medium">Sign out</span>
         </button>
-        <p className="text-xs text-[#6b7280] px-3">
-          Not financial advice. For educational use only.
+
+        <p className="text-[10px] text-white/15 px-3 pt-1">
+          Not financial advice. Educational use only.
         </p>
       </div>
     </aside>
