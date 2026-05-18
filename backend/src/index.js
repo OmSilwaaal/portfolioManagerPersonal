@@ -13,6 +13,7 @@ const govTradesRouter = require('./routes/govTrades');
 const commoditiesRouter = require('./routes/commodities');
 const preferencesRouter = require('./routes/preferences');
 const searchRouter = require('./routes/search');
+const { router: paperTradingRouter } = require('./routes/paperTrading');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const { sessionMiddleware, requireAuth, validateTicker } = require('./middleware/auth');
 
@@ -32,6 +33,8 @@ const allowedOrigins = [
 ].filter(Boolean);
 
 app.use(cors({ origin: allowedOrigins, credentials: true }));
+// Raw body for Stripe webhook signature verification
+app.use('/api/paper-trading/webhook', express.raw({ type: 'application/json' }))
 app.use(express.json({ limit: '50kb' })); // cap request body size
 app.use(sessionMiddleware);
 
@@ -69,8 +72,9 @@ app.use('/api/preferences', requireAuth, preferencesRouter);
 app.use('/api/portfolio',   requireAuth, portfolioRouter);
 
 // Public routes — no auth needed
-app.use('/api/calendar', calendarRouter);
-app.use('/api/search',   searchRouter);
+app.use('/api/calendar',      calendarRouter);
+app.use('/api/search',        searchRouter);
+app.use('/api/paper-trading', paperTradingRouter);
 
 // Health check
 app.get('/health', (req, res) => {

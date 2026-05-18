@@ -20,6 +20,18 @@ const QUESTIONS = [
     ],
   },
   {
+    id: 'traderRole',
+    question: 'What best describes you?',
+    type: 'single',
+    options: [
+      { label: 'Student — learning how markets work',   value: 'student' },
+      { label: 'Educator — teaching others to invest',  value: 'educator' },
+      { label: 'Professional trader',                    value: 'professional' },
+      { label: 'Retail investor',                        value: 'retail' },
+      { label: 'Just trading for fun',                   value: 'fun' },
+    ],
+  },
+  {
     id: 'watchedCategories',
     question: 'What do you want to track?',
     type: 'multi',
@@ -253,6 +265,7 @@ export default function QuizContainer() {
   const [current, setCurrent] = useState(0)
   const [answers, setAnswers] = useState({
     investorType: null,
+    traderRole: null,
     watchedCategories: [],
     watchlist: [],
     priorityAlerts: [],

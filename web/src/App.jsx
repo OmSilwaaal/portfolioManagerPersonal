@@ -16,6 +16,7 @@ import Feed from './pages/Feed'
 import GovTrades from './pages/GovTrades'
 import Commodities from './pages/Commodities'
 import Settings from './pages/Settings'
+import PaperTrading from './pages/PaperTrading'
 import Landing from './pages/Landing'
 import Pricing from './pages/Pricing'
 
@@ -106,6 +107,7 @@ function AppInner() {
         <Route path="/crypto" element={<Crypto />} />
         <Route path="/copy-trading" element={<CopyTrading />} />
         <Route path="/alerts" element={<Alerts />} />
+        <Route path="/paper-trading" element={<PaperTrading />} />
         <Route path="/gov-trades" element={<GovTrades />} />
         <Route path="/commodities" element={<Commodities />} />
         <Route path="/settings" element={<Settings />} />

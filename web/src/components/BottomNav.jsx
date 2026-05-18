@@ -23,12 +23,11 @@ const tabs = [
     ),
   },
   {
-    path: '/gov-trades',
-    label: 'Gov',
+    path: '/paper-trading',
+    label: 'Trade',
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
-        <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+        <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
       </svg>
     ),
   },
@@ -58,7 +57,7 @@ export default function BottomNav() {
   const { user } = useAuth()
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-[#0f0f0f] border-t border-[#1f1f1f]">
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50" style={{ background: 'rgba(10,10,10,0.85)', backdropFilter: 'blur(20px)', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
       <div className="flex items-center justify-around h-16">
         {tabs.map((tab) => (
           <NavLink
@@ -68,15 +67,15 @@ export default function BottomNav() {
             className={({ isActive }) =>
               `flex flex-col items-center gap-1 px-3 py-2 transition-colors ${
                 isActive
-                  ? 'text-[#3b82f6]'
-                  : 'text-[#a1a1aa]'
+                  ? 'text-white'
+                  : 'text-white/30'
               }`
             }
           >
             {({ isActive }) =>
               tab.path === '/settings' && user ? (
                 <>
-                  <div className={`rounded-full ${isActive ? 'ring-2 ring-[#3b82f6]' : ''}`}>
+                  <div className={`rounded-full ${isActive ? 'ring-2 ring-white' : ''}`}>
                     <UserAvatar user={user} size={26} />
                   </div>
                   <span className="text-[10px] font-medium">{tab.label}</span>

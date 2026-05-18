@@ -16,6 +16,7 @@ const initialState = {
   displayName: null,
   email: null,
   investorType: null,
+  traderRole: null,
   riskTolerance: null,
   updateFrequency: null,
   watchedCategories: [],
@@ -35,6 +36,7 @@ const preferencesSlice = createSlice({
       if (p.displayName !== undefined) state.displayName = p.displayName
       if (p.email !== undefined) state.email = p.email
       if (p.investorType !== undefined) state.investorType = p.investorType
+      if (p.traderRole !== undefined) state.traderRole = p.traderRole
       if (p.riskTolerance !== undefined) state.riskTolerance = p.riskTolerance
       if (p.updateFrequency !== undefined) state.updateFrequency = p.updateFrequency
       if (p.watchedCategories !== undefined) state.watchedCategories = p.watchedCategories
@@ -54,6 +56,7 @@ const preferencesSlice = createSlice({
     },
     resetPreferences(state) {
       state.investorType = null
+      state.traderRole = null
       state.riskTolerance = null
       state.updateFrequency = null
       state.watchedCategories = []

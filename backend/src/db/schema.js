@@ -44,6 +44,46 @@ function initSchema() {
       updatedAt TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS paper_portfolios (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      userId      TEXT    NOT NULL UNIQUE,
+      cashBalance REAL    NOT NULL DEFAULT 0,
+      createdAt   TEXT    NOT NULL DEFAULT (datetime('now')),
+      updatedAt   TEXT    NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS paper_positions (
+      id        INTEGER PRIMARY KEY AUTOINCREMENT,
+      userId    TEXT    NOT NULL,
+      ticker    TEXT    NOT NULL,
+      shares    REAL    NOT NULL DEFAULT 0,
+      avgCost   REAL    NOT NULL DEFAULT 0,
+      updatedAt TEXT    NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(userId, ticker)
+    );
+
+    CREATE TABLE IF NOT EXISTS paper_transactions (
+      id        INTEGER PRIMARY KEY AUTOINCREMENT,
+      userId    TEXT    NOT NULL,
+      type      TEXT    NOT NULL CHECK(type IN ('buy','sell','deposit')),
+      ticker    TEXT,
+      shares    REAL,
+      price     REAL,
+      total     REAL    NOT NULL,
+      createdAt TEXT    NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS paper_cash_purchases (
+      id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+      userId             TEXT    NOT NULL,
+      usdPaid            REAL    NOT NULL,
+      paperCashCredited  REAL    NOT NULL,
+      stripeSessionId    TEXT    UNIQUE,
+      status             TEXT    NOT NULL DEFAULT 'pending'
+                                 CHECK(status IN ('pending','completed')),
+      createdAt          TEXT    NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS gov_trades_cache (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tradeHash TEXT NOT NULL UNIQUE,
