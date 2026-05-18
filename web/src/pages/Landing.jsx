@@ -33,10 +33,9 @@ const features = [
 ]
 
 const NAV_SECTIONS = [
-  { id: 'section-hero',       label: 'Overview'      },
-  { id: 'section-features',   label: 'Features'      },
-  { id: 'section-gov-trades', label: 'Congressional' },
-  { id: 'section-cta',        label: 'Get started'   },
+  { id: 'section-hero',     label: 'Overview'   },
+  { id: 'section-features', label: 'Features'   },
+  { id: 'section-cta',      label: 'Get started' },
 ]
 
 /* ─── Liquid glass style ─────────────────────────────────────────────────── */
@@ -165,50 +164,6 @@ function Logo() {
   )
 }
 
-/* ─── Mock trade card ────────────────────────────────────────────────────── */
-function MockTradeCard() {
-  return (
-    <div className="rounded-2xl p-5 max-w-sm w-full relative overflow-hidden" style={glassStyle}>
-      {/* Specular edges */}
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/40 to-transparent pointer-events-none" />
-      <div className="absolute inset-y-0 left-0 w-px bg-gradient-to-b from-white/20 via-white/10 to-transparent pointer-events-none" />
-
-      <div className="flex items-start justify-between gap-2 mb-1">
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full flex-shrink-0 mt-0.5 bg-white/50" />
-          <div>
-            <span className="text-white font-semibold text-sm">Sen. Nancy Pelosi</span>
-            <div className="flex items-center gap-2 mt-0.5">
-              <span className="text-white/40 text-xs">Senate · Democrat</span>
-            </div>
-          </div>
-        </div>
-        <span className="text-xs font-semibold px-2 py-0.5 rounded bg-white/10 text-white/70 uppercase tracking-wide border border-white/15">
-          High
-        </span>
-      </div>
-      <div className="border-t border-white/10 my-3" />
-      <div className="flex items-center justify-between gap-3 mb-1">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-bold px-2 py-0.5 rounded bg-white/10 text-white/70 border border-white/15">PURCHASE</span>
-          <span className="text-white font-bold">NVDA</span>
-          <span className="text-white/40 text-xs truncate max-w-[100px]">NVIDIA Corp.</span>
-        </div>
-        <span className="text-white/70 text-sm font-medium">$1M–$5M</span>
-      </div>
-      <div className="flex items-center gap-2 text-xs text-white/30 mt-1">
-        <span>Traded 2 days ago · Disclosed 31 days after ⚠</span>
-      </div>
-      <div className="border-t border-white/10 my-3" />
-      <p className="text-white/45 text-xs leading-relaxed">
-        High urgency: Pelosi's purchase of NVDA aligns with Senate Commerce Committee activity surrounding AI chip export policy. Pattern suggests informed positioning ahead of regulatory announcements.
-      </p>
-      <div className="mt-3">
-        <span className="text-[10px] text-white/25 uppercase tracking-wider">STOCK Act disclosure</span>
-      </div>
-    </div>
-  )
-}
 
 /* ─── Canvas frame-scrub section ─────────────────────────────────────────── */
 const TOTAL_FRAMES = 227
@@ -441,22 +396,8 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── GOV TRADES HIGHLIGHT ── */}
-      <section id="section-gov-trades" className="border-y border-white/5 py-16" style={{ position: 'relative', zIndex: 2 }}>
-        <div className="max-w-6xl mx-auto px-6 flex flex-col items-center text-center gap-8">
-          <div>
-            <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight mb-2">
-              Follow the money.
-            </h2>
-            <p className="text-white/35 text-sm">
-              Every congressional trade, surfaced with AI context.
-            </p>
-          </div>
-          <MockTradeCard />
-        </div>
-      </section>
 
-      {/* ── CTA ── */}
+{/* ── CTA ── */}
       <section id="section-cta" className="max-w-6xl mx-auto px-6 py-16 text-center" style={{ position: 'relative', zIndex: 2 }}>
         <h2 className="text-3xl font-bold text-white tracking-tight mb-3">
           The market doesn't wait.
