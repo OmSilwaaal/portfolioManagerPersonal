@@ -32,6 +32,67 @@ const features = [
   { icon: <IconBell />,     title: 'Price Alerts',         description: 'Set threshold alerts on any stock or crypto and get notified instantly.' },
 ]
 
+const NAV_SECTIONS = [
+  { id: 'section-hero',       label: 'Overview'      },
+  { id: 'section-features',   label: 'Features'      },
+  { id: 'section-gov-trades', label: 'Congressional' },
+  { id: 'section-cta',        label: 'Get started'   },
+]
+
+/* ─── Liquid glass style ─────────────────────────────────────────────────── */
+const glassStyle = {
+  background: 'linear-gradient(135deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.03) 100%)',
+  backdropFilter: 'blur(24px) saturate(160%)',
+  WebkitBackdropFilter: 'blur(24px) saturate(160%)',
+  border: '1px solid rgba(255,255,255,0.10)',
+  boxShadow: '0 8px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.10)',
+}
+
+/* ─── Dot sidebar nav ────────────────────────────────────────────────────── */
+function SidebarNav({ active }) {
+  const scrollTo = (id) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  return (
+    <nav className="fixed right-5 top-1/2 -translate-y-1/2 z-50 flex flex-col items-end gap-5 select-none">
+      {NAV_SECTIONS.map((s) => {
+        const isActive = active === s.id
+        return (
+          <button
+            key={s.id}
+            onClick={() => scrollTo(s.id)}
+            aria-label={s.label}
+            className="group flex items-center gap-3"
+          >
+            {/* Label — slides in on hover */}
+            <span
+              className="text-[11px] tracking-widest uppercase text-white/0 group-hover:text-white/40 transition-all duration-200 whitespace-nowrap"
+            >
+              {s.label}
+            </span>
+            {/* Ball */}
+            <span
+              className="block rounded-full transition-all duration-300 flex-shrink-0"
+              style={{
+                width:  isActive ? 10 : 7,
+                height: isActive ? 10 : 7,
+                background: isActive
+                  ? 'rgba(255,255,255,0.9)'
+                  : 'transparent',
+                border: isActive
+                  ? '1.5px solid rgba(255,255,255,0.9)'
+                  : '1.5px solid rgba(255,255,255,0.30)',
+                boxShadow: isActive ? '0 0 8px rgba(255,255,255,0.5)' : 'none',
+              }}
+            />
+          </button>
+        )
+      })}
+    </nav>
+  )
+}
+
 /* ─── Logo ───────────────────────────────────────────────────────────────── */
 function Logo() {
   return (
@@ -49,7 +110,9 @@ function Logo() {
 /* ─── Mock trade card ────────────────────────────────────────────────────── */
 function MockTradeCard() {
   return (
-    <div className="bg-[#0f0f0f] border border-white/8 rounded-xl p-5 max-w-sm w-full">
+    <div className="rounded-2xl p-5 max-w-sm w-full relative overflow-hidden" style={glassStyle}>
+      {/* Specular top edge */}
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent pointer-events-none" />
       <div className="flex items-start justify-between gap-2 mb-1">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full flex-shrink-0 mt-0.5 bg-white/40" />
@@ -103,53 +166,46 @@ function drawToCanvas(canvas, img) {
   const cw = canvas.width, ch = canvas.height
   const iw = img.naturalWidth, ih = img.naturalHeight
   if (!iw || !ih) return
-  // object-fit: cover — scale to fill, centre-crop
   const scale = Math.max(cw / iw, ch / ih)
   const sw = iw * scale, sh = ih * scale
   ctx.drawImage(img, (cw - sw) / 2, (ch - sh) / 2, sw, sh)
 }
 
-const MIN_PHASE_DWELL_MS = 800 // min ms a phase must show before advancing forward
+const MIN_PHASE_DWELL_MS = 800
 
 function ScrollVideoSection() {
-  const sectionRef          = useRef(null)
-  const canvasRef           = useRef(null)
-  const framesRef           = useRef([])          // Image[] — preloaded frames
-  const targetRef           = useRef(0)           // float frame index (updated on scroll, no re-render)
-  const currentRef          = useRef(0)           // float frame index (lerped in RAF)
-  const rafRef              = useRef(null)
-  const phaseRef            = useRef(0)           // current phase without re-render
-  const lastPhaseChangeRef  = useRef(0)           // timestamp of last phase change
+  const sectionRef         = useRef(null)
+  const canvasRef          = useRef(null)
+  const framesRef          = useRef([])
+  const targetRef          = useRef(0)
+  const currentRef         = useRef(0)
+  const rafRef             = useRef(null)
+  const phaseRef           = useRef(0)
+  const lastPhaseChangeRef = useRef(0)
   const [phase, setPhase]       = useState(0)
   const [scrolled, setScrolled] = useState(false)
-  const [ready, setReady]       = useState(false) // first frame loaded
+  const [ready, setReady]       = useState(false)
 
-  // ── Size canvas to viewport ──────────────────────────────────────────────
   const sizeCanvas = () => {
     const canvas = canvasRef.current
     if (!canvas) return
     canvas.width  = window.innerWidth
     canvas.height = window.innerHeight
-    // Redraw current frame after resize
     const f = framesRef.current[Math.round(currentRef.current)]
     if (f) drawToCanvas(canvas, f)
   }
 
-  // ── Preload frames ───────────────────────────────────────────────────────
   useEffect(() => {
     sizeCanvas()
     window.addEventListener('resize', sizeCanvas)
-
     const frames = new Array(TOTAL_FRAMES)
     framesRef.current = frames
     let firstDone = false
-
     for (let i = 0; i < TOTAL_FRAMES; i++) {
       const img = new Image()
       img.src = FRAME_URL(i)
       img.onload = () => {
         frames[i] = img
-        // Show first frame immediately — reveals the canvas
         if (i === 0 && !firstDone) {
           firstDone = true
           drawToCanvas(canvasRef.current, img)
@@ -157,38 +213,30 @@ function ScrollVideoSection() {
         }
       }
     }
-
     return () => window.removeEventListener('resize', sizeCanvas)
   }, []) // eslint-disable-line
 
-  // ── RAF animation loop ───────────────────────────────────────────────────
   useEffect(() => {
     let lastDrawn = -1
-
     const tick = () => {
       const diff = targetRef.current - currentRef.current
-      // Lerp toward target; factor 0.2 = snappy but smooth
       if (Math.abs(diff) > 0.1) {
         currentRef.current += diff * 0.2
       } else {
         currentRef.current = targetRef.current
       }
-
       const idx = Math.round(currentRef.current)
       if (idx !== lastDrawn) {
         const img = framesRef.current[idx]
         if (img) drawToCanvas(canvasRef.current, img)
         lastDrawn = idx
       }
-
       rafRef.current = requestAnimationFrame(tick)
     }
-
     rafRef.current = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(rafRef.current)
   }, [])
 
-  // ── Scroll → target frame ────────────────────────────────────────────────
   useEffect(() => {
     const onScroll = () => {
       const el = sectionRef.current
@@ -197,12 +245,9 @@ function ScrollVideoSection() {
         -el.getBoundingClientRect().top / (el.offsetHeight - window.innerHeight)
       ))
       targetRef.current = p * (TOTAL_FRAMES - 1)
-
       const desired = p < 0.33 ? 0 : p < 0.67 ? 1 : 2
       if (desired !== phaseRef.current) {
         const advancing = desired > phaseRef.current
-        // When going forward, enforce minimum dwell so text isn't skipped on fast scroll.
-        // When scrolling back, update immediately so it feels responsive.
         if (!advancing || Date.now() - lastPhaseChangeRef.current >= MIN_PHASE_DWELL_MS) {
           phaseRef.current = desired
           lastPhaseChangeRef.current = Date.now()
@@ -216,25 +261,17 @@ function ScrollVideoSection() {
   }, [])
 
   return (
-    // Tall section = lots of scroll runway → smooth, unhurried frame progression
     <section ref={sectionRef} style={{ height: '320vh' }} className="relative">
       <div className="sticky top-0 h-screen overflow-hidden bg-[#0a0a0a]">
-
-        {/* Canvas — frames drawn here */}
         <canvas
           ref={canvasRef}
           className="absolute inset-0 w-full h-full"
           style={{ opacity: ready ? 1 : 0, transition: 'opacity 0.4s ease' }}
         />
-
-        {/* Dark overlay so text is readable */}
         <div className="absolute inset-0 bg-black/45 pointer-events-none" />
-
-        {/* Top + bottom fades blend into page background */}
         <div className="absolute top-0 inset-x-0 h-44 bg-gradient-to-b from-[#0a0a0a] to-transparent pointer-events-none" />
         <div className="absolute bottom-0 inset-x-0 h-44 bg-gradient-to-t from-[#0a0a0a] to-transparent pointer-events-none" />
 
-        {/* Text phases — pure CSS transitions, no per-frame JS */}
         {PHASE_LINES.map((lines, i) => (
           <div
             key={i}
@@ -249,7 +286,7 @@ function ScrollVideoSection() {
           </div>
         ))}
 
-        {/* CTA on final phase */}
+        {/* CTA on final phase — no "free" */}
         <div
           className="absolute bottom-20 inset-x-0 flex justify-center z-10"
           style={{ opacity: phase === 2 ? 1 : 0, transition: 'opacity 0.7s ease' }}
@@ -258,11 +295,10 @@ function ScrollVideoSection() {
             to="/onboarding"
             className="bg-white hover:bg-gray-100 text-[#0a0a0a] font-bold px-8 py-4 rounded-xl text-sm tracking-wide transition-colors"
           >
-            Get started free
+            Get started
           </Link>
         </div>
 
-        {/* Scroll hint */}
         <div
           className="absolute bottom-10 inset-x-0 flex flex-col items-center gap-2 pointer-events-none"
           style={{ opacity: scrolled ? 0 : 1, transition: 'opacity 0.6s ease' }}
@@ -270,7 +306,6 @@ function ScrollVideoSection() {
           <span className="text-white/30 text-xs tracking-widest uppercase">Scroll</span>
           <div className="w-px h-8 bg-gradient-to-b from-white/30 to-transparent animate-pulse" />
         </div>
-
       </div>
     </section>
   )
@@ -278,8 +313,27 @@ function ScrollVideoSection() {
 
 /* ─── Main Landing ───────────────────────────────────────────────────────── */
 export default function Landing() {
+  const [activeSection, setActiveSection] = useState('section-hero')
+
+  useEffect(() => {
+    const observers = []
+    NAV_SECTIONS.forEach(({ id }) => {
+      const el = document.getElementById(id)
+      if (!el) return
+      const obs = new IntersectionObserver(
+        ([entry]) => { if (entry.isIntersecting) setActiveSection(id) },
+        { threshold: 0.3 }
+      )
+      obs.observe(el)
+      observers.push(obs)
+    })
+    return () => observers.forEach((o) => o.disconnect())
+  }, [])
+
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white font-sans">
+
+      <SidebarNav active={activeSection} />
 
       {/* ── NAV ── */}
       <header className="sticky top-0 z-50 bg-[#0a0a0a]/80 backdrop-blur-md border-b border-white/5">
@@ -289,32 +343,37 @@ export default function Landing() {
             to="/onboarding"
             className="bg-white hover:bg-gray-100 text-[#0a0a0a] text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
           >
-            Get started free
+            Get started
           </Link>
         </div>
       </header>
 
       {/* ── STICKY SCROLL VIDEO ── */}
-      <ScrollVideoSection />
+      <div id="section-hero">
+        <ScrollVideoSection />
+      </div>
 
       {/* ── FEATURES ── */}
-      <section id="features" className="max-w-6xl mx-auto px-6 py-20">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-white/5 rounded-2xl overflow-hidden border border-white/5">
+      <section id="section-features" className="max-w-6xl mx-auto px-6 py-20">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {features.map((feature) => (
             <div
               key={feature.title}
-              className="bg-[#0a0a0a] hover:bg-[#0f0f0f] p-7 transition-colors group"
+              className="rounded-2xl p-7 relative overflow-hidden group transition-all duration-300 hover:scale-[1.02]"
+              style={glassStyle}
             >
-              <div className="text-white/30 group-hover:text-white/60 mb-4 transition-colors">{feature.icon}</div>
+              {/* Specular top edge */}
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
+              <div className="text-white/40 group-hover:text-white/70 mb-4 transition-colors">{feature.icon}</div>
               <h3 className="text-white font-semibold text-sm mb-2">{feature.title}</h3>
-              <p className="text-white/35 text-sm leading-relaxed">{feature.description}</p>
+              <p className="text-white/40 text-sm leading-relaxed">{feature.description}</p>
             </div>
           ))}
         </div>
       </section>
 
       {/* ── GOV TRADES HIGHLIGHT ── */}
-      <section className="border-y border-white/5 py-24">
+      <section id="section-gov-trades" className="border-y border-white/5 py-24">
         <div className="max-w-6xl mx-auto px-6">
           <div className="flex flex-col lg:flex-row items-center gap-16">
             <div className="flex-1 lg:max-w-[480px]">
@@ -344,10 +403,10 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── CTA BANNER ── */}
-      <section className="max-w-6xl mx-auto px-6 py-20 text-center">
+      {/* ── CTA ── */}
+      <section id="section-cta" className="max-w-6xl mx-auto px-6 py-20 text-center">
         <h2 className="text-3xl font-bold text-white tracking-tight mb-3">
-          Free to start. No card required.
+          The market doesn't wait.
         </h2>
         <p className="text-white/35 text-sm mb-8">
           Join investors who track what really moves markets.
@@ -356,7 +415,7 @@ export default function Landing() {
           to="/onboarding"
           className="inline-block bg-white hover:bg-gray-100 text-[#0a0a0a] font-bold px-8 py-4 rounded-xl text-sm tracking-wide transition-colors"
         >
-          Get started free
+          Get started
         </Link>
       </section>
 
