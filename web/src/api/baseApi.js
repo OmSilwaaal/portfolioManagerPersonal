@@ -4,7 +4,7 @@ import { supabase } from '../utils/supabase/client'
 export const baseApi = createApi({
   reducerPath: 'api',
   baseQuery: fetchBaseQuery({
-    baseUrl: import.meta.env.VITE_API_URL ?? '/api',
+    baseUrl: import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api',
     prepareHeaders: async (headers) => {
       const { data: { session } } = await supabase.auth.getSession()
       if (session?.access_token) {

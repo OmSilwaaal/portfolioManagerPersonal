@@ -35,7 +35,7 @@ function initials(name) {
 }
 
 function PostCard({ post, groupId, isAdmin, currentUserId, onDelete }) {
-  const isOwn = post.authorId === currentUserId
+  const isOwn = post.author_id === currentUserId
   const isAnnouncement = post.type === 'announcement'
   const isNotification = post.type === 'notification'
   const [deletePost] = useDeletePostMutation()
@@ -83,12 +83,12 @@ function PostCard({ post, groupId, isAdmin, currentUserId, onDelete }) {
           className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0 text-white"
           style={{ background: 'rgba(255,255,255,0.12)' }}
         >
-          {initials(post.authorName)}
+          {initials(post.author_name)}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1.5">
-            <span className="text-sm font-semibold text-white/80">{post.authorName ?? 'Unknown'}</span>
-            <span className="text-xs text-white/25">{fmtTime(post.createdAt)}</span>
+            <span className="text-sm font-semibold text-white/80">{post.author_name ?? 'Unknown'}</span>
+            <span className="text-xs text-white/25">{fmtTime(post.created_at)}</span>
           </div>
           <p className="text-sm text-white/70 leading-relaxed whitespace-pre-wrap break-words">{post.content}</p>
         </div>
@@ -310,17 +310,17 @@ export default function GroupDetail() {
             <p className="text-[10px] uppercase tracking-widest text-white/30 mb-3">Members ({(group.members ?? []).length})</p>
             <div className="flex flex-col gap-2">
               {(group.members ?? []).map((m) => (
-                <div key={m.userId} className="flex items-center gap-2.5">
+                <div key={m.user_id} className="flex items-center gap-2.5">
                   <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold text-white flex-shrink-0" style={{ background: 'rgba(255,255,255,0.10)' }}>
-                    {initials(m.displayName)}
+                    {initials(m.display_name)}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-white/70 truncate">{m.displayName ?? m.email ?? 'Member'}</p>
+                    <p className="text-xs font-medium text-white/70 truncate">{m.display_name ?? m.email ?? 'Member'}</p>
                   </div>
                   <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded" style={{ background: m.role === 'admin' ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.05)', color: m.role === 'admin' ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.30)' }}>
                     {m.role}
                   </span>
-                  {isAdmin && m.userId !== currentUserId && (
+                  {isAdmin && m.user_id !== currentUserId && (
                     <div className="relative group">
                       <button className="text-white/20 hover:text-white/60 transition-colors">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -329,12 +329,12 @@ export default function GroupDetail() {
                       </button>
                       <div className="absolute right-0 top-5 z-10 hidden group-focus-within:flex group-hover:flex flex-col rounded-lg overflow-hidden shadow-xl" style={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.12)', minWidth: 130 }}>
                         {m.role === 'member' && (
-                          <button onClick={() => handleMemberAction(m.userId, 'admin')} className="text-left px-3 py-2 text-xs text-white/60 hover:bg-white/10 hover:text-white transition-colors">Make admin</button>
+                          <button onClick={() => handleMemberAction(m.user_id, 'admin')} className="text-left px-3 py-2 text-xs text-white/60 hover:bg-white/10 hover:text-white transition-colors">Make admin</button>
                         )}
                         {m.role === 'admin' && (
-                          <button onClick={() => handleMemberAction(m.userId, 'member')} className="text-left px-3 py-2 text-xs text-white/60 hover:bg-white/10 hover:text-white transition-colors">Remove admin</button>
+                          <button onClick={() => handleMemberAction(m.user_id, 'member')} className="text-left px-3 py-2 text-xs text-white/60 hover:bg-white/10 hover:text-white transition-colors">Remove admin</button>
                         )}
-                        <button onClick={() => handleMemberAction(m.userId, 'remove')} className="text-left px-3 py-2 text-xs text-red-400 hover:bg-white/10 transition-colors">Remove</button>
+                        <button onClick={() => handleMemberAction(m.user_id, 'remove')} className="text-left px-3 py-2 text-xs text-red-400 hover:bg-white/10 transition-colors">Remove</button>
                       </div>
                     </div>
                   )}
