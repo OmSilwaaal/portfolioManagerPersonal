@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import SentimentBadge from './SentimentBadge'
 import ShareToGroupModal from './ShareToGroupModal'
+import StockLogo from '../StockLogo'
+import CommodityIcon from '../CommodityIcon'
 
 const TYPE_CONFIG = {
   stock:      { label: 'Stock',     color: 'text-blue-400',    bg: 'bg-blue-500/10 border-blue-500/20',    accent: 'rgba(59,130,246,0.15)' },
@@ -125,6 +127,14 @@ function ThreeDotMenu({ url, onShare }) {
       )}
     </div>
   )
+}
+
+// Renders the right logo type based on feed item type + ticker
+function TickerIcon({ type, ticker, sector, size = 32 }) {
+  if (!ticker) return null
+  if (type === 'commodity') return <CommodityIcon symbol={ticker} sector={sector || 'Other'} size={size} />
+  if (type === 'stock' || type === 'stocks' || type === 'crypto') return <StockLogo ticker={ticker} size={size} />
+  return null
 }
 
 // ── Card variants ──────────────────────────────────────────────────────────────
@@ -291,7 +301,7 @@ function ThumbCard({ data, config, urgConf, image, url, ticker, sentiment, times
 }
 
 // COMPACT — no image, no summary, just headline
-function CompactCard({ data, config, urgConf, url, ticker, sentiment, timestamp, onShare }) {
+function CompactCard({ data, config, urgConf, url, ticker, sentiment, timestamp, onShare, type }) {
   return (
     <article
       className={`relative overflow-hidden rounded-xl border-t-2 ${urgConf.border}`}
@@ -301,8 +311,12 @@ function CompactCard({ data, config, urgConf, url, ticker, sentiment, timestamp,
         <div aria-hidden style={{ position: 'absolute', inset: 0, background: urgConf.ambient, pointerEvents: 'none', zIndex: 0 }} />
       )}
       <div style={{ position: 'relative', zIndex: 1 }} className="px-4 py-3.5 flex items-center gap-3">
-        {/* Color accent dot */}
-        <div className="w-1 h-10 rounded-full flex-shrink-0" style={{ background: `linear-gradient(180deg, ${config.accent} 0%, transparent 100%)`, opacity: 0.8 }} />
+        {/* Ticker logo or color accent */}
+        {ticker ? (
+          <TickerIcon type={type} ticker={ticker} sector={data.sector} size={30} />
+        ) : (
+          <div className="w-1 h-10 rounded-full flex-shrink-0" style={{ background: `linear-gradient(180deg, ${config.accent} 0%, transparent 100%)`, opacity: 0.8 }} />
+        )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 mb-1">
             <span className={`text-[10px] font-bold uppercase tracking-wider ${config.color}`}>{config.label}</span>
@@ -327,7 +341,7 @@ function CompactCard({ data, config, urgConf, url, ticker, sentiment, timestamp,
 }
 
 // STANDARD — no image, headline + summary
-function StandardCard({ data, config, urgConf, url, ticker, sentiment, timestamp, onShare }) {
+function StandardCard({ data, config, urgConf, url, ticker, sentiment, timestamp, onShare, type }) {
   return (
     <article
       className={`relative overflow-hidden rounded-2xl border-t-2 ${urgConf.border}`}
@@ -337,8 +351,11 @@ function StandardCard({ data, config, urgConf, url, ticker, sentiment, timestamp
         <div aria-hidden style={{ position: 'absolute', inset: 0, background: urgConf.ambient, pointerEvents: 'none', zIndex: 0 }} />
       )}
       <div style={{ position: 'relative', zIndex: 1 }}>
-        <div className="px-4 pt-4 pb-2">
-          <MetaRow config={config} ticker={ticker} sentiment={sentiment} urgConf={urgConf} />
+        <div className="px-4 pt-4 pb-2 flex items-start gap-3">
+          {ticker && <TickerIcon type={type} ticker={ticker} sector={data.sector} size={32} className="mt-0.5 flex-shrink-0" />}
+          <div className="flex-1 min-w-0">
+            <MetaRow config={config} ticker={ticker || ''} sentiment={sentiment} urgConf={urgConf} />
+          </div>
         </div>
         <div className="px-4 pb-3">
           {url ? (
@@ -380,7 +397,7 @@ export default function FeedCard({ type, data, urgency, index = 0 }) {
   const seed    = index + (typeof data.id === 'string' ? data.id.charCodeAt(0) : 0)
   const variant = getVariant(seed, !!image, level)
 
-  const props = { data, config, urgConf, image, url, ticker, sentiment, timestamp, onShare: () => setShareOpen(true) }
+  const props = { data, config, urgConf, image, url, ticker, sentiment, timestamp, type, onShare: () => setShareOpen(true) }
 
   return (
     <>

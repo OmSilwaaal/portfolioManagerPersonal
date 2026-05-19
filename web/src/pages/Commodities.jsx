@@ -4,6 +4,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import { useGetCommoditiesQuery } from '../api/commoditiesApi'
 import { addStock } from '../store/watchlistSlice'
 import ProGate from '../components/ProGate'
+import CommodityIcon from '../components/CommodityIcon'
 
 const SECTORS = ['All', 'Energy', 'Metals', 'Agriculture']
 
@@ -37,37 +38,40 @@ function CommodityCard({ commodity }) {
 
   return (
     <div className="bg-[#141414] border border-[#1f1f1f] rounded-lg p-4 hover:border-[#3a3a3a] transition-colors h-full flex flex-col">
-      <div className="flex items-start justify-between mb-1">
-        <p className="text-white font-semibold text-sm">{name}</p>
-        <button
-          onClick={handleTrack}
-          className={`text-xs font-semibold px-2 py-0.5 rounded border transition-colors shrink-0 ml-2 ${
-            isTracked
-              ? 'text-green-400 bg-green-400/10 border-green-400/20'
-              : 'text-[#a1a1aa] bg-[#1f1f1f] border-[#2a2a2a] hover:text-[#3b82f6] hover:border-[#3b82f6]'
-          }`}
-        >
-          {isTracked ? '✓ Tracked' : '+ Track'}
-        </button>
+      {/* Header row: icon + name + track button */}
+      <div className="flex items-start gap-3 mb-3">
+        <CommodityIcon symbol={symbol} sector={sector} size={40} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-white font-semibold text-sm leading-snug">{name}</p>
+            <button
+              onClick={handleTrack}
+              className={`text-xs font-semibold px-2 py-0.5 rounded border transition-colors shrink-0 ${
+                isTracked
+                  ? 'text-green-400 bg-green-400/10 border-green-400/20'
+                  : 'text-[#a1a1aa] bg-[#1f1f1f] border-[#2a2a2a] hover:text-[#3b82f6] hover:border-[#3b82f6]'
+              }`}
+            >
+              {isTracked ? '✓' : '+'}
+            </button>
+          </div>
+          <p className="text-[#a1a1aa] text-xs mt-0.5">{symbol} · {sector}</p>
+        </div>
       </div>
 
-      <div className="flex items-center gap-2 mb-3">
-        <p className="text-[#a1a1aa] text-xs">{symbol} · {sector}</p>
-        <span
-          className={`text-xs font-semibold px-2 py-0.5 rounded ml-auto ${typeBadgeClass(isPositive)}`}
-        >
+      <div className="flex items-center justify-between mb-3 border-t border-[#1f1f1f] pt-3">
+        <div>
+          <p className="text-white text-2xl font-bold">
+            {typeof price === 'number'
+              ? price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+              : price}
+          </p>
+          <p className="text-[#a1a1aa] text-xs">{unit}</p>
+        </div>
+        <span className={`text-sm font-semibold px-2.5 py-1 rounded-lg ${typeBadgeClass(isPositive)}`}>
           {isPositive ? '+' : ''}
           {typeof changePercent === 'number' ? changePercent.toFixed(2) : changePercent}%
         </span>
-      </div>
-
-      <div className="mb-3 border-t border-[#1f1f1f] pt-3">
-        <p className="text-white text-2xl font-bold">
-          {typeof price === 'number'
-            ? price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-            : price}
-        </p>
-        <p className="text-[#a1a1aa] text-xs">{unit}</p>
       </div>
 
       {macroContext && (

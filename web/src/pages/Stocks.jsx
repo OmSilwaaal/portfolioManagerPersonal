@@ -5,6 +5,7 @@ import { useGetStockQuery } from '../api/stocksApi'
 import NewsCard from '../components/NewsCard'
 import TradingViewChart from '../components/TradingViewChart'
 import ProGate from '../components/ProGate'
+import StockLogo from '../components/StockLogo'
 
 function MiniSparkline({ price, changePercent }) {
   const positive = changePercent >= 0
@@ -48,6 +49,7 @@ function StockCard({ ticker, isSelected, onClick }) {
       }`}
     >
       <div className="flex items-center justify-between gap-3">
+        <StockLogo ticker={ticker} size={36} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="text-white font-bold text-sm">{ticker}</span>
@@ -102,9 +104,12 @@ function DetailPanel({ ticker }) {
       {/* Header */}
       <div className="px-6 py-5 border-b border-[#1e1e1e]">
         <div className="flex items-start justify-between">
-          <div>
-            <h2 className="text-white font-bold text-xl">{ticker}</h2>
-            {data?.name && <p className="text-[#6b7280] text-sm mt-0.5">{data.name}</p>}
+          <div className="flex items-center gap-3">
+            <StockLogo ticker={ticker} size={44} />
+            <div>
+              <h2 className="text-white font-bold text-xl">{ticker}</h2>
+              {data?.name && <p className="text-[#6b7280] text-sm mt-0.5">{data.name}</p>}
+            </div>
           </div>
           {!isLoading && (
             <div className="text-right">
