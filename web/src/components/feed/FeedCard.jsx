@@ -1,40 +1,38 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import SentimentBadge from './SentimentBadge'
 import ShareToGroupModal from './ShareToGroupModal'
 
 const TYPE_CONFIG = {
-  stock:     { label: 'Stock',     color: 'text-blue-400',   bg: 'bg-blue-500/10 border-blue-500/20' },
-  crypto:    { label: 'Crypto',    color: 'text-purple-400', bg: 'bg-purple-500/10 border-purple-500/20' },
-  commodity: { label: 'Commodity', color: 'text-amber-400',  bg: 'bg-amber-500/10 border-amber-500/20' },
-  'gov-trade':{ label: 'Gov Trade',color: 'text-emerald-400',bg: 'bg-emerald-500/10 border-emerald-500/20' },
-  macro:     { label: 'Macro',     color: 'text-rose-400',   bg: 'bg-rose-500/10 border-rose-500/20' },
+  stock:      { label: 'Stock',     color: 'text-blue-400',    bg: 'bg-blue-500/10 border-blue-500/20',    accent: 'rgba(59,130,246,0.15)' },
+  crypto:     { label: 'Crypto',    color: 'text-purple-400',  bg: 'bg-purple-500/10 border-purple-500/20', accent: 'rgba(168,85,247,0.15)' },
+  commodity:  { label: 'Commodity', color: 'text-amber-400',   bg: 'bg-amber-500/10 border-amber-500/20',  accent: 'rgba(245,158,11,0.15)' },
+  'gov-trade':{ label: 'Gov Trade', color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20', accent: 'rgba(52,211,153,0.15)' },
+  macro:      { label: 'Macro',     color: 'text-rose-400',    bg: 'bg-rose-500/10 border-rose-500/20',    accent: 'rgba(244,63,94,0.15)' },
 }
 
 const URGENCY_CONFIG = {
   'Act Now': {
-    label: 'Act Now',
-    dot: 'bg-red-500',
-    text: 'text-red-400',
-    border: 'border-t-red-500/40',
-    boxShadow: '0 0 60px rgba(239,68,68,0.22), 0 8px 32px rgba(0,0,0,0.45)',
-    ambient: 'radial-gradient(ellipse at 50% 0%, rgba(239,68,68,0.10) 0%, transparent 70%)',
+    label: 'Act Now', dot: 'bg-red-500', text: 'text-red-400', border: 'border-t-red-500/50',
+    boxShadow: '0 0 70px rgba(239,68,68,0.25), 0 8px 32px rgba(0,0,0,0.5)',
+    ambient: 'radial-gradient(ellipse at 50% 0%, rgba(239,68,68,0.13) 0%, transparent 70%)',
   },
   'Watch': {
-    label: 'Watch',
-    dot: 'bg-amber-400',
-    text: 'text-amber-400',
-    border: 'border-t-amber-400/30',
-    boxShadow: '0 0 40px rgba(251,191,36,0.14), 0 8px 32px rgba(0,0,0,0.40)',
-    ambient: 'radial-gradient(ellipse at 50% 0%, rgba(251,191,36,0.08) 0%, transparent 70%)',
+    label: 'Watch', dot: 'bg-amber-400', text: 'text-amber-400', border: 'border-t-amber-400/40',
+    boxShadow: '0 0 45px rgba(251,191,36,0.16), 0 8px 32px rgba(0,0,0,0.42)',
+    ambient: 'radial-gradient(ellipse at 50% 0%, rgba(251,191,36,0.09) 0%, transparent 70%)',
   },
   'Low': {
-    label: null,
-    dot: 'bg-[#333]',
-    text: '',
-    border: 'border-t-transparent',
-    boxShadow: '0 4px 24px rgba(0,0,0,0.30)',
+    label: null, dot: 'bg-[#333]', text: '', border: 'border-t-transparent',
+    boxShadow: '0 2px 20px rgba(0,0,0,0.28)',
     ambient: null,
   },
+}
+
+const glassBase = {
+  background: 'linear-gradient(145deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.02) 100%)',
+  backdropFilter: 'blur(20px) saturate(160%)',
+  WebkitBackdropFilter: 'blur(20px) saturate(160%)',
+  border: '1px solid rgba(255,255,255,0.09)',
 }
 
 function formatTimestamp(ts) {
@@ -49,106 +47,350 @@ function formatTimestamp(ts) {
   return `${Math.floor(diffHrs / 24)}d ago`
 }
 
-export default function FeedCard({ type, data, urgency }) {
+// Deterministic card variant from item id/index so it doesn't shift on re-renders
+function getVariant(seed, hasImage, urgency) {
+  if (urgency === 'Act Now') return 'featured'
+  if (hasImage) return seed % 3 === 0 ? 'hero' : 'thumb'
+  return seed % 4 === 2 ? 'compact' : 'standard'
+}
+
+function ThreeDotMenu({ url, onShare }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  return (
+    <div ref={ref} className="relative flex-shrink-0">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center justify-center w-7 h-7 rounded-lg text-white/25 hover:text-white/60 hover:bg-white/8 transition-all"
+        aria-label="More options"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/>
+        </svg>
+      </button>
+      {open && (
+        <div
+          className="absolute right-0 bottom-9 z-30 flex flex-col rounded-xl overflow-hidden"
+          style={{ background: '#1c1c1e', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', minWidth: 160 }}
+        >
+          <button
+            onClick={() => { onShare(); setOpen(false) }}
+            className="flex items-center gap-2.5 px-3.5 py-2.5 text-xs text-white/70 hover:bg-white/8 hover:text-white transition-colors text-left"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+            Share to group
+          </button>
+          {url && (
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2.5 px-3.5 py-2.5 text-xs text-white/70 hover:bg-white/8 hover:text-white transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                <polyline points="15 3 21 3 21 9"/>
+                <line x1="10" y1="14" x2="21" y2="3"/>
+              </svg>
+              Open article
+            </a>
+          )}
+          {url && (
+            <button
+              onClick={() => { navigator.clipboard?.writeText(url); setOpen(false) }}
+              className="flex items-center gap-2.5 px-3.5 py-2.5 text-xs text-white/70 hover:bg-white/8 hover:text-white transition-colors text-left"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              </svg>
+              Copy link
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Card variants ──────────────────────────────────────────────────────────────
+
+function MetaRow({ config, ticker, sentiment, urgConf }) {
+  return (
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${config.color} ${config.bg}`}>
+          {config.label}
+        </span>
+        {ticker && <span className="text-white/50 font-bold text-[11px] tracking-widest">{ticker}</span>}
+        {sentiment && <SentimentBadge sentiment={sentiment} />}
+      </div>
+      {urgConf.label && (
+        <span className={`flex items-center gap-1 text-[11px] font-semibold flex-shrink-0 ${urgConf.text}`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${urgConf.dot} animate-pulse`} />
+          {urgConf.label}
+        </span>
+      )}
+    </div>
+  )
+}
+
+// FEATURED — Act Now: large text, full-width image banner if available, colored side bar
+function FeaturedCard({ data, config, urgConf, image, url, ticker, sentiment, timestamp, onShare }) {
+  return (
+    <article
+      className={`relative overflow-hidden rounded-2xl border-t-2 ${urgConf.border}`}
+      style={{ ...glassBase, boxShadow: urgConf.boxShadow }}
+    >
+      {urgConf.ambient && (
+        <div aria-hidden style={{ position: 'absolute', inset: 0, background: urgConf.ambient, pointerEvents: 'none', zIndex: 0 }} />
+      )}
+      {/* Red left accent bar */}
+      <div className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-2xl" style={{ background: 'linear-gradient(180deg, rgba(239,68,68,0.7) 0%, rgba(239,68,68,0.2) 100%)' }} />
+
+      <div style={{ position: 'relative', zIndex: 1 }} className="pl-4">
+        {image && (
+          <div className="overflow-hidden" style={{ height: 160 }}>
+            <img
+              src={image}
+              alt=""
+              className="w-full h-full object-cover"
+              style={{ filter: 'brightness(0.75) contrast(1.05)' }}
+              onError={(e) => { e.target.parentElement.style.display = 'none' }}
+            />
+          </div>
+        )}
+        <div className="px-4 pt-4 pb-2">
+          <MetaRow config={config} ticker={ticker} sentiment={sentiment} urgConf={urgConf} />
+        </div>
+        <div className="px-4 pb-3">
+          {url ? (
+            <a href={url} target="_blank" rel="noopener noreferrer" className="block group">
+              <h2 className="text-white font-bold text-[17px] leading-snug group-hover:text-white/80 transition-colors line-clamp-3">{data.headline}</h2>
+            </a>
+          ) : (
+            <h2 className="text-white font-bold text-[17px] leading-snug line-clamp-3">{data.headline}</h2>
+          )}
+          {data.summary && <p className="text-white/50 text-sm leading-relaxed mt-2 line-clamp-3">{data.summary}</p>}
+        </div>
+        <div className="flex items-center justify-between px-4 py-3 border-t border-white/5">
+          <div className="flex items-center gap-2">
+            {data.source && <span className="text-[11px] font-medium text-white/30">{data.source}</span>}
+            <span className="text-[11px] text-white/20">{formatTimestamp(timestamp)}</span>
+          </div>
+          <ThreeDotMenu url={url} onShare={onShare} />
+        </div>
+      </div>
+    </article>
+  )
+}
+
+// HERO — has image, large layout with image at top
+function HeroCard({ data, config, urgConf, image, url, ticker, sentiment, timestamp, onShare }) {
+  return (
+    <article
+      className={`relative overflow-hidden rounded-2xl border-t-2 ${urgConf.border}`}
+      style={{ ...glassBase, boxShadow: urgConf.boxShadow }}
+    >
+      {urgConf.ambient && (
+        <div aria-hidden style={{ position: 'absolute', inset: 0, background: urgConf.ambient, pointerEvents: 'none', zIndex: 0 }} />
+      )}
+      <div style={{ position: 'relative', zIndex: 1 }}>
+        <div className="overflow-hidden" style={{ height: 130 }}>
+          <img
+            src={image}
+            alt=""
+            className="w-full h-full object-cover"
+            style={{ filter: 'brightness(0.7)' }}
+            onError={(e) => { e.target.parentElement.style.display = 'none' }}
+          />
+          {/* Gradient overlay */}
+          <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(10,10,10,0.9) 0%, transparent 50%)' }} />
+          {/* Badge overlaid on image */}
+          <div className="absolute bottom-3 left-4 flex items-center gap-2">
+            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${config.color} ${config.bg}`}>{config.label}</span>
+            {ticker && <span className="text-white/60 font-bold text-[11px] tracking-widest">{ticker}</span>}
+          </div>
+        </div>
+        <div className="px-4 pt-3 pb-2">
+          {url ? (
+            <a href={url} target="_blank" rel="noopener noreferrer" className="block group">
+              <h2 className="text-white font-bold text-[15px] leading-snug group-hover:text-white/80 transition-colors line-clamp-2">{data.headline}</h2>
+            </a>
+          ) : (
+            <h2 className="text-white font-bold text-[15px] leading-snug line-clamp-2">{data.headline}</h2>
+          )}
+          {data.summary && <p className="text-white/45 text-sm leading-relaxed mt-1.5 line-clamp-2">{data.summary}</p>}
+        </div>
+        <div className="flex items-center justify-between px-4 py-3 border-t border-white/5">
+          <div className="flex items-center gap-2">
+            {sentiment && <SentimentBadge sentiment={sentiment} />}
+            <span className="text-[11px] text-white/25">{formatTimestamp(timestamp)}</span>
+          </div>
+          <ThreeDotMenu url={url} onShare={onShare} />
+        </div>
+      </div>
+    </article>
+  )
+}
+
+// THUMB — has image, thumbnail on right side
+function ThumbCard({ data, config, urgConf, image, url, ticker, sentiment, timestamp, onShare }) {
+  return (
+    <article
+      className={`relative overflow-hidden rounded-2xl border-t-2 ${urgConf.border}`}
+      style={{ ...glassBase, boxShadow: urgConf.boxShadow }}
+    >
+      {urgConf.ambient && (
+        <div aria-hidden style={{ position: 'absolute', inset: 0, background: urgConf.ambient, pointerEvents: 'none', zIndex: 0 }} />
+      )}
+      <div style={{ position: 'relative', zIndex: 1 }}>
+        <div className="px-4 pt-4 pb-2">
+          <MetaRow config={config} ticker={ticker} sentiment={sentiment} urgConf={urgConf} />
+        </div>
+        <div className="px-4 pb-3 flex gap-3">
+          <div className="flex-1 min-w-0">
+            {url ? (
+              <a href={url} target="_blank" rel="noopener noreferrer" className="block group">
+                <h2 className="text-white font-semibold text-[14px] leading-snug group-hover:text-white/80 transition-colors line-clamp-3">{data.headline}</h2>
+              </a>
+            ) : (
+              <h2 className="text-white font-semibold text-[14px] leading-snug line-clamp-3">{data.headline}</h2>
+            )}
+          </div>
+          <div className="w-16 h-16 rounded-xl overflow-hidden flex-shrink-0">
+            <img
+              src={image}
+              alt=""
+              className="w-full h-full object-cover"
+              onError={(e) => { e.target.parentElement.style.display = 'none' }}
+            />
+          </div>
+        </div>
+        <div className="flex items-center justify-between px-4 py-3 border-t border-white/5">
+          <span className="text-[11px] text-white/25">{formatTimestamp(timestamp)}</span>
+          <ThreeDotMenu url={url} onShare={onShare} />
+        </div>
+      </div>
+    </article>
+  )
+}
+
+// COMPACT — no image, no summary, just headline
+function CompactCard({ data, config, urgConf, url, ticker, sentiment, timestamp, onShare }) {
+  return (
+    <article
+      className={`relative overflow-hidden rounded-xl border-t-2 ${urgConf.border}`}
+      style={{ ...glassBase, boxShadow: urgConf.boxShadow }}
+    >
+      {urgConf.ambient && (
+        <div aria-hidden style={{ position: 'absolute', inset: 0, background: urgConf.ambient, pointerEvents: 'none', zIndex: 0 }} />
+      )}
+      <div style={{ position: 'relative', zIndex: 1 }} className="px-4 py-3.5 flex items-center gap-3">
+        {/* Color accent dot */}
+        <div className="w-1 h-10 rounded-full flex-shrink-0" style={{ background: `linear-gradient(180deg, ${config.accent} 0%, transparent 100%)`, opacity: 0.8 }} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 mb-1">
+            <span className={`text-[10px] font-bold uppercase tracking-wider ${config.color}`}>{config.label}</span>
+            {ticker && <span className="text-white/35 text-[10px] font-bold tracking-widest">{ticker}</span>}
+          </div>
+          {url ? (
+            <a href={url} target="_blank" rel="noopener noreferrer" className="block group">
+              <p className="text-white/80 font-medium text-[13px] leading-snug group-hover:text-white transition-colors line-clamp-2">{data.headline}</p>
+            </a>
+          ) : (
+            <p className="text-white/80 font-medium text-[13px] leading-snug line-clamp-2">{data.headline}</p>
+          )}
+          <div className="flex items-center gap-2 mt-1">
+            {sentiment && <SentimentBadge sentiment={sentiment} />}
+            <span className="text-[10px] text-white/20">{formatTimestamp(timestamp)}</span>
+          </div>
+        </div>
+        <ThreeDotMenu url={url} onShare={onShare} />
+      </div>
+    </article>
+  )
+}
+
+// STANDARD — no image, headline + summary
+function StandardCard({ data, config, urgConf, url, ticker, sentiment, timestamp, onShare }) {
+  return (
+    <article
+      className={`relative overflow-hidden rounded-2xl border-t-2 ${urgConf.border}`}
+      style={{ ...glassBase, boxShadow: urgConf.boxShadow }}
+    >
+      {urgConf.ambient && (
+        <div aria-hidden style={{ position: 'absolute', inset: 0, background: urgConf.ambient, pointerEvents: 'none', zIndex: 0 }} />
+      )}
+      <div style={{ position: 'relative', zIndex: 1 }}>
+        <div className="px-4 pt-4 pb-2">
+          <MetaRow config={config} ticker={ticker} sentiment={sentiment} urgConf={urgConf} />
+        </div>
+        <div className="px-4 pb-3">
+          {url ? (
+            <a href={url} target="_blank" rel="noopener noreferrer" className="block group">
+              <h2 className="text-white font-semibold text-[15px] leading-snug mb-1.5 group-hover:text-white/80 transition-colors line-clamp-2">{data.headline}</h2>
+            </a>
+          ) : (
+            <h2 className="text-white font-semibold text-[15px] leading-snug mb-1.5 line-clamp-2">{data.headline}</h2>
+          )}
+          {data.summary && <p className="text-white/45 text-sm leading-relaxed line-clamp-3">{data.summary}</p>}
+        </div>
+        <div className="flex items-center justify-between px-4 py-3 border-t border-white/5">
+          <div className="flex items-center gap-2">
+            {data.source && <span className="text-[11px] font-medium text-white/25">{data.source}</span>}
+            <span className="text-[11px] text-white/20">{formatTimestamp(timestamp)}</span>
+          </div>
+          <ThreeDotMenu url={url} onShare={onShare} />
+        </div>
+      </div>
+    </article>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+export default function FeedCard({ type, data, urgency, index = 0 }) {
   const [shareOpen, setShareOpen] = useState(false)
 
-  const headline = data.headline || data.commodity || data.assetName || ''
-  const summary  = data.summary || ''
-  const ticker   = data.ticker || data.symbol || ''
+  const ticker    = data.ticker || data.symbol || ''
   const sentiment = data.sentiment || null
   const timestamp = data.timestamp || data.publishedAt || data.disclosureDate || ''
-  const level = urgency || data.urgency || 'Low'
-  const url   = data.url || null
+  const level     = urgency || data.urgency || 'Low'
+  const url       = data.url || null
+  const image     = data.image_url || null
 
   const config  = TYPE_CONFIG[type] || TYPE_CONFIG.macro
   const urgConf = URGENCY_CONFIG[level] || URGENCY_CONFIG['Low']
 
-  const glassStyle = {
-    background: 'linear-gradient(145deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.02) 100%)',
-    backdropFilter: 'blur(20px) saturate(160%)',
-    WebkitBackdropFilter: 'blur(20px) saturate(160%)',
-    border: '1px solid rgba(255,255,255,0.09)',
-    boxShadow: urgConf.boxShadow,
-  }
+  const seed    = index + (typeof data.id === 'string' ? data.id.charCodeAt(0) : 0)
+  const variant = getVariant(seed, !!image, level)
+
+  const props = { data, config, urgConf, image, url, ticker, sentiment, timestamp, onShare: () => setShareOpen(true) }
 
   return (
     <>
-      <article
-        className={`relative overflow-hidden rounded-2xl border-t-2 ${urgConf.border} transition-all`}
-        style={glassStyle}
-      >
-        {/* Ambient light overlay */}
-        {urgConf.ambient && (
-          <div
-            aria-hidden="true"
-            style={{
-              position: 'absolute',
-              inset: 0,
-              background: urgConf.ambient,
-              pointerEvents: 'none',
-              zIndex: 0,
-            }}
-          />
-        )}
+      {variant === 'featured'  && <FeaturedCard {...props} />}
+      {variant === 'hero'      && <HeroCard {...props} />}
+      {variant === 'thumb'     && <ThumbCard {...props} />}
+      {variant === 'compact'   && <CompactCard {...props} />}
+      {variant === 'standard'  && <StandardCard {...props} />}
 
-        {/* Content above ambient */}
-        <div style={{ position: 'relative', zIndex: 1 }}>
-          {/* Meta row */}
-          <div className="flex items-center justify-between px-5 pt-4 pb-2">
-            <div className="flex items-center gap-2">
-              <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${config.color} ${config.bg}`}>
-                {config.label}
-              </span>
-              {ticker && (
-                <span className="text-white/70 font-bold text-xs tracking-widest">{ticker}</span>
-              )}
-              {sentiment && <SentimentBadge sentiment={sentiment} />}
-            </div>
-            {urgConf.label && (
-              <span className={`flex items-center gap-1 text-[11px] font-semibold ${urgConf.text}`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${urgConf.dot} animate-pulse`} />
-                {urgConf.label}
-              </span>
-            )}
-          </div>
-
-          {/* Content */}
-          <div className="px-5 pb-4">
-            {url ? (
-              <a href={url} target="_blank" rel="noopener noreferrer" className="block group">
-                <h2 className="text-white font-semibold text-[15px] leading-snug mb-2 group-hover:text-white/80 transition-colors line-clamp-2">
-                  {headline}
-                </h2>
-              </a>
-            ) : (
-              <h2 className="text-white font-semibold text-[15px] leading-snug mb-2 line-clamp-2">{headline}</h2>
-            )}
-            {summary && (
-              <p className="text-[#9ca3af] text-sm leading-relaxed line-clamp-3">{summary}</p>
-            )}
-          </div>
-
-          {/* Footer */}
-          <div className="flex items-center justify-between px-5 py-3 border-t border-white/5">
-            <span className="text-[#4b5563] text-xs">{formatTimestamp(timestamp)}</span>
-            <button
-              onClick={() => setShareOpen(true)}
-              className="flex items-center gap-1.5 text-[#6b7280] hover:text-white transition-colors text-xs font-medium px-2.5 py-1 rounded-lg hover:bg-white/5"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
-                <polyline points="16 6 12 2 8 6"/>
-                <line x1="12" y1="2" x2="12" y2="15"/>
-              </svg>
-              Share to group
-            </button>
-          </div>
-        </div>
-      </article>
-
-      {shareOpen && (
-        <ShareToGroupModal article={data} onClose={() => setShareOpen(false)} />
-      )}
+      {shareOpen && <ShareToGroupModal article={data} onClose={() => setShareOpen(false)} />}
     </>
   )
 }

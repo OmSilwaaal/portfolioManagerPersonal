@@ -45,6 +45,7 @@ function normalizeArticles(articles) {
     source: article.source || 'Unknown',
     publishedAt: article.published_at || new Date().toISOString(),
     url: article.url || '',
+    image_url: article.image_url || null,
     ticker: article.entities && article.entities.length > 0
       ? article.entities[0].symbol
       : null,

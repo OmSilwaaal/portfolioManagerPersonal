@@ -276,11 +276,12 @@ export default function Feed() {
       {!isLoading && filtered.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {filtered.slice(0, isPro ? filtered.length : FREE_ITEM_LIMIT).map((item, idx) => (
-            <div key={item.id || `feed-${idx}`} className="break-inside-avoid">
+            <div key={item.id || `feed-${idx}`} className={`break-inside-avoid ${(item.urgency === 'Act Now') ? 'sm:col-span-2' : ''}`}>
               <FeedCard
                 type={item._feedType || item.type || 'stock'}
                 data={item.data || item}
                 urgency={item.urgency}
+                index={idx}
               />
             </div>
           ))}
@@ -293,6 +294,7 @@ export default function Feed() {
                       type={item._feedType || item.type || 'stock'}
                       data={item.data || item}
                       urgency={item.urgency}
+                      index={FREE_ITEM_LIMIT + idx}
                     />
                   </div>
                 ))}

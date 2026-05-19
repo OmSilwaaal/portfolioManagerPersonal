@@ -24,6 +24,7 @@ router.get('/', async (req, res, next) => {
           source: item.source,
           publishedAt: item.publishedAt,
           url: item.url,
+          image_url: item.image_url || null,
           ticker: item.ticker,
           summary: aiResult.summary,
           urgency: aiResult.urgency,

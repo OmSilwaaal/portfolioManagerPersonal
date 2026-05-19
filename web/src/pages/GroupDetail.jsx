@@ -204,16 +204,22 @@ function MemberList({ members, isAdmin, currentUserId, onMemberAction, onUpdateM
                 )}
               </div>
               <div className="flex items-center gap-1.5 flex-shrink-0">
-                <span
-                  className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded"
-                  style={{
-                    background: m.role === 'admin' ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.05)',
-                    color: m.role === 'admin' ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.30)',
-                  }}
-                >
-                  {m.role}
-                </span>
-                {m.role === 'member' && m.can_post && (
+                {/* Show custom rank/title as primary badge; role in smaller text */}
+                <div className="flex flex-col items-end gap-0.5">
+                  <span
+                    className="text-[10px] font-semibold px-1.5 py-0.5 rounded"
+                    style={{
+                      background: m.role === 'admin' ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.05)',
+                      color: m.role === 'admin' ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.35)',
+                    }}
+                  >
+                    {m.rank || (m.role === 'admin' ? 'Admin' : 'Member')}
+                  </span>
+                  {m.rank && (
+                    <span className="text-[9px] text-white/20 leading-none">{m.role}</span>
+                  )}
+                </div>
+                {m.role === 'member' && m.can_post && !m.rank && (
                   <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(134,239,172,0.12)', color: 'rgba(134,239,172,0.8)' }}>
                     can post
                   </span>
@@ -237,7 +243,7 @@ function MemberList({ members, isAdmin, currentUserId, onMemberAction, onUpdateM
                         style={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.12)', minWidth: 170 }}
                       >
                         <button onClick={() => openRankEdit(m)} className="text-left px-3 py-2.5 text-xs text-white/60 hover:bg-white/10 hover:text-white transition-colors">
-                          Set rank / permissions
+                          Set title / permissions
                         </button>
                         {m.role === 'member' && (
                           <button
@@ -275,7 +281,7 @@ function MemberList({ members, isAdmin, currentUserId, onMemberAction, onUpdateM
                   type="text"
                   value={rankInput}
                   onChange={(e) => setRankInput(e.target.value.slice(0, 30))}
-                  placeholder="Custom rank (e.g. Analyst)"
+                  placeholder="Title (e.g. CTO, CFO, Analyst, Lead)"
                   className="w-full px-3 py-1.5 rounded-lg text-xs text-white placeholder-white/25 focus:outline-none"
                   style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)' }}
                 />
