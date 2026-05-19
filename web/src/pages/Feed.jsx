@@ -5,28 +5,101 @@ import FilterBar from '../components/feed/FilterBar'
 import FeedCard from '../components/feed/FeedCard'
 import { useGetGovTradesQuery } from '../api/govTradesApi'
 import { useGetCommoditiesQuery } from '../api/commoditiesApi'
-import { useGetFeedQuery } from '../api/feedApi'
+import { useGetFeedQuery, useGetFeedBriefQuery } from '../api/feedApi'
 import { usePersonalizedFeed } from '../hooks/usePersonalizedFeed'
 import ProGate from '../components/ProGate'
 
 function SkeletonCard() {
   return (
-    <div className="bg-[#141414] border border-[#2a2a2a] rounded-lg p-4 animate-pulse">
-      <div className="flex justify-between mb-3">
-        <div className="h-4 bg-[#2a2a2a] rounded w-32" />
-        <div className="h-4 bg-[#2a2a2a] rounded w-16" />
+    <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden animate-pulse">
+      <div className="px-5 pt-4 pb-2 flex items-center gap-2">
+        <div className="h-5 w-16 bg-[#222] rounded-full" />
+        <div className="h-4 w-10 bg-[#222] rounded" />
       </div>
-      <div className="h-3 bg-[#2a2a2a] rounded w-full mb-2" />
-      <div className="h-3 bg-[#2a2a2a] rounded w-3/4" />
+      <div className="px-5 pb-4 space-y-2">
+        <div className="h-4 bg-[#222] rounded w-full" />
+        <div className="h-4 bg-[#222] rounded w-4/5" />
+        <div className="h-3 bg-[#1a1a1a] rounded w-full mt-3" />
+        <div className="h-3 bg-[#1a1a1a] rounded w-2/3" />
+      </div>
+      <div className="px-5 py-3 border-t border-[#1e1e1e] flex justify-between">
+        <div className="h-3 w-16 bg-[#222] rounded" />
+        <div className="h-3 w-24 bg-[#222] rounded" />
+      </div>
     </div>
   )
 }
 
-function greeting() {
-  const h = new Date().getHours()
-  if (h < 12) return 'Good morning'
-  if (h < 17) return 'Good afternoon'
-  return 'Good evening'
+function BriefSkeleton() {
+  return (
+    <div className="bg-[#111] border border-[#222] rounded-2xl p-5 animate-pulse">
+      <div className="flex items-center gap-2 mb-3">
+        <div className="w-2 h-2 rounded-full bg-[#333]" />
+        <div className="h-3 w-24 bg-[#222] rounded" />
+      </div>
+      <div className="space-y-2 mb-4">
+        <div className="h-3 bg-[#1e1e1e] rounded w-full" />
+        <div className="h-3 bg-[#1e1e1e] rounded w-5/6" />
+        <div className="h-3 bg-[#1e1e1e] rounded w-4/6" />
+      </div>
+      <div className="space-y-2">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="h-3 bg-[#1e1e1e] rounded w-full" />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+const BULLET_COLORS = {
+  'Watch:': 'text-amber-400',
+  'Risk:': 'text-red-400',
+  'Opportunity:': 'text-emerald-400',
+  'Trend:': 'text-blue-400',
+}
+
+function BriefCard({ brief, bullets }) {
+  const bulletColor = (bullet) => {
+    const key = Object.keys(BULLET_COLORS).find((k) => bullet.startsWith(k))
+    return key ? BULLET_COLORS[key] : 'text-white/60'
+  }
+
+  return (
+    <div className="bg-[#111] border border-[#1e1e1e] rounded-2xl overflow-hidden">
+      <div className="flex items-center gap-2 px-5 pt-4 pb-1">
+        <span className="w-1.5 h-1.5 rounded-full bg-white/30" />
+        <span className="text-[11px] font-semibold text-white/40 uppercase tracking-widest">Weekly Brief</span>
+      </div>
+      <div className="px-5 pb-4">
+        <p className="text-white/80 text-sm leading-relaxed mb-4">{brief}</p>
+        {bullets && bullets.length > 0 && (
+          <ul className="space-y-2">
+            {bullets.map((b, i) => {
+              const colonIdx = b.indexOf(':')
+              const prefix = colonIdx > -1 ? b.slice(0, colonIdx + 1) : null
+              const rest = colonIdx > -1 ? b.slice(colonIdx + 1) : b
+              return (
+                <li key={i} className="flex items-start gap-2 text-sm">
+                  <span className={`font-semibold flex-shrink-0 ${bulletColor(b)}`}>{prefix}</span>
+                  <span className="text-white/55">{rest.trim()}</span>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function weekLabel() {
+  const now = new Date()
+  const startOfWeek = new Date(now)
+  startOfWeek.setDate(now.getDate() - now.getDay())
+  const endOfWeek = new Date(startOfWeek)
+  endOfWeek.setDate(startOfWeek.getDate() + 6)
+  const fmt = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return `${fmt(startOfWeek)} – ${fmt(endOfWeek)}`
 }
 
 const FREE_ITEM_LIMIT = 5
@@ -44,20 +117,18 @@ export default function Feed() {
   ).split(' ')[0]
   const watchedCategories = preferences.watchedCategories || []
 
-  // Fetch all data in parallel
   const { data: feedData, isLoading: feedLoading } = useGetFeedQuery()
   const { data: govData, isLoading: govLoading } = useGetGovTradesQuery({ days: '30', limit: '20' })
   const { data: commoditiesData, isLoading: commoditiesLoading } = useGetCommoditiesQuery()
+  const { data: briefData, isLoading: briefLoading } = useGetFeedBriefQuery()
 
   const rawFeedItems = feedData?.items || feedData?.news || feedData?.articles || []
   const rawGovTrades = govData?.trades || []
   const rawCommodities = commoditiesData?.commodities || []
 
   const feedItems = usePersonalizedFeed(rawFeedItems, rawGovTrades, rawCommodities)
-
   const isLoading = feedLoading || govLoading || commoditiesLoading
 
-  // Filter by active filter type
   const filtered =
     activeFilter === 'all'
       ? feedItems
@@ -76,20 +147,39 @@ export default function Feed() {
 
   return (
     <main className="flex-1 p-5 md:p-8 max-w-2xl mx-auto w-full">
-      <div className="mb-5">
-        <h1 className="text-2xl font-bold text-white">
-          {greeting()}{firstName ? `, ${firstName}` : ''}
+
+      {/* Personalized header */}
+      <div className="mb-7">
+        <p className="text-[#6b7280] text-xs font-medium uppercase tracking-widest mb-1">
+          Week of {weekLabel()}
+        </p>
+        <h1 className="text-2xl font-bold text-white leading-snug">
+          {firstName ? `Hello ${firstName},` : 'Hello,'} here&apos;s your brief
         </h1>
-        <p className="text-[#6b7280] text-sm mt-1">Here's what's moving the markets today</p>
       </div>
 
-      <div className="mb-5">
+      {/* Weekly AI Brief */}
+      <div className="mb-6">
+        {briefLoading ? (
+          <BriefSkeleton />
+        ) : briefData?.brief ? (
+          <BriefCard brief={briefData.brief} bullets={briefData.bullets} />
+        ) : null}
+      </div>
+
+      {/* Filter bar */}
+      <div className="mb-4">
         <FilterBar activeFilter={activeFilter} onChange={setActiveFilter} />
+      </div>
+
+      {/* Section label */}
+      <div className="mb-3">
+        <span className="text-xs font-semibold text-white/30 uppercase tracking-widest">Today</span>
       </div>
 
       {noCategories && !isLoading && (
         <div className="text-center py-16">
-          <p className="text-gray-400 text-sm">Update your preferences to see your feed</p>
+          <p className="text-[#6b7280] text-sm">Update your preferences to see your feed</p>
           <a href="/settings" className="mt-3 inline-block text-[#3b82f6] text-sm hover:underline">
             Go to Settings
           </a>
@@ -98,15 +188,13 @@ export default function Feed() {
 
       {isLoading && (
         <div className="space-y-3">
-          {[...Array(6)].map((_, i) => (
-            <SkeletonCard key={i} />
-          ))}
+          {[...Array(5)].map((_, i) => <SkeletonCard key={i} />)}
         </div>
       )}
 
       {!isLoading && !noCategories && filtered.length === 0 && (
         <div className="text-center py-16">
-          <p className="text-gray-400 text-sm">No items match the selected filter.</p>
+          <p className="text-[#6b7280] text-sm">No items match the selected filter.</p>
         </div>
       )}
 

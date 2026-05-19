@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSelector, useDispatch } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import { updateWatchlist, resetPreferences } from '../store/preferencesSlice'
@@ -94,6 +94,27 @@ function Card({ icon, title, subtitle, preview, onClick }) {
 
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/
 
+function resizeImageToDataUrl(file, maxSize = 200, quality = 0.7) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const img = new Image()
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        const scale = Math.min(maxSize / img.width, maxSize / img.height, 1)
+        canvas.width = Math.round(img.width * scale)
+        canvas.height = Math.round(img.height * scale)
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+        resolve(canvas.toDataURL('image/jpeg', quality))
+      }
+      img.onerror = reject
+      img.src = e.target.result
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
 function ProfileView({ onBack }) {
   const { data: profile, isLoading } = useGetMyProfileQuery()
   const [updateProfile, { isLoading: saving }] = useUpdateProfileMutation()
@@ -102,6 +123,9 @@ function ProfileView({ onBack }) {
   const [bio, setBio] = useState('')
   const [avatarUrl, setAvatarUrl] = useState('')
   const [usernameError, setUsernameError] = useState('')
+  const [dragOver, setDragOver] = useState(false)
+  const [uploadError, setUploadError] = useState('')
+  const fileInputRef = useRef(null)
 
   useEffect(() => {
     if (profile) {
@@ -127,6 +151,31 @@ function ProfileView({ onBack }) {
     }
   }
 
+  const processFile = useCallback(async (file) => {
+    if (!file || !file.type.startsWith('image/')) {
+      setUploadError('Please drop an image file.')
+      return
+    }
+    setUploadError('')
+    try {
+      const dataUrl = await resizeImageToDataUrl(file, 200, 0.7)
+      setAvatarUrl(dataUrl)
+    } catch {
+      setUploadError('Failed to process image.')
+    }
+  }, [])
+
+  const handleDrop = useCallback((e) => {
+    e.preventDefault()
+    setDragOver(false)
+    const file = e.dataTransfer.files[0]
+    processFile(file)
+  }, [processFile])
+
+  const handleDragOver = (e) => { e.preventDefault(); setDragOver(true) }
+  const handleDragLeave = () => setDragOver(false)
+  const handleFileInput = (e) => processFile(e.target.files[0])
+
   const avatarInitials = (username || profile?.display_name || '?').charAt(0).toUpperCase()
 
   return (
@@ -141,23 +190,54 @@ function ProfileView({ onBack }) {
       ) : (
         <form onSubmit={handleSave} className="flex flex-col gap-5">
 
-          {/* Avatar preview */}
+          {/* Avatar drag-and-drop */}
           <div className="flex flex-col items-center gap-3">
-            <div className="w-20 h-20 rounded-2xl overflow-hidden flex items-center justify-center text-2xl font-bold text-white bg-[#1f1f1f] border border-[#2a2a2a]">
-              {avatarUrl
-                ? <img src={avatarUrl} alt="" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none' }} />
-                : avatarInitials}
+            <div
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onClick={() => fileInputRef.current?.click()}
+              className={`relative w-24 h-24 rounded-2xl overflow-hidden flex items-center justify-center cursor-pointer transition-all border-2 border-dashed ${
+                dragOver
+                  ? 'border-white/40 bg-white/10 scale-105'
+                  : 'border-[#2a2a2a] bg-[#1f1f1f] hover:border-white/20 hover:bg-[#252525]'
+              }`}
+              title="Click or drag & drop an image"
+            >
+              {avatarUrl ? (
+                <>
+                  <img src={avatarUrl} alt="" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none' }} />
+                  <div className="absolute inset-0 bg-black/50 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                      <polyline points="17 8 12 3 7 8"/>
+                      <line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-col items-center gap-1 text-[#4b5563]">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                  </svg>
+                  <span className="text-[10px] text-center leading-tight">{dragOver ? 'Drop it' : 'Photo'}</span>
+                </div>
+              )}
             </div>
+            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileInput} />
             <div className="w-full">
-              <label className="block text-xs uppercase tracking-widest text-[#6b7280] mb-2">Profile picture URL</label>
+              <label className="block text-xs uppercase tracking-widest text-[#6b7280] mb-2">Or paste an image URL</label>
               <input
                 type="url"
-                value={avatarUrl}
+                value={avatarUrl.startsWith('data:') ? '' : avatarUrl}
                 onChange={(e) => setAvatarUrl(e.target.value)}
                 placeholder="https://example.com/photo.jpg"
                 className="w-full bg-[#141414] border border-[#2a2a2a] text-white placeholder-[#6b7280] text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-[#3b82f6] transition-colors"
               />
-              <p className="text-[#4b5563] text-xs mt-1.5">Paste a link to any image. Google profile pictures work great.</p>
+              {uploadError && <p className="text-red-400 text-xs mt-1.5">{uploadError}</p>}
+              {!uploadError && <p className="text-[#4b5563] text-xs mt-1.5">Drag & drop or click the photo above, or paste a URL. Resized to 200×200.</p>}
             </div>
           </div>
 

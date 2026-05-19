@@ -245,4 +245,33 @@ News content: ${content || headline}`;
   }
 }
 
-module.exports = { summarizeNewsItem, analyzePortfolioImpact, summarizeGovTrade, summarizeNewsItemWithContext, getBudgetStatus };
+async function generateWeeklyBrief(headlines) {
+  if (!checkBudget()) return { brief: BUDGET_FALLBACK.summary, bullets: [] };
+  try {
+    const anthropic = getClient();
+    const headlineText = headlines.slice(0, 12).map((h, i) => `${i + 1}. ${h}`).join('\n');
+
+    const message = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 400,
+      system: [{
+        type: 'text',
+        text: 'You are a financial analyst writing a weekly market brief for retail investors. Return only valid JSON, no markdown.',
+        cache_control: { type: 'ephemeral' },
+      }],
+      messages: [{
+        role: 'user',
+        content: `Based on these current market headlines, write a brief market outlook for this week in plain English.\n\nHeadlines:\n${headlineText}\n\nReturn ONLY valid JSON:\n{\n  "brief": "2-3 sentence overview of what to expect this week",\n  "bullets": ["Watch: one thing", "Risk: one thing", "Opportunity: one thing", "Trend: one thing"]\n}`,
+      }],
+    });
+
+    recordUsage(message.usage);
+    const cleaned = message.content[0].text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    return JSON.parse(cleaned);
+  } catch (err) {
+    console.log('Claude weekly brief error:', err.message);
+    return { brief: 'Market analysis temporarily unavailable.', bullets: [] };
+  }
+}
+
+module.exports = { summarizeNewsItem, analyzePortfolioImpact, summarizeGovTrade, summarizeNewsItemWithContext, getBudgetStatus, generateWeeklyBrief };

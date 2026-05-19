@@ -3,69 +3,24 @@ import SentimentBadge from './SentimentBadge'
 import ShareToGroupModal from './ShareToGroupModal'
 
 const TYPE_CONFIG = {
-  stock: {
-    label: 'Stock',
-    color: 'text-blue-400 bg-blue-500/10 border-blue-500/20',
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
-      </svg>
-    ),
-  },
-  crypto: {
-    label: 'Crypto',
-    color: 'text-purple-400 bg-purple-500/10 border-purple-500/20',
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10" />
-        <path d="M9.5 8h3a2 2 0 0 1 0 4h-3v4M9.5 8V6M12.5 8V6" />
-      </svg>
-    ),
-  },
-  commodity: {
-    label: 'Commodity',
-    color: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M3 3v18h18" /><path d="M18 9l-5 5-4-4-3 3" />
-      </svg>
-    ),
-  },
-  'gov-trade': {
-    label: 'Gov Trade',
-    color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
-        <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-      </svg>
-    ),
-  },
-  macro: {
-    label: 'Macro',
-    color: 'text-rose-400 bg-rose-500/10 border-rose-500/20',
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10" />
-        <line x1="12" y1="8" x2="12" y2="12" />
-        <line x1="12" y1="16" x2="12.01" y2="16" />
-      </svg>
-    ),
-  },
+  stock:     { label: 'Stock',     color: 'text-blue-400',   bg: 'bg-blue-500/10 border-blue-500/20' },
+  crypto:    { label: 'Crypto',    color: 'text-purple-400', bg: 'bg-purple-500/10 border-purple-500/20' },
+  commodity: { label: 'Commodity', color: 'text-amber-400',  bg: 'bg-amber-500/10 border-amber-500/20' },
+  'gov-trade':{ label: 'Gov Trade',color: 'text-emerald-400',bg: 'bg-emerald-500/10 border-emerald-500/20' },
+  macro:     { label: 'Macro',     color: 'text-rose-400',   bg: 'bg-rose-500/10 border-rose-500/20' },
 }
 
-const URGENCY_ACCENT = {
-  High: 'bg-red-500',
-  Medium: 'bg-amber-400',
-  Low: 'bg-[#2a2a2a]',
+const URGENCY_CONFIG = {
+  'Act Now': { label: 'Act Now', dot: 'bg-red-500',   text: 'text-red-400',   border: 'border-t-red-500/40' },
+  'Watch':   { label: 'Watch',   dot: 'bg-amber-400', text: 'text-amber-400', border: 'border-t-amber-400/30' },
+  'Low':     { label: null,      dot: 'bg-[#333]',    text: '',               border: 'border-t-transparent' },
 }
 
 function formatTimestamp(ts) {
   if (!ts) return ''
   const d = new Date(ts)
   if (isNaN(d.getTime())) return ts
-  const diffMs = Date.now() - d.getTime()
-  const diffMins = Math.floor(diffMs / 60000)
+  const diffMins = Math.floor((Date.now() - d.getTime()) / 60000)
   if (diffMins < 1) return 'just now'
   if (diffMins < 60) return `${diffMins}m ago`
   const diffHrs = Math.floor(diffMins / 60)
@@ -76,55 +31,71 @@ function formatTimestamp(ts) {
 export default function FeedCard({ type, data, urgency }) {
   const [shareOpen, setShareOpen] = useState(false)
 
-  const summary = data.summary || data.headline || data.commodity || data.assetName || ''
-  const ticker = data.ticker || data.symbol || ''
+  const headline = data.headline || data.commodity || data.assetName || ''
+  const summary  = data.summary || ''
+  const ticker   = data.ticker || data.symbol || ''
   const sentiment = data.sentiment || null
   const timestamp = data.timestamp || data.publishedAt || data.disclosureDate || ''
   const level = urgency || data.urgency || 'Low'
+  const url   = data.url || null
 
-  const config = TYPE_CONFIG[type] || TYPE_CONFIG.macro
-  const accentBar = URGENCY_ACCENT[level] || URGENCY_ACCENT.Low
+  const config  = TYPE_CONFIG[type] || TYPE_CONFIG.macro
+  const urgConf = URGENCY_CONFIG[level] || URGENCY_CONFIG.Low
 
   return (
     <>
-      <div className="relative bg-[#141414] border border-[#2a2a2a] rounded-xl overflow-hidden hover:border-[#3a3a3a] hover:bg-[#161616] transition-all group">
-        {/* Left urgency accent bar */}
-        <div className={`absolute left-0 top-0 bottom-0 w-[3px] ${accentBar}`} />
-
-        <div className="pl-4 pr-4 pt-3.5 pb-3">
-          {/* Top row: type badge + ticker + share + time */}
-          <div className="flex items-center justify-between gap-2 mb-2.5">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${config.color}`}>
-                {config.icon}
-                {config.label}
-              </span>
-              {ticker && (
-                <span className="text-white font-bold text-sm tracking-wide">{ticker}</span>
-              )}
-            </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              {sentiment && <SentimentBadge sentiment={sentiment} />}
-              <button
-                onClick={() => setShareOpen(true)}
-                className="flex items-center gap-1 text-[11px] text-[#6b7280] hover:text-white transition-colors px-2 py-1 rounded-lg hover:bg-white/5"
-                title="Share to group"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
-                  <polyline points="16 6 12 2 8 6"/>
-                  <line x1="12" y1="2" x2="12" y2="15"/>
-                </svg>
-                Share
-              </button>
-              <span className="text-[11px] text-[#6b7280]">{formatTimestamp(timestamp)}</span>
-            </div>
+      <article className={`bg-[#111] border border-[#222] rounded-2xl overflow-hidden hover:border-[#333] hover:bg-[#141414] transition-all border-t-2 ${urgConf.border}`}>
+        {/* Meta row */}
+        <div className="flex items-center justify-between px-5 pt-4 pb-2">
+          <div className="flex items-center gap-2">
+            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${config.color} ${config.bg}`}>
+              {config.label}
+            </span>
+            {ticker && (
+              <span className="text-white/70 font-bold text-xs tracking-widest">{ticker}</span>
+            )}
+            {sentiment && <SentimentBadge sentiment={sentiment} />}
           </div>
-
-          {/* Summary text */}
-          <p className="text-[#d1d5db] text-sm leading-relaxed line-clamp-3">{summary}</p>
+          {urgConf.label && (
+            <span className={`flex items-center gap-1 text-[11px] font-semibold ${urgConf.text}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${urgConf.dot} animate-pulse`} />
+              {urgConf.label}
+            </span>
+          )}
         </div>
-      </div>
+
+        {/* Content */}
+        <div className="px-5 pb-4">
+          {url ? (
+            <a href={url} target="_blank" rel="noopener noreferrer" className="block group">
+              <h2 className="text-white font-semibold text-[15px] leading-snug mb-2 group-hover:text-white/80 transition-colors line-clamp-2">
+                {headline}
+              </h2>
+            </a>
+          ) : (
+            <h2 className="text-white font-semibold text-[15px] leading-snug mb-2 line-clamp-2">{headline}</h2>
+          )}
+          {summary && (
+            <p className="text-[#9ca3af] text-sm leading-relaxed line-clamp-3">{summary}</p>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-5 py-3 border-t border-[#1e1e1e]">
+          <span className="text-[#4b5563] text-xs">{formatTimestamp(timestamp)}</span>
+          <button
+            onClick={() => setShareOpen(true)}
+            className="flex items-center gap-1.5 text-[#6b7280] hover:text-white transition-colors text-xs font-medium px-2.5 py-1 rounded-lg hover:bg-white/5"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+              <polyline points="16 6 12 2 8 6"/>
+              <line x1="12" y1="2" x2="12" y2="15"/>
+            </svg>
+            Share to group
+          </button>
+        </div>
+      </article>
 
       {shareOpen && (
         <ShareToGroupModal article={data} onClose={() => setShareOpen(false)} />

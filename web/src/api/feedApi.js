@@ -7,6 +7,10 @@ export const feedApi = baseApi.injectEndpoints({
       providesTags: ['Feed'],
       keepUnusedDataFor: 300,
     }),
+    getFeedBrief: builder.query({
+      query: () => '/feed/brief',
+      keepUnusedDataFor: 21600,
+    }),
     getCalendar: builder.query({
       query: () => '/calendar',
       keepUnusedDataFor: 3600,
@@ -15,4 +19,4 @@ export const feedApi = baseApi.injectEndpoints({
   overrideExisting: false,
 })
 
-export const { useGetFeedQuery, useGetCalendarQuery } = feedApi
+export const { useGetFeedQuery, useGetCalendarQuery, useGetFeedBriefQuery } = feedApi
