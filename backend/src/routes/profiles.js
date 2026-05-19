@@ -5,12 +5,24 @@ const { requireAuth } = require('../middleware/auth')
 
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/
 
-async function upsertProfile(userId) {
+async function upsertProfile(userId, displayName = null) {
   const { data } = await supabase.from('profiles').select('*').eq('user_id', userId).maybeSingle()
-  if (data) return data
+  if (data) {
+    // Backfill display_name if it was missing
+    if (!data.display_name && displayName) {
+      const { data: updated } = await supabase
+        .from('profiles')
+        .update({ display_name: displayName })
+        .eq('user_id', userId)
+        .select()
+        .single()
+      return updated ?? data
+    }
+    return data
+  }
   const { data: created } = await supabase
     .from('profiles')
-    .insert({ user_id: userId, username: null, bio: '', avatar_url: '' })
+    .insert({ user_id: userId, username: null, bio: '', avatar_url: '', display_name: displayName })
     .select()
     .single()
   return created
@@ -19,7 +31,12 @@ async function upsertProfile(userId) {
 // GET /profiles/me
 router.get('/me', requireAuth, async (req, res) => {
   try {
-    const profile = await upsertProfile(req.user.id)
+    const displayName =
+      req.user.user_metadata?.full_name ??
+      req.user.user_metadata?.name ??
+      req.user.email ??
+      null
+    const profile = await upsertProfile(req.user.id, displayName)
     res.json(profile)
   } catch (err) {
     console.error('GET /profiles/me', err)
@@ -66,13 +83,24 @@ router.patch('/me', requireAuth, async (req, res) => {
   }
 })
 
-// GET /profiles/:userId — public profile (auto-creates stub if missing)
+// GET /profiles/:userId — public profile
 router.get('/:userId', requireAuth, async (req, res) => {
   try {
-    const profile = await upsertProfile(req.params.userId)
+    const userId = req.params.userId
+
+    // Try to get real name from Supabase auth
+    let displayName = null
+    try {
+      const { data: authData } = await supabase.auth.admin.getUserById(userId)
+      const meta = authData?.user?.user_metadata ?? {}
+      displayName = meta.full_name ?? meta.name ?? authData?.user?.email ?? null
+    } catch (_) {}
+
+    const profile = await upsertProfile(userId, displayName)
     if (!profile) return res.status(404).json({ error: true, message: 'Profile not found.' })
-    const { user_id, username, bio, avatar_url, updated_at } = profile
-    res.json({ user_id, username, bio, avatar_url, updated_at })
+
+    const { user_id, username, bio, avatar_url, display_name, updated_at } = profile
+    res.json({ user_id, username, bio, avatar_url, display_name, updated_at })
   } catch (err) {
     console.error('GET /profiles/:userId', err)
     res.status(500).json({ error: true, message: 'Failed to load profile.' })

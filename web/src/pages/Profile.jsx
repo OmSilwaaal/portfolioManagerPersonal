@@ -38,7 +38,11 @@ export default function Profile() {
     )
   }
 
-  const displayName = profile.username ? `@${profile.username}` : 'Anonymous'
+  // Show real name if available, fall back to email-style truncation, never "Anonymous"
+  const realName = profile.display_name ?? profile.username ?? null
+  const headline = profile.username ? `@${profile.username}` : (realName ?? 'Member')
+  const subline = profile.username && profile.display_name ? profile.display_name : null
+  const avatarInitials = initials(realName ?? 'M')
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[#0a0a0a]">
@@ -66,12 +70,12 @@ export default function Profile() {
             >
               {profile.avatar_url
                 ? <img src={profile.avatar_url} alt="" className="w-full h-full object-cover rounded-2xl" />
-                : initials(profile.username ?? userId)
+                : avatarInitials
               }
             </div>
             <div className="text-center">
-              <p className="text-white font-bold text-lg">{displayName}</p>
-              {profile.username && <p className="text-white/30 text-xs mt-0.5">{userId}</p>}
+              <p className="text-white font-bold text-lg">{headline}</p>
+              {subline && <p className="text-white/40 text-sm mt-0.5">{subline}</p>}
             </div>
           </div>
 

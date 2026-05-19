@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useGetGroupsQuery, useJoinGroupMutation } from '../api/groupsApi'
+import { useGetMyProfileQuery } from '../api/profilesApi'
 
 const glassStyle = {
   background: 'linear-gradient(145deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 50%, rgba(255,255,255,0.06) 100%)',
@@ -49,11 +50,20 @@ function GroupCard({ group }) {
 export default function Groups() {
   const { data: groups = [], isLoading } = useGetGroupsQuery()
   const [joinGroup, { isLoading: joining }] = useJoinGroupMutation()
+  const { data: myProfile } = useGetMyProfileQuery()
   const navigate = useNavigate()
 
   const [joinModal, setJoinModal] = useState(false)
+  const [profileGate, setProfileGate] = useState(false)
   const [code, setCode] = useState('')
   const [joinError, setJoinError] = useState('')
+
+  const hasUsername = !!myProfile?.username
+
+  const openJoin = () => {
+    if (!hasUsername) { setProfileGate(true); return }
+    setJoinModal(true); setCode(''); setJoinError('')
+  }
 
   const handleJoin = async (e) => {
     e.preventDefault()
@@ -76,18 +86,18 @@ export default function Groups() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => { setJoinModal(true); setCode(''); setJoinError('') }}
+            onClick={openJoin}
             className="px-4 py-2 rounded-lg text-sm font-medium text-white/60 hover:text-white border transition-colors"
             style={{ borderColor: 'rgba(255,255,255,0.15)' }}
           >
             Join
           </button>
-          <Link
-            to="/groups/new"
+          <button
+            onClick={() => { if (!hasUsername) { setProfileGate(true); return } navigate('/groups/new') }}
             className="px-4 py-2 rounded-lg text-sm font-semibold bg-white text-[#0a0a0a] hover:bg-white/90 transition-colors"
           >
             + Create
-          </Link>
+          </button>
         </div>
       </header>
 
@@ -114,18 +124,18 @@ export default function Groups() {
             </div>
             <div className="flex gap-2">
               <button
-                onClick={() => { setJoinModal(true); setCode(''); setJoinError('') }}
+                onClick={openJoin}
                 className="px-4 py-2 rounded-lg text-sm font-medium text-white/60 hover:text-white border transition-colors"
                 style={{ borderColor: 'rgba(255,255,255,0.15)' }}
               >
                 Join with code
               </button>
-              <Link
-                to="/groups/new"
+              <button
+                onClick={() => { if (!hasUsername) { setProfileGate(true); return } navigate('/groups/new') }}
                 className="px-4 py-2 rounded-lg text-sm font-semibold bg-white text-[#0a0a0a] hover:bg-white/90 transition-colors"
               >
                 Create group
-              </Link>
+              </button>
             </div>
           </div>
         ) : (
@@ -134,6 +144,38 @@ export default function Groups() {
           </div>
         )}
       </main>
+
+      {profileGate && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          onClick={(e) => { if (e.target === e.currentTarget) setProfileGate(false) }}
+        >
+          <div className="w-full max-w-sm rounded-2xl p-6" style={glassStyle}>
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-4" style={{ background: 'rgba(255,255,255,0.08)' }}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+              </svg>
+            </div>
+            <h2 className="text-base font-bold text-white mb-1">Set up your profile first</h2>
+            <p className="text-sm text-white/40 mb-5">You need a username before you can join or create groups. It only takes a second.</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setProfileGate(false)}
+                className="flex-1 py-2.5 rounded-lg text-sm font-medium text-white/50 hover:text-white border transition-colors"
+                style={{ borderColor: 'rgba(255,255,255,0.12)' }}
+              >
+                Cancel
+              </button>
+              <Link
+                to="/settings"
+                className="flex-1 py-2.5 rounded-lg text-sm font-semibold bg-white text-[#0a0a0a] hover:bg-white/90 transition-colors text-center"
+              >
+                Go to Settings
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
 
       {joinModal && (
         <div
