@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useSelector, useDispatch } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import { updateWatchlist, resetPreferences } from '../store/preferencesSlice'
@@ -100,16 +100,16 @@ function ProfileView({ onBack }) {
 
   const [username, setUsername] = useState('')
   const [bio, setBio] = useState('')
+  const [avatarUrl, setAvatarUrl] = useState('')
   const [usernameError, setUsernameError] = useState('')
-  const [saved, setSaved] = useState(false)
 
-  // Populate fields once profile loads
-  const [seeded, setSeeded] = useState(false)
-  if (profile && !seeded) {
-    setUsername(profile.username ?? '')
-    setBio(profile.bio ?? '')
-    setSeeded(true)
-  }
+  useEffect(() => {
+    if (profile) {
+      setUsername(profile.username ?? '')
+      setBio(profile.bio ?? '')
+      setAvatarUrl(profile.avatar_url ?? '')
+    }
+  }, [profile])
 
   const handleSave = async (e) => {
     e.preventDefault()
@@ -120,13 +120,14 @@ function ProfileView({ onBack }) {
       return
     }
     try {
-      await updateProfile({ username: clean, bio: bio.trim() }).unwrap()
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
+      await updateProfile({ username: clean, bio: bio.trim(), avatar_url: avatarUrl.trim() }).unwrap()
+      onBack()
     } catch (err) {
       setUsernameError(err?.data?.message ?? 'Failed to save.')
     }
   }
+
+  const avatarInitials = (username || profile?.display_name || '?').charAt(0).toUpperCase()
 
   return (
     <>
@@ -139,8 +140,29 @@ function ProfileView({ onBack }) {
         </div>
       ) : (
         <form onSubmit={handleSave} className="flex flex-col gap-5">
+
+          {/* Avatar preview */}
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-20 h-20 rounded-2xl overflow-hidden flex items-center justify-center text-2xl font-bold text-white bg-[#1f1f1f] border border-[#2a2a2a]">
+              {avatarUrl
+                ? <img src={avatarUrl} alt="" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none' }} />
+                : avatarInitials}
+            </div>
+            <div className="w-full">
+              <label className="block text-xs uppercase tracking-widest text-[#6b7280] mb-2">Profile picture URL</label>
+              <input
+                type="url"
+                value={avatarUrl}
+                onChange={(e) => setAvatarUrl(e.target.value)}
+                placeholder="https://example.com/photo.jpg"
+                className="w-full bg-[#141414] border border-[#2a2a2a] text-white placeholder-[#6b7280] text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-[#3b82f6] transition-colors"
+              />
+              <p className="text-[#4b5563] text-xs mt-1.5">Paste a link to any image. Google profile pictures work great.</p>
+            </div>
+          </div>
+
           <div>
-            <label className="block text-xs uppercase tracking-widest text-[#6b7280] mb-2">Username</label>
+            <label className="block text-xs uppercase tracking-widest text-[#6b7280] mb-2">Username *</label>
             <input
               type="text"
               value={username}
@@ -150,7 +172,7 @@ function ProfileView({ onBack }) {
               className="w-full bg-[#141414] border border-[#2a2a2a] text-white placeholder-[#6b7280] text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-[#3b82f6] transition-colors font-mono"
             />
             {usernameError && <p className="text-red-400 text-xs mt-1.5">{usernameError}</p>}
-            <p className="text-[#4b5563] text-xs mt-1.5">Visible to group members. Alphanumeric + underscore, 3–20 chars.</p>
+            <p className="text-[#4b5563] text-xs mt-1.5">Required to join groups. Letters, numbers, underscores, 3–20 chars.</p>
           </div>
 
           <div>
@@ -170,7 +192,7 @@ function ProfileView({ onBack }) {
             disabled={saving}
             className="w-full py-3 rounded-xl text-sm font-semibold bg-white text-[#0a0a0a] hover:bg-white/90 disabled:opacity-40 transition-colors"
           >
-            {saving ? 'Saving…' : saved ? 'Saved!' : 'Save profile'}
+            {saving ? 'Saving…' : 'Save & finish'}
           </button>
         </form>
       )}

@@ -8,6 +8,7 @@ import {
   useUpdateMemberMutation,
   useRemoveMemberMutation,
   useUpdateGroupMutation,
+  useDeleteGroupMutation,
 } from '../api/groupsApi'
 import '../api/profilesApi'
 
@@ -213,6 +214,7 @@ export default function GroupDetail() {
   const [updateMember] = useUpdateMemberMutation()
   const [removeMember] = useRemoveMemberMutation()
   const [updateGroup, { isLoading: savingSettings }] = useUpdateGroupMutation()
+  const [deleteGroup] = useDeleteGroupMutation()
 
   const [content, setContent] = useState('')
   const [postType, setPostType] = useState('post')
@@ -278,6 +280,14 @@ export default function GroupDetail() {
     try {
       await updateGroup({ id, name: editName, description: editDesc, color: editColor, emoji: editEmoji }).unwrap()
       setSettingsOpen(false)
+    } catch (_) {}
+  }
+
+  const handleDeleteGroup = async () => {
+    if (!confirm(`Are you sure you want to delete "${group.name}"? This cannot be undone and will remove all posts and members.`)) return
+    try {
+      await deleteGroup(id).unwrap()
+      navigate('/groups')
     } catch (_) {}
   }
 
@@ -453,6 +463,12 @@ export default function GroupDetail() {
               <button onClick={() => setSettingsOpen(false)} className="flex-1 py-2.5 rounded-lg text-sm font-medium text-white/50 hover:text-white border transition-colors" style={{ borderColor: 'rgba(255,255,255,0.12)' }}>Cancel</button>
               <button onClick={handleSaveSettings} disabled={savingSettings || !editName.trim()} className="flex-1 py-2.5 rounded-lg text-sm font-semibold bg-white text-[#0a0a0a] hover:bg-white/90 disabled:opacity-30 transition-colors">{savingSettings ? 'Saving…' : 'Save'}</button>
             </div>
+            <button
+              onClick={() => { setSettingsOpen(false); handleDeleteGroup() }}
+              className="w-full mt-3 py-2.5 rounded-lg text-sm font-medium text-red-400 hover:bg-red-500/10 border border-red-500/20 transition-colors"
+            >
+              Delete group
+            </button>
           </div>
         </div>
       )}

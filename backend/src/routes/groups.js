@@ -287,6 +287,20 @@ router.patch('/:id/members/:userId', requireAuth, async (req, res) => {
   }
 })
 
+// DELETE /:id — delete group (admin only)
+router.delete('/:id', requireAuth, async (req, res) => {
+  try {
+    const groupId = req.params.id
+    const member = await getMembership(groupId, req.user.id)
+    if (member?.role !== 'admin') return res.status(403).json({ error: true, message: 'Admin only.' })
+    await supabase.from('groups').delete().eq('id', groupId)
+    res.json({ success: true })
+  } catch (err) {
+    console.error('DELETE /groups/:id', err)
+    res.status(500).json({ error: true, message: 'Failed to delete group.' })
+  }
+})
+
 // DELETE /:id/members/:userId — remove member (admin or self-leave)
 router.delete('/:id/members/:userId', requireAuth, async (req, res) => {
   try {
