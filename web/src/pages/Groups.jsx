@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useSelector } from 'react-redux'
 import { useGetGroupsQuery, useJoinGroupMutation } from '../api/groupsApi'
 import { useGetMyProfileQuery } from '../api/profilesApi'
 
@@ -53,8 +54,11 @@ export default function Groups() {
   const { data: myProfile } = useGetMyProfileQuery()
   const navigate = useNavigate()
 
+  const isPro = useSelector((state) => state.preferences.isPro)
+
   const [joinModal, setJoinModal] = useState(false)
   const [profileGate, setProfileGate] = useState(false)
+  const [proGate, setProGate] = useState(false)
   const [code, setCode] = useState('')
   const [joinError, setJoinError] = useState('')
 
@@ -93,7 +97,7 @@ export default function Groups() {
             Join
           </button>
           <button
-            onClick={() => { if (!hasUsername) { setProfileGate(true); return } navigate('/groups/new') }}
+            onClick={() => { if (!hasUsername) { setProfileGate(true); return } if (!isPro) { setProGate(true); return } navigate('/groups/new') }}
             className="px-4 py-2 rounded-lg text-sm font-semibold bg-white text-[#0a0a0a] hover:bg-white/90 transition-colors"
           >
             + Create
@@ -131,7 +135,7 @@ export default function Groups() {
                 Join with code
               </button>
               <button
-                onClick={() => { if (!hasUsername) { setProfileGate(true); return } navigate('/groups/new') }}
+                onClick={() => { if (!hasUsername) { setProfileGate(true); return } if (!isPro) { setProGate(true); return } navigate('/groups/new') }}
                 className="px-4 py-2 rounded-lg text-sm font-semibold bg-white text-[#0a0a0a] hover:bg-white/90 transition-colors"
               >
                 Create group
@@ -171,6 +175,39 @@ export default function Groups() {
                 className="flex-1 py-2.5 rounded-lg text-sm font-semibold bg-white text-[#0a0a0a] hover:bg-white/90 transition-colors text-center"
               >
                 Go to Settings
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {proGate && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          onClick={(e) => { if (e.target === e.currentTarget) setProGate(false) }}
+        >
+          <div className="w-full max-w-sm rounded-2xl p-6" style={glassStyle}>
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-4" style={{ background: 'rgba(255,255,255,0.08)' }}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M2 4l3 12h14l3-12-6 5-4-5-4 5-6-5z"/>
+                <path d="M5 20h14"/>
+              </svg>
+            </div>
+            <h2 className="text-base font-bold text-white mb-1">Pro required to create groups</h2>
+            <p className="text-sm text-white/40 mb-5">Upgrade to MarketIQ Pro to create investment clubs and communities. Joining existing groups is always free.</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setProGate(false)}
+                className="flex-1 py-2.5 rounded-lg text-sm font-medium text-white/50 hover:text-white border transition-colors"
+                style={{ borderColor: 'rgba(255,255,255,0.12)' }}
+              >
+                Cancel
+              </button>
+              <Link
+                to="/pricing"
+                className="flex-1 py-2.5 rounded-lg text-sm font-semibold bg-white text-[#0a0a0a] hover:bg-white/90 transition-colors text-center"
+              >
+                Upgrade to Pro
               </Link>
             </div>
           </div>
