@@ -13,6 +13,6 @@ export const baseApi = createApi({
       return headers
     },
   }),
-  tagTypes: ['Stocks', 'Crypto', 'Feed', 'Alerts', 'GovTrades', 'Commodities', 'Preferences', 'Groups'],
+  tagTypes: ['Stocks', 'Crypto', 'Feed', 'Alerts', 'GovTrades', 'Commodities', 'Preferences', 'Groups', 'Profile'],
   endpoints: () => ({}),
 })

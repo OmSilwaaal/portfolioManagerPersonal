@@ -20,6 +20,7 @@ import PaperTrading from './pages/PaperTrading'
 import Groups from './pages/Groups'
 import GroupDetail from './pages/GroupDetail'
 import CreateGroup from './pages/CreateGroup'
+import Profile from './pages/Profile'
 import Landing from './pages/Landing'
 import Pricing from './pages/Pricing'
 
@@ -114,6 +115,7 @@ function AppInner() {
         <Route path="/groups" element={<Groups />} />
         <Route path="/groups/new" element={<CreateGroup />} />
         <Route path="/groups/:id" element={<GroupDetail />} />
+        <Route path="/profile/:userId" element={<Profile />} />
         <Route path="/gov-trades" element={<GovTrades />} />
         <Route path="/commodities" element={<Commodities />} />
         <Route path="/settings" element={<Settings />} />

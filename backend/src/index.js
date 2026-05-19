@@ -15,8 +15,10 @@ const preferencesRouter = require('./routes/preferences');
 const searchRouter = require('./routes/search');
 const { router: paperTradingRouter } = require('./routes/paperTrading');
 const groupsRouter = require('./routes/groups');
+const profilesRouter = require('./routes/profiles');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const { sessionMiddleware, requireAuth, validateTicker } = require('./middleware/auth');
+const { getBudgetStatus } = require('./services/claude');
 
 // Initialize DB on startup
 require('./db/schema').getDb();
@@ -77,10 +79,11 @@ app.use('/api/calendar', calendarRouter);
 app.use('/api/search', searchRouter);
 app.use('/api/paper-trading', paperTradingRouter);
 app.use('/api/groups', requireAuth, groupsRouter);
+app.use('/api/profiles', requireAuth, profilesRouter);
 
 // Health check
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({ status: 'ok', timestamp: new Date().toISOString(), budget: getBudgetStatus() });
 });
 
 // Error handlers

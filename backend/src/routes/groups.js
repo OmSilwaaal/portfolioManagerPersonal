@@ -69,7 +69,7 @@ router.post('/', requireAuth, async (req, res) => {
       .from('groups')
       .select('*', { count: 'exact', head: true })
       .eq('created_by', req.user.id)
-    if (ownedCount >= 10) return res.status(400).json({ error: true, message: 'You can only create up to 10 groups.' })
+    if (ownedCount >= 3) return res.status(400).json({ error: true, message: 'You can only create up to 3 groups.' })
 
     const code = await generateCode()
     const displayName = req.user.user_metadata?.full_name ?? req.user.email ?? req.user.id
@@ -87,6 +87,7 @@ router.post('/', requireAuth, async (req, res) => {
       display_name: displayName,
       email: req.user.email ?? null,
       role: 'admin',
+      can_post: true,
     })
     if (mErr) throw mErr
 
@@ -121,6 +122,7 @@ router.post('/join', requireAuth, async (req, res) => {
       display_name: displayName,
       email: req.user.email ?? null,
       role: 'member',
+      can_post: false,
     })
     if (mErr) throw mErr
 
@@ -198,6 +200,9 @@ router.post('/:id/posts', requireAuth, async (req, res) => {
     const groupId = req.params.id
     const member = await getMembership(groupId, req.user.id)
     if (!member) return res.status(403).json({ error: true, message: 'Not a member.' })
+    if (member.role !== 'admin' && !member.can_post) {
+      return res.status(403).json({ error: true, message: 'You do not have permission to post in this group.' })
+    }
 
     const { content, type = 'post' } = req.body
     if (!content?.trim()) return res.status(400).json({ error: true, message: 'Content is required.' })
@@ -258,13 +263,23 @@ router.patch('/:id/members/:userId', requireAuth, async (req, res) => {
     if (member?.role !== 'admin') return res.status(403).json({ error: true, message: 'Admin only.' })
     if (targetUserId === req.user.id) return res.status(400).json({ error: true, message: 'Cannot change your own role.' })
 
-    const { role } = req.body
-    if (!['admin', 'member'].includes(role)) return res.status(400).json({ error: true, message: 'Invalid role.' })
+    const { role, rank, can_post } = req.body
+    if (role !== undefined && !['admin', 'member'].includes(role)) {
+      return res.status(400).json({ error: true, message: 'Invalid role.' })
+    }
 
     const target = await getMembership(groupId, targetUserId)
     if (!target) return res.status(404).json({ error: true, message: 'Member not found.' })
 
-    await supabase.from('group_members').update({ role }).eq('group_id', groupId).eq('user_id', targetUserId)
+    const updates = {}
+    if (role !== undefined) {
+      updates.role = role
+      if (role === 'admin') updates.can_post = true
+    }
+    if (rank !== undefined) updates.rank = rank.trim().slice(0, 30) || null
+    if (can_post !== undefined) updates.can_post = Boolean(can_post)
+
+    await supabase.from('group_members').update(updates).eq('group_id', groupId).eq('user_id', targetUserId)
     res.json({ success: true })
   } catch (err) {
     console.error('PATCH /groups/:id/members/:userId', err)

@@ -5,6 +5,7 @@ import { updateWatchlist, resetPreferences } from '../store/preferencesSlice'
 import { supabase } from '../utils/supabase/client'
 import { useAuth } from '../contexts/AuthContext'
 import { UserAvatar } from '../components/Sidebar'
+import { useGetMyProfileQuery, useUpdateProfileMutation } from '../api/profilesApi'
 
 const CATEGORY_LABELS = {
   stocks: 'US Stocks',
@@ -88,6 +89,92 @@ function Card({ icon, title, subtitle, preview, onClick }) {
         <polyline points="9 18 15 12 9 6"/>
       </svg>
     </button>
+  )
+}
+
+const USERNAME_RE = /^[a-z0-9_]{3,20}$/
+
+function ProfileView({ onBack }) {
+  const { data: profile, isLoading } = useGetMyProfileQuery()
+  const [updateProfile, { isLoading: saving }] = useUpdateProfileMutation()
+
+  const [username, setUsername] = useState('')
+  const [bio, setBio] = useState('')
+  const [usernameError, setUsernameError] = useState('')
+  const [saved, setSaved] = useState(false)
+
+  // Populate fields once profile loads
+  const [seeded, setSeeded] = useState(false)
+  if (profile && !seeded) {
+    setUsername(profile.username ?? '')
+    setBio(profile.bio ?? '')
+    setSeeded(true)
+  }
+
+  const handleSave = async (e) => {
+    e.preventDefault()
+    setUsernameError('')
+    const clean = username.trim().toLowerCase()
+    if (clean && !USERNAME_RE.test(clean)) {
+      setUsernameError('3–20 chars: letters, numbers, underscores only')
+      return
+    }
+    try {
+      await updateProfile({ username: clean, bio: bio.trim() }).unwrap()
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (err) {
+      setUsernameError(err?.data?.message ?? 'Failed to save.')
+    }
+  }
+
+  return (
+    <>
+      <BackButton onClick={onBack} />
+      <h1 className="text-xl font-bold text-white mb-6">Edit Profile</h1>
+
+      {isLoading ? (
+        <div className="flex justify-center py-12">
+          <div className="w-5 h-5 border-2 border-white/20 border-t-white/60 rounded-full animate-spin" />
+        </div>
+      ) : (
+        <form onSubmit={handleSave} className="flex flex-col gap-5">
+          <div>
+            <label className="block text-xs uppercase tracking-widest text-[#6b7280] mb-2">Username</label>
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => { setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '')); setUsernameError('') }}
+              placeholder="your_username"
+              maxLength={20}
+              className="w-full bg-[#141414] border border-[#2a2a2a] text-white placeholder-[#6b7280] text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-[#3b82f6] transition-colors font-mono"
+            />
+            {usernameError && <p className="text-red-400 text-xs mt-1.5">{usernameError}</p>}
+            <p className="text-[#4b5563] text-xs mt-1.5">Visible to group members. Alphanumeric + underscore, 3–20 chars.</p>
+          </div>
+
+          <div>
+            <label className="block text-xs uppercase tracking-widest text-[#6b7280] mb-2">Bio</label>
+            <textarea
+              value={bio}
+              onChange={(e) => setBio(e.target.value.slice(0, 200))}
+              placeholder="Tell your club a bit about yourself…"
+              rows={4}
+              className="w-full bg-[#141414] border border-[#2a2a2a] text-white placeholder-[#6b7280] text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-[#3b82f6] transition-colors resize-none"
+            />
+            <p className="text-[#4b5563] text-xs mt-1">{bio.length}/200</p>
+          </div>
+
+          <button
+            type="submit"
+            disabled={saving}
+            className="w-full py-3 rounded-xl text-sm font-semibold bg-white text-[#0a0a0a] hover:bg-white/90 disabled:opacity-40 transition-colors"
+          >
+            {saving ? 'Saving…' : saved ? 'Saved!' : 'Save profile'}
+          </button>
+        </form>
+      )}
+    </>
   )
 }
 
@@ -342,6 +429,11 @@ export default function Settings() {
   const watchlistCount = preferences.watchlist?.length ?? 0
   const investorLabel = INVESTOR_LABELS[preferences.investorType] ?? null
 
+  if (view === 'profile') return (
+    <main className="flex-1 p-5 md:p-8 max-w-lg mx-auto w-full">
+      <ProfileView onBack={() => setView(null)} />
+    </main>
+  )
   if (view === 'account') return (
     <main className="flex-1 p-5 md:p-8 max-w-lg mx-auto w-full">
       <AccountView onBack={() => setView(null)} />
@@ -372,6 +464,16 @@ export default function Settings() {
       </div>
 
       <div className="space-y-3">
+        <Card
+          onClick={() => setView('profile')}
+          icon={
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ec4899" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+            </svg>
+          }
+          title="Edit Profile"
+          subtitle="Username, bio, and public info"
+        />
         <Card
           onClick={() => setView('account')}
           icon={

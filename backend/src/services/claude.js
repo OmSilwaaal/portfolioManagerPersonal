@@ -11,13 +11,41 @@ function getClient() {
   return client;
 }
 
+// ── Daily token budget ────────────────────────────────────────────────────────
+const DAILY_BUDGET = parseInt(process.env.DAILY_TOKEN_BUDGET ?? '100000', 10);
+let budget = { date: '', used: 0 };
+
+function checkBudget() {
+  const today = new Date().toDateString();
+  if (budget.date !== today) budget = { date: today, used: 0 };
+  return budget.used < DAILY_BUDGET;
+}
+
+function recordUsage(usage) {
+  if (usage) budget.used += (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0);
+}
+
+function getBudgetStatus() {
+  const today = new Date().toDateString();
+  if (budget.date !== today) return { used: 0, limit: DAILY_BUDGET, remaining: DAILY_BUDGET };
+  return { used: budget.used, limit: DAILY_BUDGET, remaining: Math.max(0, DAILY_BUDGET - budget.used) };
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 const FALLBACK_RESPONSE = {
   summary: 'Summary unavailable',
   urgency: 'Low',
   reasoning: 'AI service temporarily unavailable',
 };
 
+const BUDGET_FALLBACK = {
+  summary: 'Daily AI budget reached. Analysis will resume tomorrow.',
+  urgency: 'Low',
+  reasoning: 'Token budget exceeded',
+};
+
 async function summarizeNewsItem(headline, content) {
+  if (!checkBudget()) return BUDGET_FALLBACK;
   try {
     const anthropic = getClient();
 
@@ -36,25 +64,16 @@ News content: ${content || headline}`;
           cache_control: { type: 'ephemeral' },
         },
       ],
-      messages: [
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
+      messages: [{ role: 'user', content: prompt }],
     });
 
+    recordUsage(message.usage);
     const responseText = message.content[0].type === 'text' ? message.content[0].text : '';
-
-    // Strip any accidental markdown fences
     const cleaned = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     const parsed = JSON.parse(cleaned);
 
-    // Validate urgency value
     const validUrgencies = ['Low', 'Watch', 'Act Now'];
-    if (!validUrgencies.includes(parsed.urgency)) {
-      parsed.urgency = 'Low';
-    }
+    if (!validUrgencies.includes(parsed.urgency)) parsed.urgency = 'Low';
 
     return {
       summary: parsed.summary || FALLBACK_RESPONSE.summary,
@@ -68,17 +87,17 @@ News content: ${content || headline}`;
 }
 
 async function analyzePortfolioImpact(holdings, newsItems) {
+  if (!checkBudget()) return {
+    overallImpact: 'Low',
+    summary: BUDGET_FALLBACK.summary,
+    tickerBreakdown: holdings.map((h) => ({ ticker: h.ticker, impact: 'Neutral', reason: 'Budget exceeded' })),
+    recommendation: 'AI analysis will resume tomorrow.',
+  };
   try {
     const anthropic = getClient();
 
-    const holdingsText = holdings
-      .map((h) => `${h.ticker}: ${h.quantity} shares/units`)
-      .join('\n');
-
-    const newsText = newsItems
-      .slice(0, 5)
-      .map((n) => `- ${n.headline}`)
-      .join('\n');
+    const holdingsText = holdings.map((h) => `${h.ticker}: ${h.quantity} shares/units`).join('\n');
+    const newsText = newsItems.slice(0, 5).map((n) => `- ${n.headline}`).join('\n');
 
     const prompt = `A retail investor holds the following assets:
 ${holdingsText}
@@ -102,6 +121,7 @@ Analyze how this news might impact their portfolio. Return ONLY valid JSON with 
       messages: [{ role: 'user', content: prompt }],
     });
 
+    recordUsage(message.usage);
     const responseText = message.content[0].type === 'text' ? message.content[0].text : '';
     const cleaned = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     return JSON.parse(cleaned);
@@ -110,17 +130,20 @@ Analyze how this news might impact their portfolio. Return ONLY valid JSON with 
     return {
       overallImpact: 'Low',
       summary: 'Portfolio analysis temporarily unavailable.',
-      tickerBreakdown: holdings.map((h) => ({
-        ticker: h.ticker,
-        impact: 'Neutral',
-        reason: 'Analysis unavailable',
-      })),
+      tickerBreakdown: holdings.map((h) => ({ ticker: h.ticker, impact: 'Neutral', reason: 'Analysis unavailable' })),
       recommendation: 'Check back later for AI-powered portfolio analysis.',
     };
   }
 }
 
 async function summarizeGovTrade(tradeData, investorContext = null) {
+  if (!checkBudget()) return {
+    summary: BUDGET_FALLBACK.summary,
+    urgency: 'Low',
+    reasoning: BUDGET_FALLBACK.reasoning,
+    sentiment: 'Neutral',
+    time_sensitive: false,
+  };
   try {
     const anthropic = getClient();
 
@@ -129,7 +152,6 @@ async function summarizeGovTrade(tradeData, investorContext = null) {
       tradeData.disclosureLagDays > 0
         ? `${tradeData.disclosureLagDays} days after the trade`
         : 'on the day of the trade';
-
     const contextNote = investorContext
       ? `\nInvestor profile: ${investorContext.investorType}, ${investorContext.riskTolerance} risk tolerance.`
       : '';
@@ -153,6 +175,7 @@ Return ONLY valid JSON with no markdown:
       messages: [{ role: 'user', content: prompt }],
     });
 
+    recordUsage(message.usage);
     const responseText = message.content[0].type === 'text' ? message.content[0].text : '';
     const cleaned = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     const parsed = JSON.parse(cleaned);
@@ -176,6 +199,7 @@ Return ONLY valid JSON with no markdown:
 }
 
 async function summarizeNewsItemWithContext(headline, content, userProfile = null) {
+  if (!checkBudget()) return BUDGET_FALLBACK;
   try {
     const anthropic = getClient();
 
@@ -202,6 +226,7 @@ News content: ${content || headline}`;
       messages: [{ role: 'user', content: prompt }],
     });
 
+    recordUsage(message.usage);
     const responseText = message.content[0].type === 'text' ? message.content[0].text : '';
     const cleaned = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     const parsed = JSON.parse(cleaned);
@@ -220,4 +245,4 @@ News content: ${content || headline}`;
   }
 }
 
-module.exports = { summarizeNewsItem, analyzePortfolioImpact, summarizeGovTrade, summarizeNewsItemWithContext };
+module.exports = { summarizeNewsItem, analyzePortfolioImpact, summarizeGovTrade, summarizeNewsItemWithContext, getBudgetStatus };

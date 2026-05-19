@@ -9,6 +9,7 @@ import {
   useRemoveMemberMutation,
   useUpdateGroupMutation,
 } from '../api/groupsApi'
+import '../api/profilesApi'
 
 const COLORS = ['#e2e8f0','#fca5a5','#fdba74','#fef08a','#86efac','#93c5fd','#c4b5fd','#f9a8d4']
 const EMOJIS = ['📈','💹','🏦','🎯','📊','🚀','💡','🔬']
@@ -107,6 +108,102 @@ function PostCard({ post, groupId, isAdmin, currentUserId, onDelete }) {
   )
 }
 
+function MemberList({ members, isAdmin, currentUserId, onMemberAction, onUpdateMember }) {
+  const [editingMember, setEditingMember] = useState(null)
+  const [rankInput, setRankInput] = useState('')
+
+  const openRankEdit = (m) => {
+    setEditingMember(m.user_id)
+    setRankInput(m.rank ?? '')
+  }
+
+  const saveRank = async (userId, canPost) => {
+    await onUpdateMember(userId, { rank: rankInput, can_post: canPost })
+    setEditingMember(null)
+  }
+
+  return (
+    <div className="rounded-xl p-4" style={glassStyle}>
+      <p className="text-[10px] uppercase tracking-widest text-white/30 mb-3">Members ({members.length})</p>
+      <div className="flex flex-col gap-3">
+        {members.map((m) => (
+          <div key={m.user_id}>
+            <div className="flex items-center gap-2.5">
+              <Link to={`/profile/${m.user_id}`} className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold text-white flex-shrink-0 hover:opacity-80 transition-opacity" style={{ background: 'rgba(255,255,255,0.10)' }}>
+                {initials(m.display_name)}
+              </Link>
+              <div className="flex-1 min-w-0">
+                <Link to={`/profile/${m.user_id}`} className="text-xs font-medium text-white/70 hover:text-white transition-colors truncate block">
+                  {m.display_name ?? m.email ?? 'Member'}
+                </Link>
+                {m.rank && (
+                  <span className="text-[9px] text-white/40 truncate block">{m.rank}</span>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded" style={{ background: m.role === 'admin' ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.05)', color: m.role === 'admin' ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.30)' }}>
+                  {m.role}
+                </span>
+                {m.role === 'member' && m.can_post && (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(134,239,172,0.12)', color: 'rgba(134,239,172,0.8)' }}>can post</span>
+                )}
+              </div>
+              {isAdmin && m.user_id !== currentUserId && (
+                <div className="relative group flex-shrink-0">
+                  <button className="text-white/20 hover:text-white/60 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>
+                    </svg>
+                  </button>
+                  <div className="absolute right-0 top-5 z-10 hidden group-focus-within:flex group-hover:flex flex-col rounded-lg overflow-hidden shadow-xl" style={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.12)', minWidth: 150 }}>
+                    <button onClick={() => openRankEdit(m)} className="text-left px-3 py-2 text-xs text-white/60 hover:bg-white/10 hover:text-white transition-colors">Set rank / permissions</button>
+                    {m.role === 'member' && (
+                      <button onClick={() => onMemberAction(m.user_id, 'admin')} className="text-left px-3 py-2 text-xs text-white/60 hover:bg-white/10 hover:text-white transition-colors">Make admin</button>
+                    )}
+                    {m.role === 'admin' && (
+                      <button onClick={() => onMemberAction(m.user_id, 'member')} className="text-left px-3 py-2 text-xs text-white/60 hover:bg-white/10 hover:text-white transition-colors">Remove admin</button>
+                    )}
+                    <button onClick={() => onMemberAction(m.user_id, 'remove')} className="text-left px-3 py-2 text-xs text-red-400 hover:bg-white/10 transition-colors">Remove</button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {editingMember === m.user_id && (
+              <div className="mt-2 ml-9 p-3 rounded-xl flex flex-col gap-2" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.10)' }}>
+                <input
+                  type="text"
+                  value={rankInput}
+                  onChange={(e) => setRankInput(e.target.value.slice(0, 30))}
+                  placeholder="Custom rank (e.g. Analyst)"
+                  className="w-full px-3 py-1.5 rounded-lg text-xs text-white placeholder-white/25 focus:outline-none"
+                  style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)' }}
+                />
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={() => saveRank(m.user_id, false)}
+                    className="flex-1 py-1.5 rounded-lg text-xs font-medium text-white/50 hover:text-white border transition-colors"
+                    style={{ borderColor: 'rgba(255,255,255,0.12)' }}
+                  >
+                    Save (no post)
+                  </button>
+                  <button
+                    onClick={() => saveRank(m.user_id, true)}
+                    className="flex-1 py-1.5 rounded-lg text-xs font-medium text-white bg-white/10 hover:bg-white/20 transition-colors"
+                  >
+                    Save + can post
+                  </button>
+                </div>
+                <button onClick={() => setEditingMember(null)} className="text-xs text-white/25 hover:text-white/50 text-center transition-colors">Cancel</button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function GroupDetail() {
   const { id } = useParams()
   const { user } = useAuth()
@@ -147,6 +244,8 @@ export default function GroupDetail() {
 
   const isAdmin = group.role === 'admin'
   const currentUserId = user?.id
+  const myMember = group.members?.find(m => m.user_id === currentUserId)
+  const canPost = isAdmin || myMember?.can_post
 
   const handlePost = async (e) => {
     e.preventDefault()
@@ -227,8 +326,8 @@ export default function GroupDetail() {
       <main className="flex-1 overflow-hidden flex flex-col lg:flex-row">
         {/* Stream */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Post composer */}
-          <div className="px-4 py-4 border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+          {/* Post composer — only visible to users with post permission */}
+          {canPost && <div className="px-4 py-4 border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
             <form onSubmit={handlePost} className="flex flex-col gap-2">
               <textarea
                 value={content}
@@ -267,7 +366,7 @@ export default function GroupDetail() {
               </div>
               {postError && <p className="text-red-400 text-xs">{postError}</p>}
             </form>
-          </div>
+          </div>}
 
           {/* Posts */}
           <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
@@ -306,42 +405,13 @@ export default function GroupDetail() {
           </div>
 
           {/* Members */}
-          <div className="rounded-xl p-4" style={glassStyle}>
-            <p className="text-[10px] uppercase tracking-widest text-white/30 mb-3">Members ({(group.members ?? []).length})</p>
-            <div className="flex flex-col gap-2">
-              {(group.members ?? []).map((m) => (
-                <div key={m.user_id} className="flex items-center gap-2.5">
-                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold text-white flex-shrink-0" style={{ background: 'rgba(255,255,255,0.10)' }}>
-                    {initials(m.display_name)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-white/70 truncate">{m.display_name ?? m.email ?? 'Member'}</p>
-                  </div>
-                  <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded" style={{ background: m.role === 'admin' ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.05)', color: m.role === 'admin' ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.30)' }}>
-                    {m.role}
-                  </span>
-                  {isAdmin && m.user_id !== currentUserId && (
-                    <div className="relative group">
-                      <button className="text-white/20 hover:text-white/60 transition-colors">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>
-                        </svg>
-                      </button>
-                      <div className="absolute right-0 top-5 z-10 hidden group-focus-within:flex group-hover:flex flex-col rounded-lg overflow-hidden shadow-xl" style={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.12)', minWidth: 130 }}>
-                        {m.role === 'member' && (
-                          <button onClick={() => handleMemberAction(m.user_id, 'admin')} className="text-left px-3 py-2 text-xs text-white/60 hover:bg-white/10 hover:text-white transition-colors">Make admin</button>
-                        )}
-                        {m.role === 'admin' && (
-                          <button onClick={() => handleMemberAction(m.user_id, 'member')} className="text-left px-3 py-2 text-xs text-white/60 hover:bg-white/10 hover:text-white transition-colors">Remove admin</button>
-                        )}
-                        <button onClick={() => handleMemberAction(m.user_id, 'remove')} className="text-left px-3 py-2 text-xs text-red-400 hover:bg-white/10 transition-colors">Remove</button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
+          <MemberList
+            members={group.members ?? []}
+            isAdmin={isAdmin}
+            currentUserId={currentUserId}
+            onMemberAction={handleMemberAction}
+            onUpdateMember={(userId, updates) => updateMember({ groupId: id, userId, ...updates }).unwrap().catch(() => {})}
+          />
         </aside>
       </main>
 

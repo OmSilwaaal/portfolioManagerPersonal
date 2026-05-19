@@ -31,7 +31,11 @@ export const groupsApi = baseApi.injectEndpoints({
       invalidatesTags: (result, error, { groupId }) => [{ type: 'Groups', id: groupId }],
     }),
     updateMember: builder.mutation({
-      query: ({ groupId, userId, role }) => ({ url: `/groups/${groupId}/members/${userId}`, method: 'PATCH', body: { role } }),
+      query: ({ groupId, userId, role, rank, can_post }) => ({
+        url: `/groups/${groupId}/members/${userId}`,
+        method: 'PATCH',
+        body: { role, rank, can_post },
+      }),
       invalidatesTags: (result, error, { groupId }) => [{ type: 'Groups', id: groupId }],
     }),
     removeMember: builder.mutation({
