@@ -11,9 +11,30 @@ const TYPE_CONFIG = {
 }
 
 const URGENCY_CONFIG = {
-  'Act Now': { label: 'Act Now', dot: 'bg-red-500',   text: 'text-red-400',   border: 'border-t-red-500/40' },
-  'Watch':   { label: 'Watch',   dot: 'bg-amber-400', text: 'text-amber-400', border: 'border-t-amber-400/30' },
-  'Low':     { label: null,      dot: 'bg-[#333]',    text: '',               border: 'border-t-transparent' },
+  'Act Now': {
+    label: 'Act Now',
+    dot: 'bg-red-500',
+    text: 'text-red-400',
+    border: 'border-t-red-500/40',
+    boxShadow: '0 0 60px rgba(239,68,68,0.22), 0 8px 32px rgba(0,0,0,0.45)',
+    ambient: 'radial-gradient(ellipse at 50% 0%, rgba(239,68,68,0.10) 0%, transparent 70%)',
+  },
+  'Watch': {
+    label: 'Watch',
+    dot: 'bg-amber-400',
+    text: 'text-amber-400',
+    border: 'border-t-amber-400/30',
+    boxShadow: '0 0 40px rgba(251,191,36,0.14), 0 8px 32px rgba(0,0,0,0.40)',
+    ambient: 'radial-gradient(ellipse at 50% 0%, rgba(251,191,36,0.08) 0%, transparent 70%)',
+  },
+  'Low': {
+    label: null,
+    dot: 'bg-[#333]',
+    text: '',
+    border: 'border-t-transparent',
+    boxShadow: '0 4px 24px rgba(0,0,0,0.30)',
+    ambient: null,
+  },
 }
 
 function formatTimestamp(ts) {
@@ -40,60 +61,88 @@ export default function FeedCard({ type, data, urgency }) {
   const url   = data.url || null
 
   const config  = TYPE_CONFIG[type] || TYPE_CONFIG.macro
-  const urgConf = URGENCY_CONFIG[level] || URGENCY_CONFIG.Low
+  const urgConf = URGENCY_CONFIG[level] || URGENCY_CONFIG['Low']
+
+  const glassStyle = {
+    background: 'linear-gradient(145deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.02) 100%)',
+    backdropFilter: 'blur(20px) saturate(160%)',
+    WebkitBackdropFilter: 'blur(20px) saturate(160%)',
+    border: '1px solid rgba(255,255,255,0.09)',
+    boxShadow: urgConf.boxShadow,
+  }
 
   return (
     <>
-      <article className={`bg-[#111] border border-[#222] rounded-2xl overflow-hidden hover:border-[#333] hover:bg-[#141414] transition-all border-t-2 ${urgConf.border}`}>
-        {/* Meta row */}
-        <div className="flex items-center justify-between px-5 pt-4 pb-2">
-          <div className="flex items-center gap-2">
-            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${config.color} ${config.bg}`}>
-              {config.label}
-            </span>
-            {ticker && (
-              <span className="text-white/70 font-bold text-xs tracking-widest">{ticker}</span>
+      <article
+        className={`relative overflow-hidden rounded-2xl border-t-2 ${urgConf.border} transition-all`}
+        style={glassStyle}
+      >
+        {/* Ambient light overlay */}
+        {urgConf.ambient && (
+          <div
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background: urgConf.ambient,
+              pointerEvents: 'none',
+              zIndex: 0,
+            }}
+          />
+        )}
+
+        {/* Content above ambient */}
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          {/* Meta row */}
+          <div className="flex items-center justify-between px-5 pt-4 pb-2">
+            <div className="flex items-center gap-2">
+              <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${config.color} ${config.bg}`}>
+                {config.label}
+              </span>
+              {ticker && (
+                <span className="text-white/70 font-bold text-xs tracking-widest">{ticker}</span>
+              )}
+              {sentiment && <SentimentBadge sentiment={sentiment} />}
+            </div>
+            {urgConf.label && (
+              <span className={`flex items-center gap-1 text-[11px] font-semibold ${urgConf.text}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${urgConf.dot} animate-pulse`} />
+                {urgConf.label}
+              </span>
             )}
-            {sentiment && <SentimentBadge sentiment={sentiment} />}
           </div>
-          {urgConf.label && (
-            <span className={`flex items-center gap-1 text-[11px] font-semibold ${urgConf.text}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${urgConf.dot} animate-pulse`} />
-              {urgConf.label}
-            </span>
-          )}
-        </div>
 
-        {/* Content */}
-        <div className="px-5 pb-4">
-          {url ? (
-            <a href={url} target="_blank" rel="noopener noreferrer" className="block group">
-              <h2 className="text-white font-semibold text-[15px] leading-snug mb-2 group-hover:text-white/80 transition-colors line-clamp-2">
-                {headline}
-              </h2>
-            </a>
-          ) : (
-            <h2 className="text-white font-semibold text-[15px] leading-snug mb-2 line-clamp-2">{headline}</h2>
-          )}
-          {summary && (
-            <p className="text-[#9ca3af] text-sm leading-relaxed line-clamp-3">{summary}</p>
-          )}
-        </div>
+          {/* Content */}
+          <div className="px-5 pb-4">
+            {url ? (
+              <a href={url} target="_blank" rel="noopener noreferrer" className="block group">
+                <h2 className="text-white font-semibold text-[15px] leading-snug mb-2 group-hover:text-white/80 transition-colors line-clamp-2">
+                  {headline}
+                </h2>
+              </a>
+            ) : (
+              <h2 className="text-white font-semibold text-[15px] leading-snug mb-2 line-clamp-2">{headline}</h2>
+            )}
+            {summary && (
+              <p className="text-[#9ca3af] text-sm leading-relaxed line-clamp-3">{summary}</p>
+            )}
+          </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between px-5 py-3 border-t border-[#1e1e1e]">
-          <span className="text-[#4b5563] text-xs">{formatTimestamp(timestamp)}</span>
-          <button
-            onClick={() => setShareOpen(true)}
-            className="flex items-center gap-1.5 text-[#6b7280] hover:text-white transition-colors text-xs font-medium px-2.5 py-1 rounded-lg hover:bg-white/5"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
-              <polyline points="16 6 12 2 8 6"/>
-              <line x1="12" y1="2" x2="12" y2="15"/>
-            </svg>
-            Share to group
-          </button>
+          {/* Footer */}
+          <div className="flex items-center justify-between px-5 py-3 border-t border-white/5">
+            <span className="text-[#4b5563] text-xs">{formatTimestamp(timestamp)}</span>
+            <button
+              onClick={() => setShareOpen(true)}
+              className="flex items-center gap-1.5 text-[#6b7280] hover:text-white transition-colors text-xs font-medium px-2.5 py-1 rounded-lg hover:bg-white/5"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+                <polyline points="16 6 12 2 8 6"/>
+                <line x1="12" y1="2" x2="12" y2="15"/>
+              </svg>
+              Share to group
+            </button>
+          </div>
         </div>
       </article>
 

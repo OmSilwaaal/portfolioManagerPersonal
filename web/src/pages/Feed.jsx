@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useSelector } from 'react-redux'
 import { useAuth } from '../contexts/AuthContext'
 import FilterBar from '../components/feed/FilterBar'
@@ -106,8 +106,10 @@ const FREE_ITEM_LIMIT = 5
 
 export default function Feed() {
   const [activeFilter, setActiveFilter] = useState('all')
+  const [subFilter, setSubFilter] = useState(null)
   const preferences = useSelector((state) => state.preferences)
   const isPro = useSelector((state) => state.preferences.isPro)
+  const watchlist = useSelector((state) => state.watchlist?.stocks || [])
   const { user } = useAuth()
   const firstName = (
     user?.user_metadata?.full_name ??
@@ -129,7 +131,47 @@ export default function Feed() {
   const feedItems = usePersonalizedFeed(rawFeedItems, rawGovTrades, rawCommodities)
   const isLoading = feedLoading || govLoading || commoditiesLoading
 
-  const filtered =
+  // Reset subFilter whenever activeFilter changes
+  useEffect(() => {
+    setSubFilter(null)
+  }, [activeFilter])
+
+  // Compute sub-filter chips based on active filter
+  const subFilterChips = (() => {
+    if (activeFilter === 'stocks') {
+      return watchlist.map((t) => t.toUpperCase())
+    }
+    if (activeFilter === 'commodities') {
+      return rawCommodities.map((c) => c.symbol).filter(Boolean)
+    }
+    if (activeFilter === 'gov-trades') {
+      const seen = new Set()
+      return rawGovTrades
+        .map((t) => t.ticker)
+        .filter((t) => {
+          if (!t || seen.has(t)) return false
+          seen.add(t)
+          return true
+        })
+    }
+    if (activeFilter === 'crypto') {
+      const seen = new Set()
+      return rawFeedItems
+        .filter((item) => {
+          const t = (item._feedType || item.type || '').toLowerCase()
+          return t === 'crypto'
+        })
+        .map((item) => (item.ticker || item.data?.ticker || item.symbol || item.data?.symbol || '').toUpperCase())
+        .filter((t) => {
+          if (!t || seen.has(t)) return false
+          seen.add(t)
+          return true
+        })
+    }
+    return []
+  })()
+
+  const baseFiltered =
     activeFilter === 'all'
       ? feedItems
       : feedItems.filter((item) => {
@@ -143,10 +185,17 @@ export default function Feed() {
           return true
         })
 
+  const filtered = baseFiltered.filter(
+    (item) =>
+      !subFilter ||
+      (item.ticker || item.data?.ticker || item.data?.symbol || '')
+        .toUpperCase() === subFilter.toUpperCase()
+  )
+
   const noCategories = watchedCategories.length === 0
 
   return (
-    <main className="flex-1 p-5 md:p-8 max-w-2xl mx-auto w-full">
+    <main className="flex-1 p-5 md:p-8 max-w-5xl mx-auto w-full">
 
       {/* Personalized header */}
       <div className="mb-7">
@@ -168,9 +217,31 @@ export default function Feed() {
       </div>
 
       {/* Filter bar */}
-      <div className="mb-4">
+      <div className="mb-2">
         <FilterBar activeFilter={activeFilter} onChange={setActiveFilter} />
       </div>
+
+      {/* Sub-filter chips */}
+      {activeFilter !== 'all' && subFilterChips.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-4 mt-2">
+          {subFilterChips.map((chip) => {
+            const isActive = subFilter === chip
+            return (
+              <button
+                key={chip}
+                onClick={() => setSubFilter(isActive ? null : chip)}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all ${
+                  isActive
+                    ? 'bg-white/10 border-white/20 text-white'
+                    : 'bg-transparent border-white/10 text-white/40 hover:text-white/60 hover:border-white/15'
+                }`}
+              >
+                {chip}
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {/* Section label */}
       <div className="mb-3">
@@ -187,8 +258,12 @@ export default function Feed() {
       )}
 
       {isLoading && (
-        <div className="space-y-3">
-          {[...Array(5)].map((_, i) => <SkeletonCard key={i} />)}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="break-inside-avoid">
+              <SkeletonCard />
+            </div>
+          ))}
         </div>
       )}
 
@@ -199,25 +274,27 @@ export default function Feed() {
       )}
 
       {!isLoading && filtered.length > 0 && (
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {filtered.slice(0, isPro ? filtered.length : FREE_ITEM_LIMIT).map((item, idx) => (
-            <FeedCard
-              key={item.id || `feed-${idx}`}
-              type={item._feedType || item.type || 'stock'}
-              data={item.data || item}
-              urgency={item.urgency}
-            />
+            <div key={item.id || `feed-${idx}`} className="break-inside-avoid">
+              <FeedCard
+                type={item._feedType || item.type || 'stock'}
+                data={item.data || item}
+                urgency={item.urgency}
+              />
+            </div>
           ))}
           {!isPro && filtered.length > FREE_ITEM_LIMIT && (
             <ProGate label="Unlock full feed">
-              <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {filtered.slice(FREE_ITEM_LIMIT, FREE_ITEM_LIMIT + 3).map((item, idx) => (
-                  <FeedCard
-                    key={`locked-${idx}`}
-                    type={item._feedType || item.type || 'stock'}
-                    data={item.data || item}
-                    urgency={item.urgency}
-                  />
+                  <div key={`locked-${idx}`} className="break-inside-avoid">
+                    <FeedCard
+                      type={item._feedType || item.type || 'stock'}
+                      data={item.data || item}
+                      urgency={item.urgency}
+                    />
+                  </div>
                 ))}
               </div>
             </ProGate>

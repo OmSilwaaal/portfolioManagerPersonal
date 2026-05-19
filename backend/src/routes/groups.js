@@ -172,12 +172,13 @@ router.patch('/:id', requireAuth, async (req, res) => {
     const member = await getMembership(groupId, req.user.id)
     if (member?.role !== 'admin') return res.status(403).json({ error: true, message: 'Admin only.' })
 
-    const { name, description, color, emoji } = req.body
+    const { name, description, color, emoji, image_url } = req.body
     const updates = {}
     if (name !== undefined) updates.name = name
     if (description !== undefined) updates.description = description
     if (color !== undefined) updates.color = color
     if (emoji !== undefined) updates.emoji = emoji
+    if (image_url !== undefined) updates.image_url = image_url || null
 
     const { data: group, error } = await supabase
       .from('groups')

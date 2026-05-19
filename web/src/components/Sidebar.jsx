@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import { resetPreferences } from '../store/preferencesSlice'
 import { supabase } from '../utils/supabase/client'
 import { useAuth } from '../contexts/AuthContext'
+import { useGetMyProfileQuery } from '../api/profilesApi'
 
 const navItems = [
   {
@@ -136,10 +137,16 @@ export default function Sidebar() {
   const dispatch = useDispatch()
   const { user } = useAuth()
   const isPro = useSelector((state) => state.preferences.isPro)
+  const { data: profile } = useGetMyProfileQuery(undefined, { skip: !user })
 
   const meta = user?.user_metadata ?? {}
-  const displayName = meta.full_name ?? meta.name ?? meta.display_name ?? null
   const email = user?.email ?? null
+
+  // Prefer custom profile data over OAuth metadata
+  const displayName = profile?.username
+    ? `@${profile.username}`
+    : (profile?.display_name ?? meta.full_name ?? meta.name ?? meta.display_name ?? null)
+  const avatarUrl = profile?.avatar_url || meta.avatar_url || meta.picture || null
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
@@ -233,7 +240,20 @@ export default function Sidebar() {
 
         {user && (
           <div className="flex items-center gap-3 px-3 py-2">
-            <UserAvatar user={user} size={32} />
+            {avatarUrl ? (
+              <img
+                src={avatarUrl}
+                alt={displayName || ''}
+                width={32}
+                height={32}
+                className="rounded-full object-cover flex-shrink-0"
+                style={{ width: 32, height: 32 }}
+                referrerPolicy="no-referrer"
+                onError={(e) => { e.target.style.display = 'none' }}
+              />
+            ) : (
+              <UserAvatar user={user} size={32} />
+            )}
             <div className="min-w-0">
               {displayName && (
                 <p className="text-sm font-medium text-white/80 truncate leading-tight">{displayName}</p>
