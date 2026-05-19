@@ -19,7 +19,15 @@ const MOCK_COMMODITIES = [
   { commodity: 'Palladium', symbol: 'PALLADIUM', price: 1124.80, unit: 'USD/troy oz', changePercent: 0.9, sector: 'Metals', relatedETFs: ['PALL'] },
   { commodity: 'Soybeans', symbol: 'SOYBEANS', price: 1182.50, unit: 'USd/bu', changePercent: -0.5, sector: 'Agriculture', relatedETFs: ['SOYB', 'DBA'] },
   { commodity: 'Cotton', symbol: 'COTTON', price: 78.35, unit: 'USd/lb', changePercent: 1.4, sector: 'Agriculture', relatedETFs: ['BAL', 'DBA'] },
-  { commodity: 'Cocoa', symbol: 'COCOA', price: 8420.00, unit: 'USD/MT', changePercent: -2.1, sector: 'Agriculture', relatedETFs: ['NIB'] },
+  { commodity: 'Heating Oil', symbol: 'HO1', price: 2.89, unit: 'USD/gallon', changePercent: -0.5, sector: 'Energy', relatedETFs: ['USO', 'XLE'] },
+  { commodity: 'RBOB Gasoline', symbol: 'RB1', price: 2.65, unit: 'USD/gallon', changePercent: 0.3, sector: 'Energy', relatedETFs: ['UGA', 'XLE'] },
+  { commodity: 'Live Cattle', symbol: 'LE1', price: 182.45, unit: 'USd/lb', changePercent: 0.8, sector: 'Agriculture', relatedETFs: ['COW', 'DBA'] },
+  { commodity: 'Lean Hogs', symbol: 'HE1', price: 84.20, unit: 'USd/lb', changePercent: -1.2, sector: 'Agriculture', relatedETFs: ['COW', 'DBA'] },
+  { commodity: 'Lumber', symbol: 'LBS1', price: 512.30, unit: 'USD/MBF', changePercent: 2.4, sector: 'Agriculture', relatedETFs: ['CUT', 'WOOD'] },
+  { commodity: 'Orange Juice', symbol: 'OJ1', price: 385.50, unit: 'USd/lb', changePercent: -0.7, sector: 'Agriculture', relatedETFs: ['DBA'] },
+  { commodity: 'Oats', symbol: 'ZO1', price: 328.75, unit: 'USd/bu', changePercent: 1.1, sector: 'Agriculture', relatedETFs: ['DBA'] },
+  { commodity: 'Rough Rice', symbol: 'ZR1', price: 16.85, unit: 'USD/cwt', changePercent: -0.3, sector: 'Agriculture', relatedETFs: ['DBA'] },
+  { commodity: 'Cocoa', symbol: 'CC1', price: 8420.00, unit: 'USD/MT', changePercent: -2.1, sector: 'Agriculture', relatedETFs: ['NIB'] },
 ];
 
 // Maps symbol to Alpha Vantage function parameter
@@ -35,6 +43,7 @@ const SYMBOL_TO_FUNCTION = {
   ALL_COMMODITIES: 'ALL_COMMODITIES',
   GOLD: 'GOLD_PRICE',
   SILVER: 'SILVER_PRICE',
+  HO1: 'HO1', RB1: 'RB1', LE1: 'LE1', HE1: 'HE1', LBS1: 'LBS1', OJ1: 'OJ1', ZO1: 'ZO1', ZR1: 'ZR1', CC1: 'CC1',
 };
 
 const SYMBOL_META = {

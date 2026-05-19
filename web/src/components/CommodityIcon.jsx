@@ -57,6 +57,36 @@ const ICONS = {
   OJ1: { label: 'Orange Juice', color: '#fb923c', bg: '#1c0e00',
     svg: <><circle cx="12" cy="13" r="5" fill="currentColor" opacity="0.85"/><path d="M12 8V6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M12 6c1-2 3-2 3-2" stroke="currentColor" strokeWidth="1" strokeLinecap="round" opacity="0.5"/><line x1="12" y1="13" x2="15" y2="11" stroke="white" strokeWidth="0.7" opacity="0.3"/><line x1="12" y1="13" x2="9" y2="11" stroke="white" strokeWidth="0.7" opacity="0.3"/><line x1="12" y1="13" x2="12" y2="10" stroke="white" strokeWidth="0.7" opacity="0.3"/></>
   },
+  LE1: { label: 'Live Cattle', color: '#92400e', bg: '#1a0a00',
+    svg: <><ellipse cx="12" cy="14" rx="7" ry="5" fill="currentColor" opacity="0.7"/><path d="M8 9c0-3 2-5 4-5s4 2 4 5" fill="currentColor" opacity="0.5"/><path d="M7 9L5 7M17 9l2-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></>
+  },
+  HE1: { label: 'Lean Hogs', color: '#f9a8d4', bg: '#1a0010',
+    svg: <><ellipse cx="12" cy="14" rx="6" ry="4" fill="currentColor" opacity="0.8"/><circle cx="12" cy="10" r="3" fill="currentColor" opacity="0.9"/><circle cx="10.5" cy="9.5" r="0.8" fill="white" opacity="0.5"/><circle cx="13.5" cy="9.5" r="0.8" fill="white" opacity="0.5"/></>
+  },
+  LBS1: { label: 'Lumber', color: '#92400e', bg: '#1c0e00',
+    svg: <><rect x="4" y="9" width="16" height="3" rx="1" fill="currentColor" opacity="0.9"/><rect x="4" y="13" width="16" height="3" rx="1" fill="currentColor" opacity="0.7"/><rect x="4" y="5" width="16" height="3" rx="1" fill="currentColor" opacity="0.5"/></>
+  },
+  ZO1: { label: 'Oats', color: '#d97706', bg: '#1a0e00',
+    svg: <><ellipse cx="12" cy="14" rx="3" ry="5" fill="currentColor" opacity="0.8"/><path d="M12 9V5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M9 8c0-2 1.5-4 3-4s3 2 3 4" stroke="currentColor" strokeWidth="1" fill="none" strokeLinecap="round" opacity="0.5"/></>
+  },
+  ZR1: { label: 'Rough Rice', color: '#fef08a', bg: '#1a1400',
+    svg: <><ellipse cx="9" cy="13" rx="2.5" ry="4" fill="currentColor" opacity="0.8"/><ellipse cx="15" cy="13" rx="2.5" ry="4" fill="currentColor" opacity="0.8"/><ellipse cx="12" cy="11" rx="2.5" ry="4" fill="currentColor"/><path d="M12 7V5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" opacity="0.5"/></>
+  },
+  CC1: { label: 'Cocoa', color: '#92400e', bg: '#150800',
+    svg: <><path d="M12 4c-4 0-7 3-7 7s3 7 7 7 7-3 7-7-3-7-7-7z" fill="currentColor" opacity="0.7"/><path d="M9 11c1-2 2-3 3-3s2 1 3 3" stroke="white" strokeWidth="0.75" fill="none" opacity="0.4"/></>
+  },
+}
+
+const SYMBOL_ALIASES = {
+  WTI: 'CL1', BRENT: 'CL1',
+  GOLD: 'GC1', SILVER: 'SI1',
+  NATURAL_GAS: 'NG1',
+  COPPER: 'HG1',
+  WHEAT: 'ZW1', CORN: 'ZC1', SOYBEANS: 'ZS1',
+  COFFEE: 'KC1', SUGAR: 'SB1', COTTON: 'CT1',
+  COCOA: 'CC1', CC1: 'CC1',
+  PLATINUM: 'PL1', PALLADIUM: 'PA1',
+  HO1: 'HO1', RB1: 'RB1', OJ1: 'OJ1',
 }
 
 // Generic fallbacks by sector
@@ -76,7 +106,8 @@ const SECTOR_FALLBACKS = {
 }
 
 export default function CommodityIcon({ symbol, sector = 'Other', size = 40, className = '' }) {
-  const icon = ICONS[symbol] || SECTOR_FALLBACKS[sector] || SECTOR_FALLBACKS.Other
+  const resolvedSymbol = SYMBOL_ALIASES[symbol] || symbol
+  const icon = ICONS[resolvedSymbol] || SECTOR_FALLBACKS[sector] || SECTOR_FALLBACKS.Other
 
   return (
     <div

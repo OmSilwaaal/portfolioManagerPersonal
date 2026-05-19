@@ -26,11 +26,28 @@ export default function ShareToGroupModal({ article, onClose }) {
     setError('')
     setSharing(true)
 
-    const tickerPart = ticker ? ` · ${ticker}` : ''
-    const content = [
-      `📰 [${headline}${tickerPart}]`,
-      message.trim() || null,
-    ].filter(Boolean).join('\n')
+    const articleData = {
+      headline: article.headline || article.summary || article.commodity || article.assetName || '...',
+      ticker: article.ticker || article.symbol || '',
+      summary: article.summary || '',
+      image_url: article.image_url || '',
+      url: article.url || '',
+      sentiment: article.sentiment || '',
+    }
+
+    let articleLine = `__ARTICLE__${JSON.stringify(articleData)}`
+
+    // Truncate summary if combined content would exceed 1900 chars
+    const userMsg = message.trim()
+    const full = [articleLine, userMsg].filter(Boolean).join('\n')
+    if (full.length > 1900) {
+      const overhead = `__ARTICLE__${JSON.stringify({ ...articleData, summary: '' })}`.length
+      const budgetForSummary = Math.max(0, 1900 - overhead - (userMsg ? userMsg.length + 1 : 0) - 5)
+      const truncatedData = { ...articleData, summary: articleData.summary.slice(0, budgetForSummary) }
+      articleLine = `__ARTICLE__${JSON.stringify(truncatedData)}`
+    }
+
+    const content = [articleLine, userMsg].filter(Boolean).join('\n')
 
     try {
       await createPost({ groupId: selectedGroup, content, type: 'post' }).unwrap()

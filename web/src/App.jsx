@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
+import PriceAlertBanner from './components/PriceAlertBanner'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { setPreferences, setIsPro } from './store/preferencesSlice'
 import { setWatchlistStocks } from './store/watchlistSlice'
@@ -30,6 +31,7 @@ import './api/cryptoApi'
 import './api/feedApi'
 import './api/alertsApi'
 import './api/searchApi'
+import './api/notificationsApi'
 
 function Spinner() {
   return (
@@ -43,6 +45,7 @@ function ProtectedLayout() {
   const { user, loading } = useAuth()
   const isDark = useSelector((state) => state.theme.isDark)
   const onboardingComplete = useSelector((state) => state.preferences.onboardingComplete)
+  const watchlistTickers = useSelector((state) => state.watchlist.stocks).join(',')
 
   if (loading) return <Spinner />
   if (!user) return <Navigate to="/" replace />
@@ -50,6 +53,7 @@ function ProtectedLayout() {
 
   return (
     <div className={`flex min-h-screen ${isDark ? 'bg-[#0f0f0f] text-white' : 'bg-white text-[#0f0f0f]'}`}>
+      <PriceAlertBanner tickers={watchlistTickers} />
       <Sidebar />
       <div className="flex-1 flex flex-col min-h-screen pb-16 md:pb-0">
         <Outlet />

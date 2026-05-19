@@ -1,6 +1,7 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { supabase } from '../utils/supabase/client'
 import {
   useGetGroupQuery,
   useCreatePostMutation,
@@ -57,20 +58,35 @@ function resizeImageToDataUrl(file, maxSize = 200, quality = 0.75) {
   })
 }
 
-// Parse article shares: content starting with "📰 [" shows a card-style preview
+// Parse article shares: handles __ARTICLE__{json} format and legacy "📰 [" format
 function parsePostContent(content) {
   if (!content) return { type: 'text', text: content }
+
+  // New rich format: __ARTICLE__{"headline":...}\nmessage
+  if (content.startsWith('__ARTICLE__')) {
+    try {
+      const firstNewline = content.indexOf('\n')
+      const jsonStr = firstNewline > -1 ? content.slice(11, firstNewline) : content.slice(11)
+      const message = firstNewline > -1 ? content.slice(firstNewline + 1).trim() : ''
+      const { headline, ticker, summary, image_url, url, sentiment } = JSON.parse(jsonStr)
+      return { type: 'article', headline, ticker, summary, image_url, url, sentiment, message }
+    } catch {
+      return { type: 'text', text: content }
+    }
+  }
+
+  // Legacy format: 📰 [Title · TICKER]
   if (content.startsWith('📰 [') || content.startsWith('📰 ')) {
     const firstNewline = content.indexOf('\n')
     const header = firstNewline > -1 ? content.slice(0, firstNewline) : content
     const message = firstNewline > -1 ? content.slice(firstNewline + 1).trim() : ''
-    // Extract title and ticker from "📰 [Title · TICKER]"
     const match = header.match(/📰 \[(.+?)(?:\s·\s(.+?))?\]/)
     if (match) {
       return { type: 'article', headline: match[1], ticker: match[2] || '', message }
     }
     return { type: 'article', headline: header.replace('📰 ', ''), ticker: '', message }
   }
+
   return { type: 'text', text: content }
 }
 
@@ -134,17 +150,50 @@ function PostCard({ post, groupId, isAdmin, currentUserId }) {
           {parsed.type === 'article' ? (
             <div className="flex flex-col gap-2">
               {/* Article share preview */}
-              <div className="rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)' }}>
-                <div className="flex items-center gap-2 mb-1.5">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
-                  </svg>
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-white/30">Article</span>
-                  {parsed.ticker && (
-                    <span className="text-[10px] font-bold text-white/50 tracking-widest">{parsed.ticker}</span>
+              <div className="rounded-lg overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)' }}>
+                {parsed.image_url && (
+                  <img
+                    src={parsed.image_url}
+                    alt={parsed.headline}
+                    className="w-full max-h-32 object-cover rounded-t-lg"
+                  />
+                )}
+                <div className="p-3">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+                    </svg>
+                    <span className="text-[10px] font-semibold uppercase tracking-widest text-white/30">Article</span>
+                  </div>
+                  <p className="text-sm font-semibold text-white/80 leading-snug mb-1">{parsed.headline}</p>
+                  {parsed.summary && (
+                    <p className="text-xs text-white/40 leading-relaxed line-clamp-2 mb-2">{parsed.summary}</p>
                   )}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {parsed.ticker && (
+                      <span className="text-[10px] font-bold text-white/50 tracking-widest px-1.5 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.08)' }}>{parsed.ticker}</span>
+                    )}
+                    {parsed.sentiment && (() => {
+                      const s = parsed.sentiment
+                      const bg = s === 'Bullish' ? 'rgba(52,211,153,0.15)' : s === 'Bearish' ? 'rgba(239,68,68,0.15)' : 'rgba(255,255,255,0.08)'
+                      const color = s === 'Bullish' ? 'rgba(52,211,153,0.9)' : s === 'Bearish' ? 'rgba(239,68,68,0.9)' : 'rgba(255,255,255,0.45)'
+                      const label = s === 'Bullish' ? '↑ Bullish' : s === 'Bearish' ? '↓ Bearish' : '— Neutral'
+                      return (
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: bg, color }}>{label}</span>
+                      )
+                    })()}
+                    {parsed.url && (
+                      <a
+                        href={parsed.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[10px] text-white/40 hover:text-white/70 transition-colors ml-auto"
+                      >
+                        Read →
+                      </a>
+                    )}
+                  </div>
                 </div>
-                <p className="text-sm font-medium text-white/80 leading-snug">{parsed.headline}</p>
               </div>
               {parsed.message && (
                 <p className="text-sm text-white/60 leading-relaxed whitespace-pre-wrap break-words pl-1">{parsed.message}</p>
@@ -327,6 +376,29 @@ export default function GroupDetail() {
   const [updateGroup, { isLoading: savingSettings }] = useUpdateGroupMutation()
   const [deleteGroup] = useDeleteGroupMutation()
 
+  const [realtimePosts, setRealtimePosts] = useState([])
+  const messagesEndRef = useRef(null)
+
+  // Supabase Realtime subscription for live posts
+  useEffect(() => {
+    if (!id) return
+    const channel = supabase
+      .channel(`group_posts_${id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'group_posts', filter: `group_id=eq.${id}` },
+        (payload) => {
+          setRealtimePosts((prev) => {
+            // Avoid duplicates that may already be in the RTK cache
+            if (prev.some((p) => p.id === payload.new.id)) return prev
+            return [...prev, payload.new]
+          })
+        }
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [id])
+
   const [activeChannel, setActiveChannel] = useState('stream')
   const [content, setContent] = useState('')
   const [postType, setPostType] = useState('post')
@@ -352,6 +424,20 @@ export default function GroupDetail() {
     } catch { setImageUploadError('Failed to process image.') }
   }, [])
 
+  // Channel filtering — computed early (safe with null-coalescing) so useEffect below can reference it
+  const currentChannel = CHANNELS.find(c => c.id === activeChannel)
+  const channelPosts = [
+    ...(group?.posts ?? []),
+    ...realtimePosts.filter((rp) => !(group?.posts ?? []).some((p) => p.id === rp.id)),
+  ]
+    .filter((p) => currentChannel?.types.includes(p.type))
+    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+
+  // Auto-scroll to newest message whenever the list grows
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [channelPosts.length])
+
   if (isLoading) {
     return (
       <div className="flex-1 flex items-center justify-center bg-[#0a0a0a]">
@@ -373,10 +459,6 @@ export default function GroupDetail() {
   const currentUserId = user?.id
   const myMember = group.members?.find(m => m.user_id === currentUserId)
   const canPost = isAdmin || myMember?.can_post
-
-  // Channel filtering
-  const currentChannel = CHANNELS.find(c => c.id === activeChannel)
-  const channelPosts = (group.posts ?? []).filter(p => currentChannel?.types.includes(p.type))
 
   // Post type follows active channel for regular members; admins can override
   const defaultPostTypeForChannel = activeChannel === 'announcements' ? 'announcement'
@@ -591,6 +673,7 @@ export default function GroupDetail() {
                 />
               ))
             )}
+            <div ref={messagesEndRef} />
           </div>
         </div>
 

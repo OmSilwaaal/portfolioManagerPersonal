@@ -16,6 +16,7 @@ const searchRouter = require('./routes/search');
 const { router: paperTradingRouter } = require('./routes/paperTrading');
 const groupsRouter = require('./routes/groups');
 const profilesRouter = require('./routes/profiles');
+const notificationsRouter = require('./routes/notifications');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const { sessionMiddleware, requireAuth, validateTicker } = require('./middleware/auth');
 const { getBudgetStatus } = require('./services/claude');
@@ -80,6 +81,7 @@ app.use('/api/search', searchRouter);
 app.use('/api/paper-trading', paperTradingRouter);
 app.use('/api/groups', requireAuth, groupsRouter);
 app.use('/api/profiles', requireAuth, profilesRouter);
+app.use('/api/notifications', notificationsRouter);
 
 // Health check
 app.get('/health', (req, res) => {

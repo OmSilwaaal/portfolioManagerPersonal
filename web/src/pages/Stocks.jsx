@@ -154,7 +154,7 @@ function DetailPanel({ ticker }) {
   )
 }
 
-function TickerSearchInput({ onAdd }) {
+function TickerSearchInput({ onAdd, fullWidth = false }) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const wrapRef = useRef(null)
@@ -206,9 +206,9 @@ function TickerSearchInput({ onAdd }) {
             onChange={(e) => { setQuery(e.target.value); setOpen(true) }}
             onFocus={() => query.length >= 3 && setOpen(true)}
             onKeyDown={handleKeyDown}
-            placeholder="Search or enter ticker…"
+            placeholder="Search by company name or ticker…"
             maxLength={50}
-            className="w-52 pl-8 pr-3 py-2 text-sm bg-[#111] border border-[#222] text-white placeholder-[#4b5563] rounded-lg focus:outline-none focus:border-white/20 transition-colors"
+            className={`${fullWidth ? 'w-full' : 'w-52'} pl-8 pr-3 py-2 text-sm bg-[#111] border border-[#222] text-white placeholder-[#4b5563] rounded-lg focus:outline-none focus:border-white/20 transition-colors`}
           />
         </div>
         <button
@@ -224,7 +224,7 @@ function TickerSearchInput({ onAdd }) {
       {/* Dropdown */}
       {open && shouldSearch && (
         <div
-          className="absolute right-0 top-full mt-1.5 w-72 z-40 rounded-xl overflow-hidden"
+          className={`absolute ${fullWidth ? 'left-0 right-0' : 'right-0'} top-full mt-1.5 ${fullWidth ? 'w-full' : 'w-72'} z-40 rounded-xl overflow-hidden`}
           style={{ background: '#141414', border: '1px solid rgba(255,255,255,0.10)', boxShadow: '0 8px 32px rgba(0,0,0,0.6)' }}
         >
           {isFetching && (
@@ -307,14 +307,20 @@ export default function Stocks() {
           }`}
         >
           {stocks.length === 0 ? (
-            <div className="flex flex-col items-center justify-center flex-1 py-20 gap-3">
-              <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
-                <polyline points="16 7 22 7 22 13"/>
-              </svg>
-              <p className="text-[#4b5563] text-sm text-center px-8">
-                Search for a company or ticker above to add to your watchlist
-              </p>
+            <div className="flex flex-col items-center justify-center flex-1 py-20 gap-5">
+              <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
+                  <polyline points="16 7 22 7 22 13"/>
+                </svg>
+              </div>
+              <div className="text-center">
+                <p className="text-white/50 text-sm font-medium">No stocks in watchlist</p>
+                <p className="text-[#4b5563] text-xs mt-1">Search by company name or ticker — try "Apple" or "NVDA"</p>
+              </div>
+              <div className="w-full max-w-sm px-6">
+                <TickerSearchInput onAdd={handleAdd} fullWidth />
+              </div>
             </div>
           ) : (
             <div className={`p-4 space-y-2 ${selectedTicker ? '' : 'max-w-2xl mx-auto w-full'}`}>
