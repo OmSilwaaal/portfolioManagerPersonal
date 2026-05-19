@@ -66,16 +66,13 @@ router.patch('/me', requireAuth, async (req, res) => {
   }
 })
 
-// GET /profiles/:userId — public profile
+// GET /profiles/:userId — public profile (auto-creates stub if missing)
 router.get('/:userId', requireAuth, async (req, res) => {
   try {
-    const { data } = await supabase
-      .from('profiles')
-      .select('user_id, username, bio, avatar_url, updated_at')
-      .eq('user_id', req.params.userId)
-      .maybeSingle()
-    if (!data) return res.status(404).json({ error: true, message: 'Profile not found.' })
-    res.json(data)
+    const profile = await upsertProfile(req.params.userId)
+    if (!profile) return res.status(404).json({ error: true, message: 'Profile not found.' })
+    const { user_id, username, bio, avatar_url, updated_at } = profile
+    res.json({ user_id, username, bio, avatar_url, updated_at })
   } catch (err) {
     console.error('GET /profiles/:userId', err)
     res.status(500).json({ error: true, message: 'Failed to load profile.' })
