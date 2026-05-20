@@ -416,7 +416,9 @@ export default function GroupDetail() {
   const { id } = useParams()
   const { user } = useAuth()
   const navigate = useNavigate()
-  const { data: group, isLoading, isError } = useGetGroupQuery(id)
+  const { data: group, isLoading, isError, refetch } = useGetGroupQuery(id, {
+    pollingInterval: 3000,
+  })
   const [createPost, { isLoading: posting }] = useCreatePostMutation()
   const [updateMember] = useUpdateMemberMutation()
   const [removeMember] = useRemoveMemberMutation()
@@ -424,27 +426,42 @@ export default function GroupDetail() {
   const [deleteGroup] = useDeleteGroupMutation()
 
   const [realtimePosts, setRealtimePosts] = useState([])
+  const [realtimeUpdates, setRealtimeUpdates] = useState({})
   const messagesEndRef = useRef(null)
 
-  // Supabase Realtime subscription for live posts
+  // Supabase Realtime — posts (INSERT + UPDATE) and members (all events)
   useEffect(() => {
     if (!id) return
     const channel = supabase
-      .channel(`group_posts_${id}`)
-      .on(
-        'postgres_changes',
+      .channel(`group_live_${id}`)
+      .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'group_posts', filter: `group_id=eq.${id}` },
         (payload) => {
           setRealtimePosts((prev) => {
-            // Avoid duplicates that may already be in the RTK cache
             if (prev.some((p) => p.id === payload.new.id)) return prev
             return [...prev, payload.new]
           })
         }
       )
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'group_posts', filter: `group_id=eq.${id}` },
+        (payload) => {
+          // Update poll votes and any other post edits in-place instantly
+          setRealtimeUpdates((prev) => ({ ...prev, [payload.new.id]: payload.new }))
+          setRealtimePosts((prev) => prev.map((p) => p.id === payload.new.id ? payload.new : p))
+        }
+      )
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'group_members', filter: `group_id=eq.${id}` },
+        () => { refetch() }
+      )
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'groups', filter: `id=eq.${id}` },
+        () => { refetch() }
+      )
       .subscribe()
     return () => { supabase.removeChannel(channel) }
-  }, [id])
+  }, [id, refetch])
 
   const [activeChannel, setActiveChannel] = useState('stream')
   const [content, setContent] = useState('')
@@ -476,11 +493,13 @@ export default function GroupDetail() {
     } catch { setImageUploadError('Failed to process image.') }
   }, [])
 
-  // Channel filtering — computed early (safe with null-coalescing) so useEffect below can reference it
+  // Channel filtering — merge RTK cache + realtime new posts + in-place updates (poll votes etc.)
   const currentChannel = CHANNELS.find(c => c.id === activeChannel)
   const channelPosts = [
-    ...(group?.posts ?? []),
-    ...realtimePosts.filter((rp) => !(group?.posts ?? []).some((p) => p.id === rp.id)),
+    ...(group?.posts ?? []).map((p) => realtimeUpdates[p.id] ?? p),
+    ...realtimePosts
+      .filter((rp) => !(group?.posts ?? []).some((p) => p.id === rp.id))
+      .map((p) => realtimeUpdates[p.id] ?? p),
   ]
     .filter((p) => currentChannel?.types.includes(p.type))
     .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
