@@ -1,7 +1,7 @@
 import { NavLink, Link, useNavigate, useLocation } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { resetPreferences } from '../store/preferencesSlice'
-import { setFeedFilter, setFeedSubFilter, toggleFeedExpanded } from '../store/feedSlice'
+import { setFeedFilter, setFeedSubFilter, setFeedExpanded } from '../store/feedSlice'
 import { supabase } from '../utils/supabase/client'
 import { useAuth } from '../contexts/AuthContext'
 import { useGetMyProfileQuery } from '../api/profilesApi'
@@ -219,55 +219,48 @@ export default function Sidebar() {
         <div className="space-y-0.5">
           {/* Feed — expandable */}
           <div>
-            <div className="flex items-center rounded-lg overflow-hidden">
-              <NavLink
-                to="/feed"
-                end
-                onClick={() => dispatch(setFeedFilter(activeFilter === 'all' && !feedExpanded ? 'all' : activeFilter))}
-                className={({ isActive }) =>
-                  `relative flex-1 flex items-center gap-3 pl-3 pr-1 py-2 text-sm font-medium transition-all duration-150 ${
-                    isActive ? 'text-white' : 'text-white/35 hover:text-white/70'
-                  }`
-                }
-                style={({ isActive }) => isActive ? {
-                  background: 'rgba(255,255,255,0.07)',
-                  backdropFilter: 'blur(8px)',
-                } : {}}
-              >
-                {({ isActive }) => (
-                  <>
-                    {isActive && (
-                      <span
-                        className="absolute left-0 top-1/2 -translate-y-1/2 w-[2.5px] h-4 rounded-full"
-                        style={{ background: 'rgba(255,255,255,0.8)' }}
-                      />
-                    )}
-                    <span className={isActive ? 'text-white' : ''}>
-                      <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-                        <polyline points="9 22 9 12 15 12 15 22"/>
-                      </svg>
-                    </span>
-                    <span>Feed</span>
-                  </>
-                )}
-              </NavLink>
-              <button
-                onClick={() => dispatch(toggleFeedExpanded())}
-                className="px-2 py-2 text-white/20 hover:text-white/60 transition-colors flex-shrink-0"
-                title={feedExpanded ? 'Collapse' : 'Expand'}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  {feedExpanded
-                    ? <polyline points="18 15 12 9 6 15" />
-                    : <polyline points="6 9 12 15 18 9" />
-                  }
-                </svg>
-              </button>
-            </div>
+            <NavLink
+              to="/feed"
+              end
+              onClick={() => dispatch(setFeedExpanded(true))}
+              className={({ isActive }) =>
+                `relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 ${
+                  isActive ? 'text-white' : 'text-white/35 hover:text-white/70 hover:bg-white/[0.04]'
+                }`
+              }
+              style={({ isActive }) => isActive ? {
+                background: 'rgba(255,255,255,0.07)',
+                backdropFilter: 'blur(8px)',
+              } : {}}
+            >
+              {({ isActive }) => (
+                <>
+                  {isActive && (
+                    <span
+                      className="absolute left-0 top-1/2 -translate-y-1/2 w-[2.5px] h-4 rounded-full"
+                      style={{ background: 'rgba(255,255,255,0.8)' }}
+                    />
+                  )}
+                  <span className={isActive ? 'text-white' : ''}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                      <polyline points="9 22 9 12 15 12 15 22"/>
+                    </svg>
+                  </span>
+                  <span>Feed</span>
+                </>
+              )}
+            </NavLink>
 
-            {/* Feed sub-items */}
-            {feedExpanded && (
+            {/* Feed sub-items — always rendered, animated via max-height */}
+            <div
+              style={{
+                maxHeight: feedExpanded ? '500px' : '0px',
+                opacity: feedExpanded ? 1 : 0,
+                overflow: 'hidden',
+                transition: 'max-height 0.28s ease, opacity 0.2s ease',
+              }}
+            >
               <div className="ml-3 mt-0.5 border-l border-white/[0.06] pl-2 space-y-0.5 pb-1">
                 {FEED_FILTERS.map((f) => {
                   const isActive = isFeed && activeFilter === f.id
@@ -308,7 +301,7 @@ export default function Sidebar() {
                   )
                 })}
               </div>
-            )}
+            </div>
           </div>
         </div>
 
@@ -317,7 +310,36 @@ export default function Sidebar() {
         <p className="text-[9px] font-semibold uppercase tracking-[0.15em] text-white/20 px-3 mb-1 mt-2">Tools</p>
         <div className="space-y-0.5">
           {TOOLS_ITEMS.map((item) => (
-            <NavItem key={item.path} item={item} />
+            <NavLink
+              key={item.path}
+              to={item.path}
+              end
+              onClick={() => dispatch(setFeedExpanded(false))}
+              className={({ isActive }) =>
+                `relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 ${
+                  isActive
+                    ? 'text-white'
+                    : 'text-white/35 hover:text-white/70 hover:bg-white/[0.04]'
+                }`
+              }
+              style={({ isActive }) => isActive ? {
+                background: 'rgba(255,255,255,0.07)',
+                backdropFilter: 'blur(8px)',
+              } : {}}
+            >
+              {({ isActive }) => (
+                <>
+                  {isActive && (
+                    <span
+                      className="absolute left-0 top-1/2 -translate-y-1/2 w-[2.5px] h-4 rounded-full"
+                      style={{ background: 'rgba(255,255,255,0.8)' }}
+                    />
+                  )}
+                  <span className={isActive ? 'text-white' : ''}>{item.icon}</span>
+                  <span>{item.label}</span>
+                </>
+              )}
+            </NavLink>
           ))}
         </div>
 
@@ -333,6 +355,7 @@ export default function Sidebar() {
                 key={item.path}
                 to={item.path}
                 end
+                onClick={() => dispatch(setFeedExpanded(false))}
                 className={({ isActive }) =>
                   `relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 ${
                     isActive
