@@ -429,8 +429,10 @@ export default function GroupDetail() {
   const [realtimeUpdates, setRealtimeUpdates] = useState({})
   const [typingUsers, setTypingUsers] = useState({})
   const messagesEndRef = useRef(null)
+  const scrollContainerRef = useRef(null)
   const channelRef = useRef(null)
   const typingTimeoutRef = useRef(null)
+  const stickToBottomRef = useRef(true)
 
   // Supabase Realtime — posts (INSERT + UPDATE), members (all events), and Presence (typing)
   useEffect(() => {
@@ -529,8 +531,9 @@ export default function GroupDetail() {
     .filter((p) => currentChannel?.types.includes(p.type))
     .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
 
-  // Auto-scroll to newest message whenever the list grows
+  // Auto-scroll only when user is already pinned to the bottom
   useEffect(() => {
+    if (!stickToBottomRef.current) return
     requestAnimationFrame(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     })
@@ -583,6 +586,7 @@ export default function GroupDetail() {
     try {
       await createPost({ groupId: id, content: content.trim(), type }).unwrap()
       setContent('')
+      stickToBottomRef.current = true
     } catch (err) {
       setPostError(err?.data?.message ?? 'Failed to post.')
     }
@@ -738,7 +742,15 @@ export default function GroupDetail() {
         {/* Stream */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Posts — Discord-style, fills space, no scrollbar */}
-          <div className="flex-1 overflow-y-auto flex flex-col py-4 scrollbar-hide">
+          <div
+            ref={scrollContainerRef}
+            className="flex-1 overflow-y-auto flex flex-col py-4 scrollbar-hide"
+            onScroll={() => {
+              const el = scrollContainerRef.current
+              if (!el) return
+              stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+            }}
+          >
             {channelPosts.length === 0 ? (
               <div className="flex flex-col items-center justify-center flex-1 py-16 gap-2">
                 <p className="text-white/20 text-sm">

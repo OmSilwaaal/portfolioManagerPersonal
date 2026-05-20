@@ -64,6 +64,24 @@ function ProtectedLayout() {
   )
 }
 
+function ProtectedLayoutMinimal() {
+  const { user, loading } = useAuth()
+  const isDark = useSelector((state) => state.theme.isDark)
+  const onboardingComplete = useSelector((state) => state.preferences.onboardingComplete)
+
+  if (loading) return <Spinner />
+  if (!user) return <Navigate to="/" replace />
+  if (!onboardingComplete) return <Navigate to="/onboarding" replace />
+
+  return (
+    <div className={`flex min-h-screen ${isDark ? 'bg-[#0f0f0f] text-white' : 'bg-white text-[#0f0f0f]'}`}>
+      <div className="flex-1 flex flex-col min-h-screen">
+        <Outlet />
+      </div>
+    </div>
+  )
+}
+
 function AppInner() {
   const isDark = useSelector((state) => state.theme.isDark)
   const { user } = useAuth()
@@ -100,7 +118,7 @@ function AppInner() {
       <Route path="/onboarding" element={<Onboarding />} />
       <Route path="/app" element={<Navigate to="/feed" replace />} />
 
-      {/* Protected — layout route with Outlet so child paths resolve correctly */}
+      {/* Protected — with sidebar */}
       <Route element={<ProtectedLayout />}>
         <Route path="/feed" element={<Feed />} />
         <Route path="/dashboard" element={<Dashboard />} />
@@ -111,12 +129,16 @@ function AppInner() {
         <Route path="/paper-trading" element={<PaperTrading />} />
         <Route path="/groups" element={<Groups />} />
         <Route path="/groups/new" element={<CreateGroup />} />
-        <Route path="/groups/:id" element={<GroupDetail />} />
         <Route path="/profile/:userId" element={<Profile />} />
         <Route path="/gov-trades" element={<GovTrades />} />
         <Route path="/commodities" element={<Commodities />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/pricing" element={<Pricing />} />
+      </Route>
+
+      {/* Protected — no sidebar (immersive views) */}
+      <Route element={<ProtectedLayoutMinimal />}>
+        <Route path="/groups/:id" element={<GroupDetail />} />
       </Route>
     </Routes>
   )

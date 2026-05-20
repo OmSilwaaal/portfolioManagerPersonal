@@ -138,6 +138,8 @@ function initSchema() {
   // Migrations — add columns if they don't exist (SQLite lacks ADD COLUMN IF NOT EXISTS)
   try { db.exec('ALTER TABLE paper_positions ADD COLUMN targetPrice REAL DEFAULT NULL') } catch (_) {}
   try { db.exec('ALTER TABLE paper_positions ADD COLUMN stopLoss REAL DEFAULT NULL') } catch (_) {}
+  // Give existing $0 portfolios the $500 starting balance
+  try { db.exec('UPDATE paper_portfolios SET cashBalance = 500 WHERE cashBalance = 0') } catch (_) {}
 }
 
 module.exports = { getDb };

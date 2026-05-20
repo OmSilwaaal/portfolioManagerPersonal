@@ -547,7 +547,7 @@ function Leaderboard({ currentUserId }) {
     <div className="rounded-2xl overflow-hidden" style={glassCard}>
       <div className="px-5 py-4 border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
         <h3 className="text-sm font-semibold text-white">Leaderboard</h3>
-        <p className="text-[11px] text-white/30 mt-0.5">Portfolio value (positions estimated at avg cost)</p>
+        <p className="text-[11px] text-white/30 mt-0.5">Ranked by trading return on starting $500 — extra top-ups excluded</p>
       </div>
       {isLoading ? (
         <div className="p-5 space-y-3">
@@ -565,7 +565,7 @@ function Leaderboard({ currentUserId }) {
         <div className="divide-y" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
           {board.map((entry, idx) => {
             const isMe = entry.userId === currentUserId
-            const positive = entry.pnl >= 0
+            const positive = (entry.returnPct ?? 0) >= 0
             return (
               <div key={entry.userId} className={`flex items-center gap-4 px-5 py-3.5 ${isMe ? 'bg-white/[0.03]' : ''}`}>
                 <span className={`text-sm font-bold w-6 text-center tabular-nums ${idx === 0 ? 'text-yellow-400' : idx === 1 ? 'text-gray-300' : idx === 2 ? 'text-amber-600' : 'text-white/30'}`}>
@@ -579,9 +579,11 @@ function Leaderboard({ currentUserId }) {
                   <p className="text-[11px] text-white/30">{entry.positionCount} position{entry.positionCount !== 1 ? 's' : ''}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-semibold text-white tabular-nums">{fmtCompact(entry.totalValue)}</p>
-                  <p className={`text-[11px] tabular-nums ${positive ? 'text-emerald-400' : 'text-red-400'}`}>
+                  <p className={`text-lg font-bold tabular-nums ${positive ? 'text-emerald-400' : 'text-red-400'}`}>
                     {positive ? '+' : ''}{fmt(entry.returnPct)}%
+                  </p>
+                  <p className="text-[11px] text-white/30 tabular-nums">
+                    {positive ? '+' : ''}${fmt(Math.abs(entry.tradingPnl ?? 0))} P&L
                   </p>
                 </div>
               </div>
@@ -730,6 +732,44 @@ function PaperTradingInner({ userId }) {
                 />
               </div>
             </div>
+
+            {/* Compact open positions — visible without switching tabs */}
+            {positions.length > 0 && (
+              <div className="mt-6 rounded-2xl overflow-hidden" style={glassCard}>
+                <div className="px-5 py-3 border-b flex items-center justify-between" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+                  <span className="text-xs uppercase tracking-widest text-white/30 font-semibold">Open Positions</span>
+                  <button onClick={() => setActiveTab('positions')} className="text-[11px] text-white/30 hover:text-white/60 transition-colors">View all →</button>
+                </div>
+                <div className="divide-y" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+                  {positions.map((pos) => {
+                    const positive = (pos.pnl ?? 0) >= 0
+                    return (
+                      <div key={pos.ticker} className="flex items-center gap-4 px-5 py-3">
+                        <button
+                          onClick={() => setTicker(pos.ticker)}
+                          className="font-bold text-sm text-white hover:text-white/70 transition-colors w-14 text-left"
+                        >
+                          {pos.ticker}
+                        </button>
+                        <span className="text-xs text-white/40 w-16">{pos.shares} sh @ ${fmt(pos.avgCost)}</span>
+                        <span className="text-xs text-white/60 flex-1">
+                          {pos.currentPrice != null ? `$${fmt(pos.currentPrice)}` : '—'}
+                        </span>
+                        <span className={`text-xs font-semibold tabular-nums ${positive ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {pos.pnl != null ? `${positive ? '+' : ''}$${fmt(Math.abs(pos.pnl))}` : '—'}
+                        </span>
+                        <button
+                          onClick={() => setCloseModal(pos)}
+                          className="text-xs text-red-400/60 hover:text-red-400 transition-colors ml-2"
+                        >
+                          Close
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

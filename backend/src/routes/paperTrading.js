@@ -9,7 +9,7 @@ const stripe = process.env.STRIPE_SECRET_KEY
   : null
 
 function ensurePortfolio(db, userId) {
-  db.prepare('INSERT OR IGNORE INTO paper_portfolios (userId) VALUES (?)').run(userId)
+  db.prepare('INSERT OR IGNORE INTO paper_portfolios (userId, cashBalance) VALUES (?, 500)').run(userId)
   return db.prepare('SELECT * FROM paper_portfolios WHERE userId = ?').get(userId)
 }
 
@@ -249,6 +249,7 @@ router.patch('/positions/:ticker', requireAuth, (req, res, next) => {
 router.get('/leaderboard', requireAuth, (req, res, next) => {
   try {
     const db = getDb()
+    const STARTING_BALANCE = 500
 
     const portfolios = db.prepare('SELECT * FROM paper_portfolios').all()
 
@@ -259,24 +260,27 @@ router.get('/leaderboard', requireAuth, (req, res, next) => {
       const positionsValue = positions.reduce((s, pos) => s + pos.shares * pos.avgCost, 0)
       const totalValue = p.cashBalance + positionsValue
 
-      const deposited = db.prepare(
+      // Extra cash purchased (deposits) — excluded from performance calc
+      const extraDeposits = db.prepare(
         "SELECT COALESCE(SUM(total), 0) AS t FROM paper_transactions WHERE userId = ? AND type = 'deposit'"
       ).get(p.userId).t
 
-      const pnl = totalValue - deposited
-      const returnPct = deposited > 0 ? (pnl / deposited) * 100 : 0
+      // Trading P&L = current value minus what they started with, ignoring top-ups
+      const tradingPnl = totalValue - STARTING_BALANCE - extraDeposits
+      // Return % based purely on the original $500, not purchased cash
+      const returnPct = (tradingPnl / STARTING_BALANCE) * 100
 
       return {
         userId: p.userId,
         totalValue,
-        cashBalance: p.cashBalance,
-        pnl,
+        tradingPnl,
         returnPct,
         positionCount: positions.length,
       }
     })
 
-    board.sort((a, b) => b.totalValue - a.totalValue)
+    // Rank by pure trading return %, not portfolio size
+    board.sort((a, b) => b.returnPct - a.returnPct)
 
     res.json({ leaderboard: board.slice(0, 50) })
   } catch (err) {

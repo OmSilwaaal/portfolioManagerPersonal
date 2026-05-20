@@ -1,8 +1,42 @@
 const axios = require('axios');
 const NodeCache = require('node-cache');
 
-const cache = new NodeCache({ stdTTL: 3600 }); // 60 minutes
+const cache = new NodeCache({ stdTTL: 900 }); // 15 minutes
 const BASE_URL = 'https://www.alphavantage.co/query';
+
+// ETF proxies for live Finnhub quotes when Alpha Vantage key is absent
+const COMMODITY_ETF_PROXY = {
+  SILVER:      'SLV',
+  GOLD:        'GLD',
+  WTI:         'USO',
+  BRENT:       'BNO',
+  NATURAL_GAS: 'UNG',
+  COPPER:      'CPER',
+  WHEAT:       'WEAT',
+  CORN:        'CORN',
+  SUGAR:       'SGG',
+  COFFEE:      'JO',
+  PLATINUM:    'PPLT',
+  PALLADIUM:   'PALL',
+  SOYBEANS:    'SOYB',
+  COTTON:      'BAL',
+}
+
+async function finnhubQuote(symbol) {
+  const token = process.env.FINNHUB_API_KEY
+  if (!token) return null
+  try {
+    const resp = await axios.get('https://finnhub.io/api/v1/quote', {
+      params: { symbol, token },
+      timeout: 6000,
+    })
+    const d = resp.data
+    if (!d || !d.c) return null
+    return { price: d.c, changePercent: d.dp ?? 0 }
+  } catch (_) {
+    return null
+  }
+}
 
 const MOCK_COMMODITIES = [
   { commodity: 'WTI Crude Oil', symbol: 'WTI', price: 78.42, unit: 'USD/barrel', changePercent: -0.8, sector: 'Energy', relatedETFs: ['USO', 'XLE', 'OIH'] },
@@ -62,10 +96,25 @@ const SYMBOL_META = {
 
 async function getCommodityPrice(commodity) {
   const apiKey = process.env.ALPHA_VANTAGE_API_KEY;
+  const sym = commodity.toUpperCase();
 
   if (!apiKey) {
-    const mock = MOCK_COMMODITIES.find((m) => m.symbol === commodity.toUpperCase());
-    return mock || MOCK_COMMODITIES[0];
+    const cacheKey = `commodity_live_${sym}`;
+    const cached = cache.get(cacheKey);
+    if (cached) return cached;
+
+    // Try Finnhub ETF proxy for a live price
+    const etfTicker = COMMODITY_ETF_PROXY[sym];
+    const mock = MOCK_COMMODITIES.find((m) => m.symbol === sym) || MOCK_COMMODITIES[0];
+    if (etfTicker) {
+      const quote = await finnhubQuote(etfTicker);
+      if (quote) {
+        const result = { ...mock, price: quote.price, changePercent: parseFloat((quote.changePercent ?? 0).toFixed(2)), lastRefreshed: new Date().toISOString().split('T')[0] };
+        cache.set(cacheKey, result);
+        return result;
+      }
+    }
+    return { ...mock, lastRefreshed: new Date().toISOString().split('T')[0] };
   }
 
   const cacheKey = `commodity_${commodity}`;
@@ -123,7 +172,13 @@ async function getAllCommodities() {
   const apiKey = process.env.ALPHA_VANTAGE_API_KEY;
 
   if (!apiKey) {
-    return MOCK_COMMODITIES.map((m) => ({ ...m, lastRefreshed: new Date().toISOString().split('T')[0] }));
+    // Fetch live ETF proxies via Finnhub for all supported symbols in parallel
+    const results = await Promise.allSettled(
+      MOCK_COMMODITIES.map((m) => getCommodityPrice(m.symbol))
+    );
+    return results.map((r, i) =>
+      r.status === 'fulfilled' && r.value ? r.value : { ...MOCK_COMMODITIES[i], lastRefreshed: new Date().toISOString().split('T')[0] }
+    );
   }
 
   const symbols = Object.keys(SYMBOL_TO_FUNCTION).filter((s) => s !== 'ALL_COMMODITIES');

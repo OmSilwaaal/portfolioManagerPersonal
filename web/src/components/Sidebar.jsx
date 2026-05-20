@@ -1,7 +1,7 @@
 import { NavLink, Link, useNavigate, useLocation } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { resetPreferences } from '../store/preferencesSlice'
-import { setFeedFilter, setFeedSubFilter, setFeedExpanded } from '../store/feedSlice'
+import { setFeedFilter, setFeedSubFilter, setFeedExpanded, toggleFeedExpanded } from '../store/feedSlice'
 import { supabase } from '../utils/supabase/client'
 import { useAuth } from '../contexts/AuthContext'
 import { useGetMyProfileQuery } from '../api/profilesApi'
@@ -222,7 +222,7 @@ export default function Sidebar() {
             <NavLink
               to="/feed"
               end
-              onClick={() => dispatch(setFeedExpanded(true))}
+              onClick={() => dispatch(isFeed ? toggleFeedExpanded() : setFeedExpanded(true))}
               className={({ isActive }) =>
                 `relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 ${
                   isActive ? 'text-white' : 'text-white/35 hover:text-white/70 hover:bg-white/[0.04]'
