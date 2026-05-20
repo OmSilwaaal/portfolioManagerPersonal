@@ -134,6 +134,10 @@ function initSchema() {
       createdAt   TEXT    NOT NULL DEFAULT (datetime('now'))
     );
   `);
+
+  // Migrations — add columns if they don't exist (SQLite lacks ADD COLUMN IF NOT EXISTS)
+  try { db.exec('ALTER TABLE paper_positions ADD COLUMN targetPrice REAL DEFAULT NULL') } catch (_) {}
+  try { db.exec('ALTER TABLE paper_positions ADD COLUMN stopLoss REAL DEFAULT NULL') } catch (_) {}
 }
 
 module.exports = { getDb };

@@ -1,9 +1,21 @@
-import { useState } from 'react'
-import { useSelector } from 'react-redux'
+import { useState, useEffect } from 'react'
+import { useAuth } from '../contexts/AuthContext'
+import TradingViewChart from '../components/TradingViewChart'
+import {
+  useGetPortfolioQuery,
+  useBuyStockMutation,
+  useSellStockMutation,
+  useUpdatePositionMutation,
+  useGetTransactionsQuery,
+  useGetLeaderboardQuery,
+  usePurchaseCashMutation,
+} from '../api/paperTradingApi'
+import { useGetStockQuery } from '../api/stocksApi'
 
-/* ─── Access codes ────────────────────────────────────────────────────────── */
+/* ─── Access gate ─────────────────────────────────────────────────────────── */
 const VALID_CODES = new Set(['MARKETIQ2026', 'PAPERTRADER', 'EARLYACCESS', 'TRADEBETA'])
 const LS_KEY = 'miq_pt_unlocked'
+const ORDER_LS_KEY = 'miq_group_order' // reuse key pattern
 
 function useAccessCode() {
   const [unlocked, setUnlocked] = useState(() => localStorage.getItem(LS_KEY) === '1')
@@ -30,7 +42,6 @@ function AccessGate({ onUnlock }) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center min-h-0 bg-[#0a0a0a] px-6">
       <div className="w-full max-w-sm">
-        {/* Icon */}
         <div
           className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-6"
           style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
@@ -39,14 +50,8 @@ function AccessGate({ onUnlock }) {
             <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
           </svg>
         </div>
-
-        <h1 className="text-2xl font-bold text-white text-center tracking-tight mb-2">
-          Paper Trading
-        </h1>
-        <p className="text-white/35 text-sm text-center mb-8">
-          This feature is in early access. Enter your access code to continue.
-        </p>
-
+        <h1 className="text-2xl font-bold text-white text-center tracking-tight mb-2">Paper Trading</h1>
+        <p className="text-white/35 text-sm text-center mb-8">Early access feature — enter your code to continue.</p>
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <input
             type="text"
@@ -55,10 +60,7 @@ function AccessGate({ onUnlock }) {
             placeholder="Enter access code"
             autoFocus
             className="w-full px-4 py-3 rounded-xl text-sm text-white placeholder-white/20 focus:outline-none tracking-widest uppercase"
-            style={{
-              background: 'rgba(255,255,255,0.05)',
-              border: error ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(255,255,255,0.10)',
-            }}
+            style={{ background: 'rgba(255,255,255,0.05)', border: error ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(255,255,255,0.10)' }}
           />
           {error && <p className="text-red-400 text-xs text-center">{error}</p>}
           <button
@@ -69,47 +71,26 @@ function AccessGate({ onUnlock }) {
             Unlock
           </button>
         </form>
-
-        <p className="text-white/15 text-xs text-center mt-6">
-          Don't have a code? Join the waitlist to get early access.
-        </p>
       </div>
     </div>
   )
 }
-import {
-  useGetPortfolioQuery,
-  useGetTradableStocksQuery,
-  useBuyStockMutation,
-  useSellStockMutation,
-  useGetTransactionsQuery,
-  usePurchaseCashMutation,
-} from '../api/paperTradingApi'
-import { useGetStockQuery } from '../api/stocksApi'
-import TradingViewChart from '../components/TradingViewChart'
 
-/* ─── Style constants ─────────────────────────────────────────────────────── */
-const glassStyle = {
-  background: 'linear-gradient(145deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 50%, rgba(255,255,255,0.06) 100%)',
-  backdropFilter: 'blur(24px) saturate(180%)',
-  WebkitBackdropFilter: 'blur(24px) saturate(180%)',
-  border: '1px solid rgba(255,255,255,0.10)',
-  boxShadow: '0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.14)',
+/* ─── Helpers ─────────────────────────────────────────────────────────────── */
+const fmt = (n, dec = 2) =>
+  n == null ? '—' : n.toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec })
+
+const fmtCompact = (n) => {
+  if (n == null) return '—'
+  if (Math.abs(n) >= 1e12) return `$${(n / 1e12).toFixed(2)}T`
+  if (Math.abs(n) >= 1e9) return `$${(n / 1e9).toFixed(2)}B`
+  if (Math.abs(n) >= 1e6) return `$${(n / 1e6).toFixed(2)}M`
+  if (Math.abs(n) >= 1e3) return `$${(n / 1e3).toFixed(1)}K`
+  return `$${fmt(n)}`
 }
-
-/* ─── Role config ─────────────────────────────────────────────────────────── */
-const ROLE_CONFIG = {
-  student:      { label: 'Student',             hint: 'Practice without risk — the best way to learn markets.' },
-  educator:     { label: 'Educator',            hint: 'Demonstrate real trading concepts with simulated markets.' },
-  professional: { label: 'Professional Trader', hint: 'Test strategies before committing real capital.' },
-  retail:       { label: 'Retail Investor',     hint: 'Practise on your own terms, zero downside.' },
-  fun:          { label: 'Trading for Fun',     hint: 'No pressure — just play the market.' },
-}
-
-/* ─── Formatting helpers ──────────────────────────────────────────────────── */
-const fmt = (n) => n?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '—'
 
 const fmtTime = (iso) => {
+  if (!iso) return ''
   const diff = Date.now() - new Date(iso).getTime()
   if (diff < 60000) return 'just now'
   if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
@@ -117,67 +98,496 @@ const fmtTime = (iso) => {
   return `${Math.floor(diff / 86400000)}d ago`
 }
 
-/* ─── Expanded stock detail ───────────────────────────────────────────────── */
-function ExpandedStockRow({ ticker, onBuy }) {
-  const { data, isLoading } = useGetStockQuery(ticker)
+const glassCard = {
+  background: 'rgba(255,255,255,0.04)',
+  border: '1px solid rgba(255,255,255,0.08)',
+  borderRadius: 16,
+}
 
-  const fmtStat = (n) =>
-    n == null ? '—' : n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+/* ─── Stat chip ───────────────────────────────────────────────────────────── */
+function Stat({ label, value, color }) {
+  return (
+    <div className="flex flex-col gap-0.5 px-3 py-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.04)' }}>
+      <span className="text-[10px] uppercase tracking-widest text-white/30">{label}</span>
+      <span className={`text-xs font-semibold tabular-nums ${color ?? 'text-white/80'}`}>{value}</span>
+    </div>
+  )
+}
 
-  const fmtVol = (n) => {
-    if (n == null) return '—'
-    if (n >= 1e9) return `${(n / 1e9).toFixed(2)}B`
-    if (n >= 1e6) return `${(n / 1e6).toFixed(2)}M`
-    if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`
-    return n.toLocaleString()
+/* ─── Ticker search ───────────────────────────────────────────────────────── */
+function TickerSearch({ value, onConfirm }) {
+  const [input, setInput] = useState(value)
+
+  const submit = () => {
+    const t = input.trim().toUpperCase()
+    if (t) onConfirm(t)
   }
 
-  const change = data?.change ?? 0
-  const changePct = data?.changePercent ?? 0
-  const positive = change >= 0
+  return (
+    <div className="flex gap-2 mb-4">
+      <input
+        type="text"
+        value={input}
+        onChange={(e) => setInput(e.target.value.toUpperCase())}
+        onKeyDown={(e) => e.key === 'Enter' && submit()}
+        placeholder="Search ticker — e.g. AAPL, TSLA, BTC-USD"
+        className="flex-1 px-4 py-2.5 rounded-xl text-sm text-white placeholder-white/20 focus:outline-none"
+        style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)' }}
+      />
+      <button
+        onClick={submit}
+        className="px-4 py-2.5 rounded-xl text-sm font-medium bg-white/10 hover:bg-white/15 text-white transition-colors"
+      >
+        Go
+      </button>
+    </div>
+  )
+}
 
-  const stats = [
-    { label: 'Price',       value: data?.price != null ? `$${fmtStat(data.price)}` : '—' },
-    { label: 'Change',      value: data ? `${positive ? '+' : ''}${fmtStat(change)} (${positive ? '+' : ''}${fmtStat(changePct)}%)` : '—', color: positive ? 'text-emerald-400' : 'text-red-400' },
-    { label: 'Open',        value: data?.open != null ? `$${fmtStat(data.open)}` : '—' },
-    { label: 'Prev Close',  value: data?.previousClose != null ? `$${fmtStat(data.previousClose)}` : '—' },
-    { label: 'Day High',    value: data?.high != null ? `$${fmtStat(data.high)}` : '—' },
-    { label: 'Day Low',     value: data?.low != null ? `$${fmtStat(data.low)}` : '—' },
-    { label: 'Volume',      value: fmtVol(data?.volume) },
-    { label: 'Market Cap',  value: data?.marketCap != null ? `$${fmtVol(data.marketCap * 1e6)}` : '—' },
-  ]
+/* ─── Order panel ─────────────────────────────────────────────────────────── */
+function OrderPanel({ ticker, stockData, stockLoading, stockError, cash, position, onSuccess }) {
+  const [mode, setMode] = useState('buy')
+  const [shares, setShares] = useState('')
+  const [targetPrice, setTargetPrice] = useState('')
+  const [stopLoss, setStopLoss] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+
+  const [buyStock] = useBuyStockMutation()
+  const [sellStock] = useSellStockMutation()
+
+  const price = stockData?.price ?? null
+  const sharesNum = parseFloat(shares) || 0
+  const total = price != null ? sharesNum * price : null
+  const canAfford = total != null && total <= cash
+  const maxSell = position?.shares ?? 0
+
+  useEffect(() => { setError(''); setSuccess('') }, [ticker, mode])
+
+  const handleSubmit = async () => {
+    if (!shares || sharesNum <= 0) { setError('Enter a valid number of shares'); return }
+    setLoading(true)
+    setError('')
+    setSuccess('')
+    try {
+      if (mode === 'buy') {
+        const tp = parseFloat(targetPrice) || null
+        const sl = parseFloat(stopLoss) || null
+        await buyStock({ ticker, shares: sharesNum, targetPrice: tp, stopLoss: sl }).unwrap()
+        setSuccess(`Bought ${sharesNum} share${sharesNum !== 1 ? 's' : ''} of ${ticker}`)
+        setShares('')
+        setTargetPrice('')
+        setStopLoss('')
+        onSuccess?.()
+      } else {
+        await sellStock({ ticker, shares: sharesNum }).unwrap()
+        setSuccess(`Sold ${sharesNum} share${sharesNum !== 1 ? 's' : ''} of ${ticker}`)
+        setShares('')
+        onSuccess?.()
+      }
+    } catch (err) {
+      setError(err?.data?.error ?? err?.message ?? 'Something went wrong.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const canSubmit = !loading && sharesNum > 0 && price != null &&
+    (mode === 'buy' ? canAfford : sharesNum <= maxSell)
 
   return (
-    <div className="px-4 pb-4 border-b" style={{ borderColor: 'rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.015)' }}>
-      {isLoading ? (
-        <div className="animate-pulse py-4 space-y-2">
-          <div className="h-40 bg-white/6 rounded-xl" />
-          <div className="grid grid-cols-4 gap-2 mt-3">
-            {Array.from({ length: 8 }).map((_, i) => <div key={i} className="h-8 bg-white/6 rounded" />)}
+    <div className="flex flex-col gap-4 p-5 h-full" style={glassCard}>
+      {/* Price header */}
+      <div>
+        <p className="text-xs text-white/30 uppercase tracking-widest mb-1">{ticker}</p>
+        {stockLoading ? (
+          <div className="h-8 w-32 bg-white/10 rounded animate-pulse" />
+        ) : stockError ? (
+          <p className="text-red-400 text-sm">Ticker not found</p>
+        ) : (
+          <div className="flex items-end gap-2">
+            <span className="text-3xl font-bold text-white tabular-nums">
+              {price != null ? `$${fmt(price)}` : '—'}
+            </span>
+            {stockData?.change != null && (
+              <span className={`text-sm font-medium mb-0.5 ${stockData.change >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {stockData.change >= 0 ? '+' : ''}{fmt(stockData.change)} ({stockData.changePercent >= 0 ? '+' : ''}{fmt(stockData.changePercent)}%)
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Buy / Sell tabs */}
+      <div className="flex gap-1 p-1 rounded-lg" style={{ background: 'rgba(255,255,255,0.06)' }}>
+        <button
+          onClick={() => setMode('buy')}
+          className={`flex-1 py-1.5 rounded-md text-sm font-medium transition-all ${mode === 'buy' ? 'bg-emerald-500 text-white' : 'text-white/40 hover:text-white'}`}
+        >
+          Buy
+        </button>
+        <button
+          onClick={() => setMode('sell')}
+          className={`flex-1 py-1.5 rounded-md text-sm font-medium transition-all ${mode === 'sell' ? 'bg-red-500 text-white' : 'text-white/40 hover:text-white'}`}
+        >
+          Sell
+        </button>
+      </div>
+
+      {/* Inputs */}
+      <div className="flex flex-col gap-3">
+        <div>
+          <label className="block text-[11px] text-white/40 mb-1 uppercase tracking-wider">Shares</label>
+          <input
+            type="number"
+            min={0.01}
+            step="any"
+            value={shares}
+            onChange={(e) => { setShares(e.target.value); setError('') }}
+            placeholder="0"
+            className="w-full px-3 py-2.5 rounded-lg text-white text-sm focus:outline-none tabular-nums"
+            style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.10)' }}
+          />
+          {mode === 'sell' && maxSell > 0 && (
+            <button
+              onClick={() => setShares(String(maxSell))}
+              className="mt-1 text-[11px] text-white/30 hover:text-white/60 transition-colors"
+            >
+              Max: {maxSell} shares
+            </button>
+          )}
+        </div>
+
+        {mode === 'buy' && (
+          <>
+            <div>
+              <label className="block text-[11px] text-white/40 mb-1 uppercase tracking-wider">
+                Target Price <span className="normal-case text-white/20">(auto-sell above)</span>
+              </label>
+              <input
+                type="number"
+                min={0}
+                step="any"
+                value={targetPrice}
+                onChange={(e) => setTargetPrice(e.target.value)}
+                placeholder="Optional"
+                className="w-full px-3 py-2.5 rounded-lg text-white text-sm focus:outline-none tabular-nums"
+                style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.10)' }}
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] text-white/40 mb-1 uppercase tracking-wider">
+                Stop Loss <span className="normal-case text-white/20">(auto-sell below)</span>
+              </label>
+              <input
+                type="number"
+                min={0}
+                step="any"
+                value={stopLoss}
+                onChange={(e) => setStopLoss(e.target.value)}
+                placeholder="Optional"
+                className="w-full px-3 py-2.5 rounded-lg text-white text-sm focus:outline-none tabular-nums"
+                style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.10)' }}
+              />
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Order summary */}
+      {total != null && sharesNum > 0 && (
+        <div className="rounded-lg px-3 py-2.5 space-y-1" style={{ background: 'rgba(255,255,255,0.04)' }}>
+          <div className="flex justify-between text-xs">
+            <span className="text-white/40">Est. total</span>
+            <span className="text-white font-semibold tabular-nums">${fmt(total)}</span>
+          </div>
+          <div className="flex justify-between text-xs">
+            <span className="text-white/40">Cash after</span>
+            <span className={`font-semibold tabular-nums ${mode === 'buy' ? (canAfford ? 'text-white/70' : 'text-red-400') : 'text-emerald-400'}`}>
+              ${fmt(mode === 'buy' ? cash - total : cash + total)}
+            </span>
           </div>
         </div>
-      ) : (
-        <>
-          <div className="pt-3 pb-3 rounded-xl overflow-hidden" style={{ height: 300 }}>
-            <TradingViewChart ticker={ticker} />
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1">
-            {stats.map(({ label, value, color }) => (
-              <div key={label} className="rounded-lg px-3 py-2" style={{ background: 'rgba(255,255,255,0.05)' }}>
-                <p className="text-[10px] uppercase tracking-widest text-white/30 mb-0.5">{label}</p>
-                <p className={`text-xs font-semibold tabular-nums ${color ?? 'text-white/80'}`}>{value}</p>
-              </div>
-            ))}
-          </div>
-          <div className="mt-3 flex justify-end">
-            <button
-              onClick={onBuy}
-              className="px-4 py-2 rounded-lg text-xs font-semibold bg-white text-[#0a0a0a] hover:bg-white/90 transition-colors"
-            >
-              Buy {ticker}
+      )}
+
+      {error && <p className="text-red-400 text-xs">{error}</p>}
+      {success && <p className="text-emerald-400 text-xs">{success}</p>}
+
+      <button
+        onClick={handleSubmit}
+        disabled={!canSubmit}
+        className={`w-full py-3 rounded-xl text-sm font-semibold transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
+          mode === 'buy'
+            ? 'bg-emerald-500 hover:bg-emerald-400 text-white'
+            : 'bg-red-500 hover:bg-red-400 text-white'
+        }`}
+      >
+        {loading ? 'Processing...' : mode === 'buy' ? `Buy ${ticker}` : `Sell ${ticker}`}
+      </button>
+
+      {mode === 'buy' && (
+        <p className="text-[11px] text-white/20 text-center">
+          Available cash: ${fmt(cash)}
+        </p>
+      )}
+    </div>
+  )
+}
+
+/* ─── Positions table ─────────────────────────────────────────────────────── */
+function PositionRow({ pos, onClose, onUpdateTP }) {
+  const positive = (pos.pnl ?? 0) >= 0
+  const [editing, setEditing] = useState(false)
+  const [tp, setTp] = useState(pos.targetPrice != null ? String(pos.targetPrice) : '')
+  const [sl, setSl] = useState(pos.stopLoss != null ? String(pos.stopLoss) : '')
+  const [updatePosition] = useUpdatePositionMutation()
+  const [saving, setSaving] = useState(false)
+
+  const saveOrders = async () => {
+    setSaving(true)
+    try {
+      await updatePosition({
+        ticker: pos.ticker,
+        targetPrice: parseFloat(tp) || null,
+        stopLoss: parseFloat(sl) || null,
+      }).unwrap()
+      setEditing(false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <>
+      <tr className="border-b" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+        <td className="py-3 pr-3">
+          <button onClick={() => onUpdateTP(pos.ticker)} className="text-left">
+            <span className="font-bold text-white text-sm block">{pos.ticker}</span>
+            <span className="text-[11px] text-white/30">{pos.shares} shares</span>
+          </button>
+        </td>
+        <td className="py-3 pr-3 text-sm text-white/60 tabular-nums">${fmt(pos.avgCost)}</td>
+        <td className="py-3 pr-3 text-sm text-white/80 tabular-nums">
+          {pos.currentPrice != null ? `$${fmt(pos.currentPrice)}` : '—'}
+        </td>
+        <td className={`py-3 pr-3 text-sm font-medium tabular-nums ${positive ? 'text-emerald-400' : 'text-red-400'}`}>
+          <span className="block">{pos.pnl != null ? `${positive ? '+' : ''}$${fmt(Math.abs(pos.pnl))}` : '—'}</span>
+          <span className="text-[11px] opacity-70">{pos.pnlPct != null ? `${positive ? '+' : ''}${fmt(pos.pnlPct)}%` : ''}</span>
+        </td>
+        <td className="py-3 pr-3">
+          <button
+            onClick={() => setEditing(!editing)}
+            className="text-[11px] text-white/40 hover:text-white/70 transition-colors"
+          >
+            {pos.targetPrice != null ? `TP $${fmt(pos.targetPrice)}` : '—'} / {pos.stopLoss != null ? `SL $${fmt(pos.stopLoss)}` : '—'}
+          </button>
+        </td>
+        <td className="py-3">
+          <button
+            onClick={() => onClose(pos)}
+            className="px-2.5 py-1 rounded-lg text-xs font-medium text-red-400 hover:bg-red-500/10 transition-colors border border-red-500/20"
+          >
+            Close
+          </button>
+        </td>
+      </tr>
+      {editing && (
+        <tr style={{ borderColor: 'transparent' }}>
+          <td colSpan={6} className="pb-3">
+            <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <span className="text-[11px] text-white/40 mr-1">TP</span>
+              <input
+                type="number"
+                value={tp}
+                onChange={(e) => setTp(e.target.value)}
+                placeholder="Target Price"
+                className="w-28 px-2 py-1 rounded-lg text-xs text-white focus:outline-none"
+                style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.10)' }}
+              />
+              <span className="text-[11px] text-white/40 ml-2 mr-1">SL</span>
+              <input
+                type="number"
+                value={sl}
+                onChange={(e) => setSl(e.target.value)}
+                placeholder="Stop Loss"
+                className="w-28 px-2 py-1 rounded-lg text-xs text-white focus:outline-none"
+                style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.10)' }}
+              />
+              <button
+                onClick={saveOrders}
+                disabled={saving}
+                className="ml-2 px-3 py-1 rounded-lg text-xs font-medium bg-white text-[#0a0a0a] hover:bg-white/90 transition-colors disabled:opacity-40"
+              >
+                {saving ? 'Saving...' : 'Save'}
+              </button>
+              <button
+                onClick={() => setEditing(false)}
+                className="px-2 py-1 rounded-lg text-xs text-white/40 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  )
+}
+
+/* ─── Close position modal ────────────────────────────────────────────────── */
+function CloseModal({ pos, cash, onConfirm, onCancel }) {
+  const [shares, setShares] = useState(String(pos.shares))
+  const sharesNum = parseFloat(shares) || 0
+  const total = pos.currentPrice != null ? sharesNum * pos.currentPrice : null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+      onClick={(e) => { if (e.target === e.currentTarget) onCancel() }}>
+      <div className="w-full max-w-sm rounded-2xl p-6" style={{ background: '#111', border: '1px solid rgba(255,255,255,0.10)' }}>
+        <h2 className="text-base font-bold text-white mb-1">Close {pos.ticker} Position</h2>
+        <p className="text-xs text-white/40 mb-4">Current price: {pos.currentPrice != null ? `$${fmt(pos.currentPrice)}` : 'Unknown'}</p>
+        <div className="mb-4">
+          <label className="block text-[11px] text-white/40 mb-1 uppercase tracking-wider">Shares to sell</label>
+          <input
+            type="number"
+            min={0.01}
+            max={pos.shares}
+            step="any"
+            value={shares}
+            onChange={(e) => setShares(e.target.value)}
+            className="w-full px-3 py-2.5 rounded-lg text-white text-sm focus:outline-none"
+            style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.10)' }}
+          />
+          <button onClick={() => setShares(String(pos.shares))} className="mt-1 text-[11px] text-white/30 hover:text-white/60">
+            Sell all {pos.shares} shares
+          </button>
+        </div>
+        {total != null && <div className="flex justify-between text-xs mb-4">
+          <span className="text-white/40">You'll receive</span>
+          <span className="text-white font-semibold">${fmt(total)}</span>
+        </div>}
+        <div className="flex gap-2">
+          <button onClick={onCancel} className="flex-1 py-2.5 rounded-xl text-sm font-medium text-white/50 hover:text-white border transition-colors" style={{ borderColor: 'rgba(255,255,255,0.12)' }}>Cancel</button>
+          <button
+            onClick={() => onConfirm(pos.ticker, sharesNum)}
+            disabled={sharesNum <= 0 || sharesNum > pos.shares}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-red-500 hover:bg-red-400 text-white disabled:opacity-30 transition-colors"
+          >
+            Confirm Sell
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ─── Add cash modal ──────────────────────────────────────────────────────── */
+function CashModal({ onClose }) {
+  const [units, setUnits] = useState(1)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+  const [purchaseCash] = usePurchaseCashMutation()
+  const paperAmount = units * 500
+  const usdCost = units * 5
+
+  const handlePurchase = async () => {
+    setLoading(true); setError(''); setSuccess('')
+    try {
+      const result = await purchaseCash({ units }).unwrap()
+      if (result?.url) { window.location.href = result.url }
+      else if (result?.devMode) { setSuccess(`$${paperAmount} paper cash credited!`) }
+      else if (result?.error) { setError(result.error) }
+    } catch (err) {
+      setError(err?.data?.error ?? 'Something went wrong.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="w-full max-w-sm rounded-2xl p-6" style={{ background: '#111', border: '1px solid rgba(255,255,255,0.10)' }}>
+        <h2 className="text-base font-bold text-white mb-1">Add Paper Cash</h2>
+        <p className="text-xs text-white/40 mb-5">1 unit = $5 USD → $500 paper cash</p>
+        <div className="flex gap-2 mb-5">
+          {[1, 2, 5, 10].map((u) => (
+            <button key={u} onClick={() => setUnits(u)}
+              className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${units === u ? 'bg-white text-[#0a0a0a]' : 'text-white/60 hover:text-white border'}`}
+              style={units !== u ? { borderColor: 'rgba(255,255,255,0.15)' } : {}}>
+              {u}
             </button>
-          </div>
-        </>
+          ))}
+        </div>
+        <div className="rounded-lg p-3 mb-4 space-y-1.5" style={{ background: 'rgba(255,255,255,0.05)' }}>
+          <div className="flex justify-between text-sm"><span className="text-white/40">You get</span><span className="text-white font-semibold">${paperAmount.toLocaleString()} paper cash</span></div>
+          <div className="flex justify-between text-sm"><span className="text-white/40">You pay</span><span className="text-white font-semibold">${usdCost} USD</span></div>
+        </div>
+        {success && <p className="text-emerald-400 text-xs mb-3">{success}</p>}
+        {error && <p className="text-red-400 text-xs mb-3">{error}</p>}
+        <div className="flex gap-2">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl text-sm font-medium text-white/50 hover:text-white border transition-colors" style={{ borderColor: 'rgba(255,255,255,0.12)' }}>Cancel</button>
+          <button onClick={handlePurchase} disabled={loading} className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-white text-[#0a0a0a] hover:bg-white/90 disabled:opacity-40 transition-colors">
+            {loading ? 'Processing...' : 'Continue'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ─── Leaderboard ─────────────────────────────────────────────────────────── */
+function Leaderboard({ currentUserId }) {
+  const { data, isLoading } = useGetLeaderboardQuery()
+  const board = data?.leaderboard ?? []
+
+  return (
+    <div className="rounded-2xl overflow-hidden" style={glassCard}>
+      <div className="px-5 py-4 border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+        <h3 className="text-sm font-semibold text-white">Leaderboard</h3>
+        <p className="text-[11px] text-white/30 mt-0.5">Portfolio value (positions estimated at avg cost)</p>
+      </div>
+      {isLoading ? (
+        <div className="p-5 space-y-3">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3 animate-pulse">
+              <div className="w-6 h-3 bg-white/10 rounded" />
+              <div className="flex-1 h-3 bg-white/10 rounded" />
+              <div className="w-20 h-3 bg-white/8 rounded" />
+            </div>
+          ))}
+        </div>
+      ) : board.length === 0 ? (
+        <div className="px-5 py-8 text-center text-white/30 text-sm">No data yet — be the first to trade!</div>
+      ) : (
+        <div className="divide-y" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+          {board.map((entry, idx) => {
+            const isMe = entry.userId === currentUserId
+            const positive = entry.pnl >= 0
+            return (
+              <div key={entry.userId} className={`flex items-center gap-4 px-5 py-3.5 ${isMe ? 'bg-white/[0.03]' : ''}`}>
+                <span className={`text-sm font-bold w-6 text-center tabular-nums ${idx === 0 ? 'text-yellow-400' : idx === 1 ? 'text-gray-300' : idx === 2 ? 'text-amber-600' : 'text-white/30'}`}>
+                  {idx + 1}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-white font-medium truncate">
+                    {isMe ? 'You' : `Trader ${entry.userId.slice(-4).toUpperCase()}`}
+                    {isMe && <span className="ml-2 text-[10px] text-white/40 font-normal">← you</span>}
+                  </p>
+                  <p className="text-[11px] text-white/30">{entry.positionCount} position{entry.positionCount !== 1 ? 's' : ''}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-white tabular-nums">{fmtCompact(entry.totalValue)}</p>
+                  <p className={`text-[11px] tabular-nums ${positive ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {positive ? '+' : ''}{fmt(entry.returnPct)}%
+                  </p>
+                </div>
+              </div>
+            )
+          })}
+        </div>
       )}
     </div>
   )
@@ -186,456 +596,248 @@ function ExpandedStockRow({ ticker, onBuy }) {
 /* ─── Main page ───────────────────────────────────────────────────────────── */
 export default function PaperTrading() {
   const { unlocked, unlock } = useAccessCode()
-  const traderRole = useSelector((s) => s.preferences.traderRole)
-  const investorType = useSelector((s) => s.preferences.investorType)
-
-  const roleKey = traderRole || investorType || 'retail'
-  const role = ROLE_CONFIG[roleKey] ?? ROLE_CONFIG.retail
+  const { user } = useAuth()
 
   if (!unlocked) return <AccessGate onUnlock={unlock} />
 
-  /* RTK Query hooks */
-  const { data: portfolio, isLoading: portfolioLoading, refetch: refetchPortfolio } = useGetPortfolioQuery()
-  const { data: tradableStocks, isLoading: stocksLoading } = useGetTradableStocksQuery()
-  const { data: transactions, isLoading: txLoading } = useGetTransactionsQuery(10)
-  const [buyStock] = useBuyStockMutation()
-  const [sellStock] = useSellStockMutation()
-  const [purchaseCash] = usePurchaseCashMutation()
+  return <PaperTradingInner userId={user?.id} />
+}
 
-  /* Trade modal state */
-  const [tradeModal, setTradeModal] = useState(null) // { ticker, companyName, price, mode: 'buy'|'sell' }
-  const [tradeShares, setTradeShares] = useState(1)
-  const [tradeError, setTradeError] = useState('')
-  const [tradeLoading, setTradeLoading] = useState(false)
-
-  /* Expanded ticker state */
-  const [expandedTicker, setExpandedTicker] = useState(null)
-
-  /* Cash modal state */
+function PaperTradingInner({ userId }) {
+  const [activeTab, setActiveTab] = useState('trade')
+  const [ticker, setTicker] = useState('AAPL')
   const [cashModal, setCashModal] = useState(false)
-  const [cashUnits, setCashUnits] = useState(1)
-  const [cashLoading, setCashLoading] = useState(false)
-  const [cashError, setCashError] = useState('')
-  const [cashSuccess, setCashSuccess] = useState('')
+  const [closeModal, setCloseModal] = useState(null)
 
-  /* ── Derived values ── */
-  const cash = portfolio?.cash ?? 0
+  const { data: portfolio, isLoading: portfolioLoading, refetch: refetchPortfolio } = useGetPortfolioQuery()
+  const { data: transactions, isLoading: txLoading } = useGetTransactionsQuery(50)
+  const { data: stockData, isLoading: stockLoading, isError: stockError } = useGetStockQuery(ticker, { skip: !ticker })
+  const [sellStock] = useSellStockMutation()
+
+  const cash = portfolio?.cashBalance ?? 0
   const positions = portfolio?.positions ?? []
-  const portfolioValue = positions.reduce((sum, p) => sum + (p.currentValue ?? 0), 0)
-  const totalValue = cash + portfolioValue
+  const positionsValue = positions.reduce((s, p) => s + (p.currentValue ?? 0), 0)
+  const totalValue = cash + positionsValue
+  const totalPnL = positions.reduce((s, p) => s + (p.pnl ?? 0), 0)
 
-  /* ── Open trade modal ── */
-  const openBuyModal = (stock) => {
-    setTradeModal({ ticker: stock.ticker, companyName: stock.companyName, price: stock.price, mode: 'buy' })
-    setTradeShares(1)
-    setTradeError('')
-  }
+  const currentPosition = positions.find((p) => p.ticker === ticker)
 
-  const openSellModal = (position) => {
-    setTradeModal({ ticker: position.ticker, companyName: position.companyName, price: position.currentPrice, mode: 'sell', sharesHeld: position.shares })
-    setTradeShares(1)
-    setTradeError('')
-  }
-
-  const closeTradeModal = () => {
-    setTradeModal(null)
-    setTradeError('')
-    setTradeShares(1)
-  }
-
-  /* ── Confirm trade ── */
-  const handleConfirmTrade = async () => {
-    if (!tradeModal) return
-    setTradeLoading(true)
-    setTradeError('')
+  const handleSell = async (t, shares) => {
     try {
-      const payload = { ticker: tradeModal.ticker, shares: Number(tradeShares) }
-      if (tradeModal.mode === 'buy') {
-        const result = await buyStock(payload).unwrap()
-        if (result?.error) setTradeError(result.error)
-        else closeTradeModal()
-      } else {
-        const result = await sellStock(payload).unwrap()
-        if (result?.error) setTradeError(result.error)
-        else closeTradeModal()
-      }
-    } catch (err) {
-      setTradeError(err?.data?.error ?? err?.message ?? 'Something went wrong.')
-    } finally {
-      setTradeLoading(false)
-    }
+      await sellStock({ ticker: t, shares }).unwrap()
+      setCloseModal(null)
+      refetchPortfolio()
+    } catch (_) {}
   }
 
-  /* ── Confirm cash purchase ── */
-  const handlePurchaseCash = async () => {
-    setCashLoading(true)
-    setCashError('')
-    setCashSuccess('')
-    try {
-      const result = await purchaseCash({ units: cashUnits }).unwrap()
-      if (result?.url) {
-        window.location.href = result.url
-      } else if (result?.devMode) {
-        setCashSuccess(`Cash credited (dev mode)`)
-        refetchPortfolio()
-      } else if (result?.error) {
-        setCashError(result.error)
-      }
-    } catch (err) {
-      setCashError(err?.data?.error ?? err?.message ?? 'Something went wrong.')
-    } finally {
-      setCashLoading(false)
-    }
-  }
-
-  /* ── Trade modal computed ── */
-  const tradePrice = tradeModal?.price ?? 0
-  const tradeTotal = tradeShares * tradePrice
-  const canAfford = tradeTotal <= cash
-
-  /* ── Cash modal computed ── */
-  const paperCashAmount = cashUnits * 500
-  const usdCost = cashUnits * 5
+  const tabs = [
+    { id: 'trade', label: 'Trade' },
+    { id: 'positions', label: `Positions (${positions.length})` },
+    { id: 'history', label: 'History' },
+    { id: 'leaderboard', label: 'Leaderboard' },
+  ]
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[#0a0a0a]">
-      {/* Desktop header */}
-      <header
-        className="hidden md:flex items-center justify-between px-6 py-5 border-b"
-        style={{ borderColor: 'rgba(255,255,255,0.06)' }}
-      >
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-semibold text-white tracking-tight">Paper Trading</h1>
-          <span
-            className="px-2.5 py-0.5 rounded-full text-xs font-medium text-white/70"
-            style={glassStyle}
-          >
-            {role.label}
-          </span>
+      {/* Header */}
+      <header className="px-6 py-4 border-b flex items-center justify-between gap-4 flex-wrap" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+        <div className="flex items-center gap-6 flex-wrap">
+          <div>
+            <p className="text-[10px] uppercase tracking-widest text-white/30 mb-0.5">Cash Balance</p>
+            <p className="text-2xl font-bold text-white tabular-nums">${fmt(cash)}</p>
+          </div>
+          <div className="hidden sm:block w-px h-8" style={{ background: 'rgba(255,255,255,0.08)' }} />
+          <div className="hidden sm:block">
+            <p className="text-[10px] uppercase tracking-widest text-white/30 mb-0.5">Portfolio Value</p>
+            <p className="text-lg font-semibold text-white tabular-nums">${fmt(totalValue)}</p>
+          </div>
+          <div className="hidden sm:block">
+            <p className="text-[10px] uppercase tracking-widest text-white/30 mb-0.5">Unrealized P&L</p>
+            <p className={`text-lg font-semibold tabular-nums ${totalPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              {totalPnL >= 0 ? '+' : ''}${fmt(Math.abs(totalPnL))}
+            </p>
+          </div>
         </div>
-        <p className="text-sm text-white/35 hidden lg:block">{role.hint}</p>
+        <button
+          onClick={() => setCashModal(true)}
+          className="px-4 py-2 rounded-xl text-sm font-semibold bg-white text-[#0a0a0a] hover:bg-white/90 transition-colors"
+        >
+          + Add Cash
+        </button>
       </header>
 
-      <main className="flex-1 overflow-y-auto p-5 md:p-6">
-        {/* Portfolio summary bar */}
-        <div className="mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-          <div>
-            <p className="text-xs uppercase tracking-widest text-white/30 mb-1">Cash Balance</p>
-            <p className="text-4xl font-bold text-white tabular-nums">${fmt(cash)}</p>
-            <p className="text-sm text-white/50 mt-1">Portfolio value: ${fmt(totalValue)}</p>
-          </div>
+      {/* Tabs */}
+      <div className="flex border-b px-6" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+        {tabs.map((tab) => (
           <button
-            onClick={() => { setCashModal(true); setCashUnits(1); setCashError(''); setCashSuccess('') }}
-            className="self-start sm:self-auto px-4 py-2 rounded-lg text-sm font-semibold bg-white text-[#0a0a0a] hover:bg-white/90 transition-colors"
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-all ${
+              activeTab === tab.id
+                ? 'border-white text-white'
+                : 'border-transparent text-white/35 hover:text-white/60'
+            }`}
           >
-            + Add Cash
+            {tab.label}
           </button>
-        </div>
+        ))}
+      </div>
 
-        <div className="flex flex-col lg:flex-row gap-5">
-          {/* ── LEFT: Tradeable stocks ── */}
-          <div className="lg:w-3/5">
-            <p className="text-xs uppercase tracking-widest text-white/30 mb-3">NYSE · NASDAQ Blue Chips</p>
-            <div className="rounded-2xl overflow-hidden" style={glassStyle}>
-              {stocksLoading ? (
-                Array.from({ length: 8 }).map((_, i) => (
-                  <div key={i} className="flex items-center justify-between px-4 py-3 border-b animate-pulse" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-                    <div className="flex flex-col gap-1.5">
-                      <div className="h-3 bg-white/10 rounded w-12" />
-                      <div className="h-2.5 bg-white/6 rounded w-24" />
-                    </div>
-                    <div className="h-3 bg-white/10 rounded w-16" />
-                    <div className="h-7 bg-white/8 rounded-lg w-14" />
-                  </div>
-                ))
-              ) : (tradableStocks ?? []).map((stock) => {
-                const isExpanded = expandedTicker === stock.ticker
-                return (
-                  <div key={stock.ticker} className="border-b last:border-0" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-                    <div
-                      className="flex items-center justify-between px-4 py-3 hover:bg-white/[0.03] transition-colors cursor-pointer"
-                      onClick={() => setExpandedTicker(isExpanded ? null : stock.ticker)}
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-3">
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24"
-                          fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="2.5"
-                          strokeLinecap="round" strokeLinejoin="round"
-                          className="flex-shrink-0 transition-transform duration-200"
-                          style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}
-                        >
-                          <polyline points="9 18 15 12 9 6"/>
-                        </svg>
-                        <div className="flex flex-col min-w-0">
-                          <span className="font-bold text-white text-sm">{stock.ticker}</span>
-                          <span className="text-xs text-white/40 truncate">{stock.companyName}</span>
-                        </div>
-                      </div>
-                      <span className="text-sm text-white/70 tabular-nums mr-4">${fmt(stock.price)}</span>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); openBuyModal(stock) }}
-                        className="px-3 py-1.5 rounded-lg text-xs font-medium text-white/70 hover:text-white transition-colors border"
-                        style={{ borderColor: 'rgba(255,255,255,0.20)' }}
-                      >
-                        Buy
-                      </button>
-                    </div>
-                    {isExpanded && (
-                      <ExpandedStockRow
-                        ticker={stock.ticker}
-                        onBuy={() => openBuyModal(stock)}
-                      />
+      <main className="flex-1 overflow-y-auto p-5 md:p-6">
+        {/* ── TRADE TAB ── */}
+        {activeTab === 'trade' && (
+          <div className="max-w-screen-xl mx-auto">
+            <TickerSearch value={ticker} onConfirm={setTicker} />
+            {/* Chart + Order panel */}
+            <div className="flex flex-col lg:flex-row gap-5">
+              {/* Left: chart + stats */}
+              <div className="flex-1 flex flex-col gap-4">
+                <div className="rounded-2xl overflow-hidden" style={{ ...glassCard, height: 380 }}>
+                  <TradingViewChart ticker={ticker} />
+                </div>
+                {/* Stats row */}
+                {!stockLoading && !stockError && stockData && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <Stat label="Open" value={stockData.open != null ? `$${fmt(stockData.open)}` : '—'} />
+                    <Stat label="Prev Close" value={stockData.previousClose != null ? `$${fmt(stockData.previousClose)}` : '—'} />
+                    <Stat label="Day High" value={stockData.high != null ? `$${fmt(stockData.high)}` : '—'} />
+                    <Stat label="Day Low" value={stockData.low != null ? `$${fmt(stockData.low)}` : '—'} />
+                    <Stat label="Volume" value={stockData.volume != null ? fmtCompact(stockData.volume).replace('$', '') : '—'} />
+                    <Stat label="Mkt Cap" value={stockData.marketCap != null ? fmtCompact(stockData.marketCap * 1e6) : '—'} />
+                    {currentPosition && (
+                      <>
+                        <Stat label="Your Shares" value={currentPosition.shares} />
+                        <Stat
+                          label="Your P&L"
+                          value={currentPosition.pnl != null ? `${currentPosition.pnl >= 0 ? '+' : ''}$${fmt(Math.abs(currentPosition.pnl))}` : '—'}
+                          color={currentPosition.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}
+                        />
+                      </>
                     )}
                   </div>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* ── RIGHT: Positions + Recent trades ── */}
-          <div className="lg:w-2/5 flex flex-col gap-5">
-            {/* Positions */}
-            <div className="rounded-2xl p-5" style={glassStyle}>
-              <p className="text-xs uppercase tracking-widest text-white/40 mb-4">Your Positions</p>
-              {portfolioLoading ? (
-                Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="flex items-center justify-between py-2.5 border-b animate-pulse" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-                    <div className="h-3 bg-white/10 rounded w-10" />
-                    <div className="h-3 bg-white/8 rounded w-14" />
-                    <div className="h-3 bg-white/8 rounded w-16" />
-                    <div className="h-6 bg-white/8 rounded w-10" />
-                  </div>
-                ))
-              ) : positions.length === 0 ? (
-                <p className="text-sm text-white/30">No open positions yet. Buy a stock to get started.</p>
-              ) : (
-                positions.map((pos) => {
-                  const pnl = pos.unrealizedPnl ?? 0
-                  const pnlPct = pos.unrealizedPnlPct ?? 0
-                  const positive = pnl >= 0
-                  const pnlStr = `${positive ? '+' : '-'}$${fmt(Math.abs(pnl))} (${positive ? '+' : '-'}${Math.abs(pnlPct).toFixed(2)}%)`
-                  return (
-                    <div
-                      key={pos.ticker}
-                      className="flex items-center justify-between py-2.5 border-b last:border-0"
-                      style={{ borderColor: 'rgba(255,255,255,0.06)' }}
-                    >
-                      <span className="font-bold text-white text-sm w-12">{pos.ticker}</span>
-                      <span className="text-xs text-white/50">{pos.shares} sh</span>
-                      <span className={`text-xs tabular-nums font-medium ${positive ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {pnlStr}
-                      </span>
-                      <button
-                        onClick={() => openSellModal(pos)}
-                        className="px-2.5 py-1 rounded-lg text-xs font-medium text-white/60 hover:text-white transition-colors border"
-                        style={{ borderColor: 'rgba(255,255,255,0.15)' }}
-                      >
-                        Sell
-                      </button>
-                    </div>
-                  )
-                })
-              )}
-            </div>
-
-            {/* Recent trades */}
-            <div className="rounded-2xl p-5" style={glassStyle}>
-              <p className="text-xs uppercase tracking-widest text-white/40 mb-4">Recent Trades</p>
-              {txLoading ? (
-                Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="flex items-center gap-2 py-2.5 border-b animate-pulse" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-                    <div className="h-5 bg-white/10 rounded w-10" />
-                    <div className="h-3 bg-white/8 rounded w-24 flex-1" />
-                    <div className="h-3 bg-white/8 rounded w-12" />
-                  </div>
-                ))
-              ) : !transactions?.length ? (
-                <p className="text-sm text-white/30">No trades yet.</p>
-              ) : (
-                transactions.slice(0, 10).map((tx, i) => {
-                  const isBuy = tx.type?.toUpperCase() === 'BUY'
-                  const total = (tx.shares ?? 0) * (tx.price ?? 0)
-                  return (
-                    <div
-                      key={tx.id ?? i}
-                      className="flex items-center gap-2 py-2.5 border-b last:border-0 text-xs"
-                      style={{ borderColor: 'rgba(255,255,255,0.06)' }}
-                    >
-                      <span
-                        className="px-1.5 py-0.5 rounded text-white/70 font-medium shrink-0"
-                        style={{ background: 'rgba(255,255,255,0.10)' }}
-                      >
-                        {isBuy ? 'BUY' : 'SELL'}
-                      </span>
-                      <span className="font-semibold text-white shrink-0">{tx.ticker}</span>
-                      <span className="text-white/50 flex-1 truncate">{tx.shares} × ${fmt(tx.price)}</span>
-                      <span className="text-white/70 tabular-nums shrink-0">${fmt(total)}</span>
-                      <span className="text-white/30 shrink-0">{tx.createdAt ? fmtTime(tx.createdAt) : ''}</span>
-                    </div>
-                  )
-                })
-              )}
-            </div>
-          </div>
-        </div>
-      </main>
-
-      {/* ─── Trade Modal ─────────────────────────────────────────────────────── */}
-      {tradeModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-          onClick={(e) => { if (e.target === e.currentTarget) closeTradeModal() }}
-        >
-          <div className="w-full max-w-sm rounded-2xl p-6" style={glassStyle}>
-            {/* Header */}
-            <div className="flex items-center justify-between mb-5">
-              <div>
-                <h2 className="text-lg font-bold text-white">{tradeModal.ticker}</h2>
-                <p className="text-xs text-white/40">{tradeModal.companyName}</p>
+                )}
               </div>
-              <span className="text-xl font-semibold text-white tabular-nums">
-                {tradeModal.price != null ? `$${fmt(tradeModal.price)}` : 'Loading...'}
-              </span>
+              {/* Right: order panel */}
+              <div className="lg:w-72 xl:w-80">
+                <OrderPanel
+                  ticker={ticker}
+                  stockData={stockData}
+                  stockLoading={stockLoading}
+                  stockError={stockError}
+                  cash={cash}
+                  position={currentPosition}
+                  onSuccess={refetchPortfolio}
+                />
+              </div>
             </div>
+          </div>
+        )}
 
-            {/* Mode tabs */}
-            <div className="flex gap-1 mb-5 p-1 rounded-lg" style={{ background: 'rgba(255,255,255,0.06)' }}>
-              {['buy', 'sell'].map((m) => {
-                const hasSell = tradeModal.sharesHeld > 0
-                if (m === 'sell' && !hasSell) return null
-                return (
-                  <button
-                    key={m}
-                    onClick={() => { setTradeModal((prev) => ({ ...prev, mode: m })); setTradeShares(1); setTradeError('') }}
-                    className={`flex-1 py-1.5 rounded-md text-sm font-medium capitalize transition-all ${tradeModal.mode === m ? 'bg-white text-[#0a0a0a]' : 'text-white/50 hover:text-white'}`}
-                  >
-                    {m}
-                  </button>
-                )
-              })}
-            </div>
-
-            {/* Shares input */}
-            <div className="mb-4">
-              <label className="block text-xs text-white/40 mb-1.5">Shares</label>
-              <input
-                type="number"
-                min={1}
-                step={1}
-                value={tradeShares}
-                onChange={(e) => { setTradeShares(Math.max(1, Math.floor(Number(e.target.value)))); setTradeError('') }}
-                className="w-full bg-white/[0.07] border rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-white/30 transition-colors"
-                style={{ borderColor: 'rgba(255,255,255,0.12)' }}
-              />
-            </div>
-
-            {/* Total */}
-            <div className="flex justify-between items-center mb-4">
-              <span className="text-xs text-white/40">Estimated total</span>
-              <span className="text-sm font-semibold text-white tabular-nums">${fmt(tradeTotal)}</span>
-            </div>
-
-            {/* Context info */}
-            {tradeModal.mode === 'buy' ? (
-              <div className={`text-xs mb-4 ${!canAfford && tradeShares > 0 ? 'text-red-400' : 'text-white/40'}`}>
-                Available cash: ${fmt(cash)}
-                {!canAfford && tradeShares > 0 && ' — Insufficient funds'}
+        {/* ── POSITIONS TAB ── */}
+        {activeTab === 'positions' && (
+          <div className="max-w-screen-xl mx-auto">
+            {portfolioLoading ? (
+              <div className="space-y-2">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="h-14 rounded-xl animate-pulse" style={{ background: 'rgba(255,255,255,0.05)' }} />
+                ))}
+              </div>
+            ) : positions.length === 0 ? (
+              <div className="text-center py-20">
+                <p className="text-white/30 text-sm mb-2">No open positions</p>
+                <button onClick={() => setActiveTab('trade')} className="text-white/50 text-sm hover:text-white transition-colors">
+                  Go to Trade →
+                </button>
               </div>
             ) : (
-              <div className="text-xs text-white/40 mb-4">
-                You hold {tradeModal.sharesHeld} shares
+              <div className="rounded-2xl overflow-hidden" style={glassCard}>
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+                      {['Ticker', 'Avg Cost', 'Price', 'P&L', 'TP / SL', ''].map((h) => (
+                        <th key={h} className="text-left py-3 px-5 text-[11px] uppercase tracking-widest text-white/30 font-medium">
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y" style={{ borderColor: 'transparent' }}>
+                    {positions.map((pos) => (
+                      <PositionRow
+                        key={pos.ticker}
+                        pos={pos}
+                        onClose={(p) => setCloseModal(p)}
+                        onUpdateTP={(t) => { setTicker(t); setActiveTab('trade') }}
+                      />
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
-
-            {/* Error */}
-            {tradeError && (
-              <p className="text-xs text-red-400 mb-3">{tradeError}</p>
-            )}
-
-            {/* Actions */}
-            <div className="flex gap-2">
-              <button
-                onClick={closeTradeModal}
-                className="flex-1 py-2.5 rounded-lg text-sm font-medium text-white/50 hover:text-white border transition-colors"
-                style={{ borderColor: 'rgba(255,255,255,0.12)' }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmTrade}
-                disabled={tradeLoading || (tradeModal.mode === 'buy' && !canAfford)}
-                className="flex-1 py-2.5 rounded-lg text-sm font-medium bg-white text-[#0a0a0a] hover:bg-white/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                {tradeLoading ? 'Processing...' : 'Confirm'}
-              </button>
-            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ─── Buy Cash Modal ───────────────────────────────────────────────────── */}
-      {cashModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-          onClick={(e) => { if (e.target === e.currentTarget) { setCashModal(false); setCashSuccess('') } }}
-        >
-          <div className="w-full max-w-sm rounded-2xl p-6" style={glassStyle}>
-            <h2 className="text-lg font-bold text-white mb-1">Add Paper Cash</h2>
-            <p className="text-xs text-white/40 mb-5">Each unit: $5 USD → $500 paper cash</p>
-
-            {/* Unit selector */}
-            <div className="flex gap-2 mb-5">
-              {[1, 2, 5, 10].map((u) => (
-                <button
-                  key={u}
-                  onClick={() => setCashUnits(u)}
-                  className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${cashUnits === u ? 'bg-white text-[#0a0a0a]' : 'text-white/60 hover:text-white border'}`}
-                  style={cashUnits !== u ? { borderColor: 'rgba(255,255,255,0.15)' } : {}}
-                >
-                  {u}
-                </button>
-              ))}
-            </div>
-
-            {/* Summary */}
-            <div className="rounded-lg p-4 mb-5 space-y-2" style={{ background: 'rgba(255,255,255,0.05)' }}>
-              <div className="flex justify-between text-sm">
-                <span className="text-white/50">You'll receive</span>
-                <span className="text-white font-semibold">${fmt(paperCashAmount)} paper cash</span>
+        {/* ── HISTORY TAB ── */}
+        {activeTab === 'history' && (
+          <div className="max-w-screen-xl mx-auto rounded-2xl overflow-hidden" style={glassCard}>
+            {txLoading ? (
+              <div className="p-5 space-y-3">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="h-10 bg-white/5 rounded-xl animate-pulse" />
+                ))}
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-white/50">You'll pay</span>
-                <span className="text-white font-semibold">${fmt(usdCost)} USD</span>
-              </div>
-            </div>
-
-            {/* Success / error */}
-            {cashSuccess && (
-              <p className="text-xs text-emerald-400 mb-3">{cashSuccess}</p>
+            ) : !transactions?.transactions?.length ? (
+              <div className="py-16 text-center text-white/30 text-sm">No transactions yet</div>
+            ) : (
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+                    {['Type', 'Ticker', 'Shares', 'Price', 'Total', 'Time'].map((h) => (
+                      <th key={h} className="text-left py-3 px-5 text-[11px] uppercase tracking-widest text-white/30 font-medium">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(transactions.transactions ?? []).map((tx, i) => {
+                    const isBuy = tx.type === 'buy'
+                    const isDeposit = tx.type === 'deposit'
+                    return (
+                      <tr key={tx.id ?? i} className="border-b last:border-0" style={{ borderColor: 'rgba(255,255,255,0.04)' }}>
+                        <td className="py-3 px-5">
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded ${isDeposit ? 'text-blue-400 bg-blue-500/10' : isBuy ? 'text-emerald-400 bg-emerald-500/10' : 'text-red-400 bg-red-500/10'}`}>
+                            {tx.type?.toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="py-3 px-5 text-sm font-medium text-white">{tx.ticker ?? '—'}</td>
+                        <td className="py-3 px-5 text-sm text-white/60 tabular-nums">{tx.shares ?? '—'}</td>
+                        <td className="py-3 px-5 text-sm text-white/60 tabular-nums">{tx.price != null ? `$${fmt(tx.price)}` : '—'}</td>
+                        <td className="py-3 px-5 text-sm text-white font-medium tabular-nums">${fmt(tx.total)}</td>
+                        <td className="py-3 px-5 text-xs text-white/30">{fmtTime(tx.createdAt)}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             )}
-            {cashError && (
-              <p className="text-xs text-red-400 mb-3">{cashError}</p>
-            )}
-
-            {/* Actions */}
-            <div className="flex gap-2">
-              <button
-                onClick={() => { setCashModal(false); setCashSuccess('') }}
-                className="flex-1 py-2.5 rounded-lg text-sm font-medium text-white/50 hover:text-white border transition-colors"
-                style={{ borderColor: 'rgba(255,255,255,0.12)' }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handlePurchaseCash}
-                disabled={cashLoading}
-                className="flex-1 py-2.5 rounded-lg text-sm font-medium bg-white text-[#0a0a0a] hover:bg-white/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                {cashLoading ? 'Processing...' : 'Continue to payment'}
-              </button>
-            </div>
           </div>
-        </div>
+        )}
+
+        {/* ── LEADERBOARD TAB ── */}
+        {activeTab === 'leaderboard' && (
+          <div className="max-w-2xl mx-auto">
+            <Leaderboard currentUserId={userId} />
+          </div>
+        )}
+      </main>
+
+      {cashModal && <CashModal onClose={() => setCashModal(false)} />}
+      {closeModal && (
+        <CloseModal
+          pos={closeModal}
+          cash={cash}
+          onConfirm={handleSell}
+          onCancel={() => setCloseModal(null)}
+        />
       )}
     </div>
   )

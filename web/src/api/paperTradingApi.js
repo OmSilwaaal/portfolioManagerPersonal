@@ -1,8 +1,6 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
 import { supabase } from '../utils/supabase/client'
 
-// VITE_API_URL already includes /api (e.g. https://backend.railway.app/api)
-// Strip trailing /api if present so we can append the correct path ourselves
 const _viteApiUrl = import.meta.env.VITE_API_URL ?? ''
 const API_BASE = _viteApiUrl
   ? _viteApiUrl.replace(/\/api\/?$/, '')
@@ -21,38 +19,45 @@ export const paperTradingApi = createApi({
       },
     })(args, api, extraOptions)
   },
-  tagTypes: ['Portfolio', 'Transactions'],
+  tagTypes: ['Portfolio', 'Transactions', 'Leaderboard'],
   endpoints: (builder) => ({
     getPortfolio: builder.query({
       query: () => '/portfolio',
       providesTags: ['Portfolio'],
     }),
-    getTradableStocks: builder.query({
-      query: () => '/stocks',
-    }),
     buyStock: builder.mutation({
       query: (body) => ({ url: '/buy', method: 'POST', body }),
-      invalidatesTags: ['Portfolio', 'Transactions'],
+      invalidatesTags: ['Portfolio', 'Transactions', 'Leaderboard'],
     }),
     sellStock: builder.mutation({
       query: (body) => ({ url: '/sell', method: 'POST', body }),
-      invalidatesTags: ['Portfolio', 'Transactions'],
+      invalidatesTags: ['Portfolio', 'Transactions', 'Leaderboard'],
+    }),
+    updatePosition: builder.mutation({
+      query: ({ ticker, ...body }) => ({ url: `/positions/${ticker}`, method: 'PATCH', body }),
+      invalidatesTags: ['Portfolio'],
     }),
     getTransactions: builder.query({
       query: (limit = 30) => `/transactions?limit=${limit}`,
       providesTags: ['Transactions'],
     }),
+    getLeaderboard: builder.query({
+      query: () => '/leaderboard',
+      providesTags: ['Leaderboard'],
+    }),
     purchaseCash: builder.mutation({
       query: (body) => ({ url: '/purchase-cash', method: 'POST', body }),
+      invalidatesTags: ['Portfolio', 'Leaderboard'],
     }),
   }),
 })
 
 export const {
   useGetPortfolioQuery,
-  useGetTradableStocksQuery,
   useBuyStockMutation,
   useSellStockMutation,
+  useUpdatePositionMutation,
   useGetTransactionsQuery,
+  useGetLeaderboardQuery,
   usePurchaseCashMutation,
 } = paperTradingApi

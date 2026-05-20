@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { useGetGroupsQuery, useJoinGroupMutation } from '../api/groupsApi'
 import { useGetMyProfileQuery } from '../api/profilesApi'
+
+const GROUP_ORDER_KEY = 'miq_group_order'
 
 const glassStyle = {
   background: 'linear-gradient(145deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 50%, rgba(255,255,255,0.06) 100%)',
@@ -12,49 +14,93 @@ const glassStyle = {
   boxShadow: '0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.14)',
 }
 
-function GroupCard({ group }) {
+function saveOrder(groups) {
+  try { localStorage.setItem(GROUP_ORDER_KEY, JSON.stringify(groups.map((g) => g.id))) } catch (_) {}
+}
+
+function applyStoredOrder(groups) {
+  try {
+    const raw = localStorage.getItem(GROUP_ORDER_KEY)
+    if (!raw) return groups
+    const order = JSON.parse(raw)
+    const map = new Map(groups.map((g) => [g.id, g]))
+    const sorted = order.map((id) => map.get(id)).filter(Boolean)
+    const unseen = groups.filter((g) => !order.includes(g.id))
+    return [...sorted, ...unseen]
+  } catch (_) {
+    return groups
+  }
+}
+
+function GroupCard({ group, onDragStart, onDragOver, onDrop, onDragEnd, isDragging }) {
   const initial = group.name.charAt(0).toUpperCase()
+
   return (
-    <Link
-      to={`/groups/${group.id}`}
-      className="block rounded-2xl overflow-hidden hover:scale-[1.01] transition-transform duration-200"
-      style={glassStyle}
+    <div
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
+      style={{
+        ...glassStyle,
+        opacity: isDragging ? 0.4 : 1,
+        cursor: 'grab',
+        transition: 'opacity 0.15s, transform 0.15s',
+      }}
+      className="rounded-2xl overflow-hidden select-none"
     >
-      <div className="h-1.5 w-full" style={{ background: group.color }} />
-      <div className="p-5">
-        <div className="flex items-start gap-3 mb-3">
-          <div
-            className="w-11 h-11 rounded-xl flex items-center justify-center text-xl flex-shrink-0 font-bold"
-            style={{ background: group.color + '22', border: `1px solid ${group.color}55`, color: group.color }}
-          >
-            {group.emoji || initial}
+      <Link to={`/groups/${group.id}`} className="block" draggable={false}>
+        <div className="h-1.5 w-full" style={{ background: group.color }} />
+        <div className="p-5">
+          <div className="flex items-start gap-3 mb-3">
+            <div
+              className="w-11 h-11 rounded-xl flex items-center justify-center text-xl flex-shrink-0 font-bold"
+              style={{ background: group.color + '22', border: `1px solid ${group.color}55`, color: group.color }}
+            >
+              {group.emoji || initial}
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="font-semibold text-white text-sm truncate">{group.name}</h3>
+              <p className="text-xs text-white/40 truncate mt-0.5 leading-snug">
+                {group.description || 'No description'}
+              </p>
+            </div>
+            <span
+              className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded flex-shrink-0"
+              style={{ background: group.role === 'admin' ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.06)', color: group.role === 'admin' ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.35)' }}
+            >
+              {group.role}
+            </span>
           </div>
-          <div className="min-w-0 flex-1">
-            <h3 className="font-semibold text-white text-sm truncate">{group.name}</h3>
-            <p className="text-xs text-white/40 truncate mt-0.5 leading-snug">
-              {group.description || 'No description'}
-            </p>
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-white/25">{group.memberCount ?? 0} members · {group.postCount ?? 0} posts</p>
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+              <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+            </svg>
           </div>
-          <span
-            className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded flex-shrink-0"
-            style={{ background: group.role === 'admin' ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.06)', color: group.role === 'admin' ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.35)' }}
-          >
-            {group.role}
-          </span>
         </div>
-        <p className="text-xs text-white/25">{group.memberCount ?? 0} members · {group.postCount ?? 0} posts</p>
-      </div>
-    </Link>
+      </Link>
+    </div>
   )
 }
 
 export default function Groups() {
-  const { data: groups = [], isLoading } = useGetGroupsQuery()
+  const { data: rawGroups = [], isLoading } = useGetGroupsQuery()
   const [joinGroup, { isLoading: joining }] = useJoinGroupMutation()
   const { data: myProfile } = useGetMyProfileQuery()
   const navigate = useNavigate()
-
   const isPro = useSelector((state) => state.preferences.isPro)
+
+  const [groups, setGroups] = useState([])
+  const dragIdx = useRef(null)
+
+  useEffect(() => {
+    if (rawGroups.length > 0) {
+      setGroups(applyStoredOrder(rawGroups))
+    }
+  }, [rawGroups])
 
   const [joinModal, setJoinModal] = useState(false)
   const [profileGate, setProfileGate] = useState(false)
@@ -79,6 +125,26 @@ export default function Groups() {
       const msg = err?.data?.message ?? (typeof err?.data?.error === 'string' ? err.data.error : null) ?? 'Invalid code. Please try again.'
       setJoinError(msg)
     }
+  }
+
+  /* ── Drag-to-reorder handlers ── */
+  const handleDragStart = (idx) => { dragIdx.current = idx }
+
+  const handleDragOver = (e, idx) => {
+    e.preventDefault()
+    if (dragIdx.current == null || dragIdx.current === idx) return
+    const next = [...groups]
+    const [moved] = next.splice(dragIdx.current, 1)
+    next.splice(idx, 0, moved)
+    dragIdx.current = idx
+    setGroups(next)
+  }
+
+  const handleDrop = (e) => { e.preventDefault() }
+
+  const handleDragEnd = () => {
+    saveOrder(groups)
+    dragIdx.current = null
   }
 
   return (
@@ -144,7 +210,17 @@ export default function Groups() {
           </div>
         ) : (
           <div className="max-w-screen-xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {groups.map((g) => <GroupCard key={g.id} group={g} />)}
+            {groups.map((g, idx) => (
+              <GroupCard
+                key={g.id}
+                group={g}
+                isDragging={dragIdx.current === idx}
+                onDragStart={() => handleDragStart(idx)}
+                onDragOver={(e) => handleDragOver(e, idx)}
+                onDrop={handleDrop}
+                onDragEnd={handleDragEnd}
+              />
+            ))}
           </div>
         )}
       </main>
@@ -161,21 +237,10 @@ export default function Groups() {
               </svg>
             </div>
             <h2 className="text-base font-bold text-white mb-1">Set up your profile first</h2>
-            <p className="text-sm text-white/40 mb-5">You need a username before you can join or create groups. It only takes a second.</p>
+            <p className="text-sm text-white/40 mb-5">You need a username before you can join or create groups.</p>
             <div className="flex gap-2">
-              <button
-                onClick={() => setProfileGate(false)}
-                className="flex-1 py-2.5 rounded-lg text-sm font-medium text-white/50 hover:text-white border transition-colors"
-                style={{ borderColor: 'rgba(255,255,255,0.12)' }}
-              >
-                Cancel
-              </button>
-              <Link
-                to="/settings"
-                className="flex-1 py-2.5 rounded-lg text-sm font-semibold bg-white text-[#0a0a0a] hover:bg-white/90 transition-colors text-center"
-              >
-                Go to Settings
-              </Link>
+              <button onClick={() => setProfileGate(false)} className="flex-1 py-2.5 rounded-lg text-sm font-medium text-white/50 hover:text-white border transition-colors" style={{ borderColor: 'rgba(255,255,255,0.12)' }}>Cancel</button>
+              <Link to="/settings" className="flex-1 py-2.5 rounded-lg text-sm font-semibold bg-white text-[#0a0a0a] hover:bg-white/90 transition-colors text-center">Go to Settings</Link>
             </div>
           </div>
         </div>
@@ -189,26 +254,14 @@ export default function Groups() {
           <div className="w-full max-w-sm rounded-2xl p-6" style={glassStyle}>
             <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-4" style={{ background: 'rgba(255,255,255,0.08)' }}>
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M2 4l3 12h14l3-12-6 5-4-5-4 5-6-5z"/>
-                <path d="M5 20h14"/>
+                <path d="M2 4l3 12h14l3-12-6 5-4-5-4 5-6-5z"/><path d="M5 20h14"/>
               </svg>
             </div>
             <h2 className="text-base font-bold text-white mb-1">Pro required to create groups</h2>
-            <p className="text-sm text-white/40 mb-5">Upgrade to MarketIQ Pro to create investment clubs and communities. Joining existing groups is always free.</p>
+            <p className="text-sm text-white/40 mb-5">Upgrade to MarketIQ Pro to create investment clubs. Joining is always free.</p>
             <div className="flex gap-2">
-              <button
-                onClick={() => setProGate(false)}
-                className="flex-1 py-2.5 rounded-lg text-sm font-medium text-white/50 hover:text-white border transition-colors"
-                style={{ borderColor: 'rgba(255,255,255,0.12)' }}
-              >
-                Cancel
-              </button>
-              <Link
-                to="/pricing"
-                className="flex-1 py-2.5 rounded-lg text-sm font-semibold bg-white text-[#0a0a0a] hover:bg-white/90 transition-colors text-center"
-              >
-                Upgrade to Pro
-              </Link>
+              <button onClick={() => setProGate(false)} className="flex-1 py-2.5 rounded-lg text-sm font-medium text-white/50 hover:text-white border transition-colors" style={{ borderColor: 'rgba(255,255,255,0.12)' }}>Cancel</button>
+              <Link to="/pricing" className="flex-1 py-2.5 rounded-lg text-sm font-semibold bg-white text-[#0a0a0a] hover:bg-white/90 transition-colors text-center">Upgrade to Pro</Link>
             </div>
           </div>
         </div>
@@ -231,26 +284,12 @@ export default function Groups() {
                 autoFocus
                 maxLength={6}
                 className="w-full px-4 py-3 rounded-xl text-sm text-white placeholder-white/20 focus:outline-none tracking-[0.3em] font-mono text-center"
-                style={{
-                  background: 'rgba(255,255,255,0.05)',
-                  border: joinError ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(255,255,255,0.10)',
-                }}
+                style={{ background: 'rgba(255,255,255,0.05)', border: joinError ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(255,255,255,0.10)' }}
               />
               {joinError && <p className="text-red-400 text-xs text-center">{joinError}</p>}
               <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setJoinModal(false)}
-                  className="flex-1 py-2.5 rounded-lg text-sm font-medium text-white/50 hover:text-white border transition-colors"
-                  style={{ borderColor: 'rgba(255,255,255,0.12)' }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={code.length < 6 || joining}
-                  className="flex-1 py-2.5 rounded-lg text-sm font-semibold bg-white text-[#0a0a0a] hover:bg-white/90 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
+                <button type="button" onClick={() => setJoinModal(false)} className="flex-1 py-2.5 rounded-lg text-sm font-medium text-white/50 hover:text-white border transition-colors" style={{ borderColor: 'rgba(255,255,255,0.12)' }}>Cancel</button>
+                <button type="submit" disabled={code.length < 6 || joining} className="flex-1 py-2.5 rounded-lg text-sm font-semibold bg-white text-[#0a0a0a] hover:bg-white/90 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
                   {joining ? 'Joining...' : 'Join'}
                 </button>
               </div>

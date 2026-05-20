@@ -8,48 +8,19 @@ const stripe = process.env.STRIPE_SECRET_KEY
   ? require('stripe')(process.env.STRIPE_SECRET_KEY)
   : null
 
-const TRADEABLE = new Set([
-  'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'JPM', 'V', 'JNJ',
-  'WMT', 'PG', 'UNH', 'XOM', 'BAC', 'MA', 'HD', 'CVX', 'MRK', 'LLY',
-  'ABBV', 'PFE', 'KO', 'PEP', 'COST', 'TMO', 'AVGO', 'MCD', 'DIS', 'NFLX',
-])
-
-const TRADEABLE_META = {
-  AAPL:  'Apple Inc.',
-  MSFT:  'Microsoft Corp.',
-  GOOGL: 'Alphabet Inc.',
-  AMZN:  'Amazon.com Inc.',
-  NVDA:  'NVIDIA Corp.',
-  META:  'Meta Platforms Inc.',
-  TSLA:  'Tesla Inc.',
-  JPM:   'JPMorgan Chase & Co.',
-  V:     'Visa Inc.',
-  JNJ:   'Johnson & Johnson',
-  WMT:   'Walmart Inc.',
-  PG:    'Procter & Gamble Co.',
-  UNH:   'UnitedHealth Group Inc.',
-  XOM:   'Exxon Mobil Corp.',
-  BAC:   'Bank of America Corp.',
-  MA:    'Mastercard Inc.',
-  HD:    'Home Depot Inc.',
-  CVX:   'Chevron Corp.',
-  MRK:   'Merck & Co. Inc.',
-  LLY:   'Eli Lilly and Co.',
-  ABBV:  'AbbVie Inc.',
-  PFE:   'Pfizer Inc.',
-  KO:    'Coca-Cola Co.',
-  PEP:   'PepsiCo Inc.',
-  COST:  'Costco Wholesale Corp.',
-  TMO:   'Thermo Fisher Scientific Inc.',
-  AVGO:  'Broadcom Inc.',
-  MCD:   "McDonald's Corp.",
-  DIS:   'Walt Disney Co.',
-  NFLX:  'Netflix Inc.',
-}
-
 function ensurePortfolio(db, userId) {
   db.prepare('INSERT OR IGNORE INTO paper_portfolios (userId) VALUES (?)').run(userId)
   return db.prepare('SELECT * FROM paper_portfolios WHERE userId = ?').get(userId)
+}
+
+async function fetchQuoteSafe(ticker) {
+  try {
+    const q = await getStockQuote(ticker)
+    if (!q || q.price == null || q.price === 0) return null
+    return q
+  } catch (_) {
+    return null
+  }
 }
 
 router.get('/portfolio', requireAuth, async (req, res, next) => {
@@ -62,13 +33,32 @@ router.get('/portfolio', requireAuth, async (req, res, next) => {
     ).all(userId)
 
     let totalPositionsValue = 0
+    const autoSoldItems = []
+
     const enriched = await Promise.all(
       positions.map(async (pos) => {
-        let currentPrice = null
-        try {
-          const quote = await getStockQuote(pos.ticker)
-          currentPrice = quote.price
-        } catch (_) {}
+        const quote = await fetchQuoteSafe(pos.ticker)
+        const currentPrice = quote?.price ?? null
+
+        // Auto-sell on TP/SL hit
+        if (currentPrice != null) {
+          const hitTP = pos.targetPrice != null && currentPrice >= pos.targetPrice
+          const hitSL = pos.stopLoss != null && currentPrice <= pos.stopLoss
+          if (hitTP || hitSL) {
+            const sellTotal = currentPrice * pos.shares
+            db.transaction(() => {
+              db.prepare(
+                "UPDATE paper_portfolios SET cashBalance = cashBalance + ?, updatedAt = datetime('now') WHERE userId = ?"
+              ).run(sellTotal, userId)
+              db.prepare('DELETE FROM paper_positions WHERE userId = ? AND ticker = ?').run(userId, pos.ticker)
+              db.prepare(
+                "INSERT INTO paper_transactions (userId, type, ticker, shares, price, total) VALUES (?, 'sell', ?, ?, ?, ?)"
+              ).run(userId, pos.ticker, pos.shares, currentPrice, sellTotal)
+            })()
+            autoSoldItems.push({ ticker: pos.ticker, reason: hitTP ? 'target_price' : 'stop_loss', price: currentPrice })
+            return null
+          }
+        }
 
         const currentValue = currentPrice != null ? currentPrice * pos.shares : null
         const costBasis = pos.avgCost * pos.shares
@@ -81,6 +71,8 @@ router.get('/portfolio', requireAuth, async (req, res, next) => {
           ticker: pos.ticker,
           shares: pos.shares,
           avgCost: pos.avgCost,
+          targetPrice: pos.targetPrice,
+          stopLoss: pos.stopLoss,
           currentPrice,
           currentValue,
           pnl,
@@ -89,10 +81,14 @@ router.get('/portfolio', requireAuth, async (req, res, next) => {
       })
     )
 
+    // Refresh cash after potential auto-sells
+    const freshPortfolio = db.prepare('SELECT * FROM paper_portfolios WHERE userId = ?').get(userId)
+
     res.json({
-      cashBalance: portfolio.cashBalance,
-      positions: enriched,
-      totalValue: portfolio.cashBalance + totalPositionsValue,
+      cashBalance: freshPortfolio.cashBalance,
+      positions: enriched.filter(Boolean),
+      totalValue: freshPortfolio.cashBalance + totalPositionsValue,
+      autoSold: autoSoldItems,
     })
   } catch (err) {
     next(err)
@@ -103,15 +99,12 @@ router.post('/buy', requireAuth, async (req, res, next) => {
   try {
     const db = getDb()
     const userId = req.user.id
-    let { ticker, shares } = req.body
+    let { ticker, shares, targetPrice, stopLoss } = req.body
 
-    if (typeof ticker !== 'string') {
-      return res.status(400).json({ error: 'ticker must be a string' })
+    if (typeof ticker !== 'string' || !ticker.trim()) {
+      return res.status(400).json({ error: 'ticker must be a non-empty string' })
     }
-    ticker = ticker.toUpperCase()
-    if (!TRADEABLE.has(ticker)) {
-      return res.status(400).json({ error: `${ticker} is not a tradeable stock` })
-    }
+    ticker = ticker.trim().toUpperCase()
     if (typeof shares !== 'number' || shares <= 0) {
       return res.status(400).json({ error: 'shares must be a positive number' })
     }
@@ -119,7 +112,10 @@ router.post('/buy', requireAuth, async (req, res, next) => {
       return res.status(400).json({ error: 'Cannot buy more than 10,000 shares in a single order' })
     }
 
-    const quote = await getStockQuote(ticker)
+    const quote = await fetchQuoteSafe(ticker)
+    if (!quote) {
+      return res.status(400).json({ error: `Could not find a valid quote for "${ticker}". Check the ticker symbol.` })
+    }
     const price = quote.price
     const total = price * shares
 
@@ -132,9 +128,12 @@ router.post('/buy', requireAuth, async (req, res, next) => {
       })
     }
 
+    const tp = typeof targetPrice === 'number' && targetPrice > 0 ? targetPrice : null
+    const sl = typeof stopLoss === 'number' && stopLoss > 0 ? stopLoss : null
+
     db.transaction(() => {
       db.prepare(
-        'UPDATE paper_portfolios SET cashBalance = cashBalance - ?, updatedAt = datetime(\'now\') WHERE userId = ?'
+        "UPDATE paper_portfolios SET cashBalance = cashBalance - ?, updatedAt = datetime('now') WHERE userId = ?"
       ).run(total, userId)
 
       const existing = db.prepare(
@@ -145,16 +144,16 @@ router.post('/buy', requireAuth, async (req, res, next) => {
         const newShares = existing.shares + shares
         const newAvgCost = (existing.avgCost * existing.shares + price * shares) / newShares
         db.prepare(
-          'UPDATE paper_positions SET shares = ?, avgCost = ?, updatedAt = datetime(\'now\') WHERE userId = ? AND ticker = ?'
-        ).run(newShares, newAvgCost, userId, ticker)
+          "UPDATE paper_positions SET shares = ?, avgCost = ?, targetPrice = COALESCE(?, targetPrice), stopLoss = COALESCE(?, stopLoss), updatedAt = datetime('now') WHERE userId = ? AND ticker = ?"
+        ).run(newShares, newAvgCost, tp, sl, userId, ticker)
       } else {
         db.prepare(
-          'INSERT INTO paper_positions (userId, ticker, shares, avgCost) VALUES (?, ?, ?, ?)'
-        ).run(userId, ticker, shares, price)
+          'INSERT INTO paper_positions (userId, ticker, shares, avgCost, targetPrice, stopLoss) VALUES (?, ?, ?, ?, ?, ?)'
+        ).run(userId, ticker, shares, price, tp, sl)
       }
 
       db.prepare(
-        'INSERT INTO paper_transactions (userId, type, ticker, shares, price, total) VALUES (?, \'buy\', ?, ?, ?, ?)'
+        "INSERT INTO paper_transactions (userId, type, ticker, shares, price, total) VALUES (?, 'buy', ?, ?, ?, ?)"
       ).run(userId, ticker, shares, price, total)
     })()
 
@@ -170,13 +169,10 @@ router.post('/sell', requireAuth, async (req, res, next) => {
     const userId = req.user.id
     let { ticker, shares } = req.body
 
-    if (typeof ticker !== 'string') {
-      return res.status(400).json({ error: 'ticker must be a string' })
+    if (typeof ticker !== 'string' || !ticker.trim()) {
+      return res.status(400).json({ error: 'ticker must be a non-empty string' })
     }
-    ticker = ticker.toUpperCase()
-    if (!TRADEABLE.has(ticker)) {
-      return res.status(400).json({ error: `${ticker} is not a tradeable stock` })
-    }
+    ticker = ticker.trim().toUpperCase()
     if (typeof shares !== 'number' || shares <= 0) {
       return res.status(400).json({ error: 'shares must be a positive number' })
     }
@@ -193,32 +189,96 @@ router.post('/sell', requireAuth, async (req, res, next) => {
       })
     }
 
-    const quote = await getStockQuote(ticker)
+    const quote = await fetchQuoteSafe(ticker)
+    if (!quote) {
+      return res.status(400).json({ error: `Could not get a current quote for "${ticker}"` })
+    }
     const price = quote.price
     const total = price * shares
 
     db.transaction(() => {
       db.prepare(
-        'UPDATE paper_portfolios SET cashBalance = cashBalance + ?, updatedAt = datetime(\'now\') WHERE userId = ?'
+        "UPDATE paper_portfolios SET cashBalance = cashBalance + ?, updatedAt = datetime('now') WHERE userId = ?"
       ).run(total, userId)
 
       const remaining = position.shares - shares
       if (remaining === 0) {
-        db.prepare(
-          'DELETE FROM paper_positions WHERE userId = ? AND ticker = ?'
-        ).run(userId, ticker)
+        db.prepare('DELETE FROM paper_positions WHERE userId = ? AND ticker = ?').run(userId, ticker)
       } else {
         db.prepare(
-          'UPDATE paper_positions SET shares = ?, updatedAt = datetime(\'now\') WHERE userId = ? AND ticker = ?'
+          "UPDATE paper_positions SET shares = ?, updatedAt = datetime('now') WHERE userId = ? AND ticker = ?"
         ).run(remaining, userId, ticker)
       }
 
       db.prepare(
-        'INSERT INTO paper_transactions (userId, type, ticker, shares, price, total) VALUES (?, \'sell\', ?, ?, ?, ?)'
+        "INSERT INTO paper_transactions (userId, type, ticker, shares, price, total) VALUES (?, 'sell', ?, ?, ?, ?)"
       ).run(userId, ticker, shares, price, total)
     })()
 
     res.json({ success: true, ticker, shares, price, total })
+  } catch (err) {
+    next(err)
+  }
+})
+
+router.patch('/positions/:ticker', requireAuth, (req, res, next) => {
+  try {
+    const db = getDb()
+    const userId = req.user.id
+    const ticker = req.params.ticker.toUpperCase()
+    const { targetPrice, stopLoss } = req.body
+
+    const position = db.prepare('SELECT id FROM paper_positions WHERE userId = ? AND ticker = ?').get(userId, ticker)
+    if (!position) {
+      return res.status(404).json({ error: `No position found for ${ticker}` })
+    }
+
+    const tp = typeof targetPrice === 'number' && targetPrice > 0 ? targetPrice : null
+    const sl = typeof stopLoss === 'number' && stopLoss > 0 ? stopLoss : null
+
+    db.prepare(
+      "UPDATE paper_positions SET targetPrice = ?, stopLoss = ?, updatedAt = datetime('now') WHERE userId = ? AND ticker = ?"
+    ).run(tp, sl, userId, ticker)
+
+    res.json({ success: true, ticker, targetPrice: tp, stopLoss: sl })
+  } catch (err) {
+    next(err)
+  }
+})
+
+router.get('/leaderboard', requireAuth, (req, res, next) => {
+  try {
+    const db = getDb()
+
+    const portfolios = db.prepare('SELECT * FROM paper_portfolios').all()
+
+    const board = portfolios.map((p) => {
+      const positions = db.prepare(
+        'SELECT shares, avgCost FROM paper_positions WHERE userId = ? AND shares > 0'
+      ).all(p.userId)
+      const positionsValue = positions.reduce((s, pos) => s + pos.shares * pos.avgCost, 0)
+      const totalValue = p.cashBalance + positionsValue
+
+      const deposited = db.prepare(
+        "SELECT COALESCE(SUM(total), 0) AS t FROM paper_transactions WHERE userId = ? AND type = 'deposit'"
+      ).get(p.userId).t
+
+      const pnl = totalValue - deposited
+      const returnPct = deposited > 0 ? (pnl / deposited) * 100 : 0
+
+      return {
+        userId: p.userId,
+        totalValue,
+        cashBalance: p.cashBalance,
+        pnl,
+        returnPct,
+        positionCount: positions.length,
+      }
+    })
+
+    board.sort((a, b) => b.totalValue - a.totalValue)
+
+    res.json({ leaderboard: board.slice(0, 50) })
   } catch (err) {
     next(err)
   }
@@ -262,13 +322,13 @@ router.post('/purchase-cash', requireAuth, async (req, res, next) => {
       ensurePortfolio(db, userId)
       db.transaction(() => {
         db.prepare(
-          'UPDATE paper_portfolios SET cashBalance = cashBalance + ?, updatedAt = datetime(\'now\') WHERE userId = ?'
+          "UPDATE paper_portfolios SET cashBalance = cashBalance + ?, updatedAt = datetime('now') WHERE userId = ?"
         ).run(paperCashCredited, userId)
         db.prepare(
-          'INSERT INTO paper_cash_purchases (userId, usdPaid, paperCashCredited, status) VALUES (?, ?, ?, \'completed\')'
+          "INSERT INTO paper_cash_purchases (userId, usdPaid, paperCashCredited, status) VALUES (?, ?, ?, 'completed')"
         ).run(userId, usdPaid, paperCashCredited)
         db.prepare(
-          'INSERT INTO paper_transactions (userId, type, total) VALUES (?, \'deposit\', ?)'
+          "INSERT INTO paper_transactions (userId, type, total) VALUES (?, 'deposit', ?)"
         ).run(userId, paperCashCredited)
       })()
       return res.json({ success: true, devMode: true, credited: paperCashCredited })
@@ -295,7 +355,7 @@ router.post('/purchase-cash', requireAuth, async (req, res, next) => {
     })
 
     db.prepare(
-      'INSERT INTO paper_cash_purchases (userId, usdPaid, paperCashCredited, stripeSessionId, status) VALUES (?, ?, ?, ?, \'pending\')'
+      "INSERT INTO paper_cash_purchases (userId, usdPaid, paperCashCredited, stripeSessionId, status) VALUES (?, ?, ?, ?, 'pending')"
     ).run(userId, usdPaid, paperCashCredited, session.id)
 
     res.json({ url: session.url })
@@ -331,13 +391,13 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
       db.transaction(() => {
         ensurePortfolio(db, userId)
         db.prepare(
-          'UPDATE paper_portfolios SET cashBalance = cashBalance + ?, updatedAt = datetime(\'now\') WHERE userId = ?'
+          "UPDATE paper_portfolios SET cashBalance = cashBalance + ?, updatedAt = datetime('now') WHERE userId = ?"
         ).run(paperCashCredited, userId)
         db.prepare(
-          'UPDATE paper_cash_purchases SET status = \'completed\' WHERE stripeSessionId = ?'
+          "UPDATE paper_cash_purchases SET status = 'completed' WHERE stripeSessionId = ?"
         ).run(session.id)
         db.prepare(
-          'INSERT INTO paper_transactions (userId, type, total) VALUES (?, \'deposit\', ?)'
+          "INSERT INTO paper_transactions (userId, type, total) VALUES (?, 'deposit', ?)"
         ).run(userId, paperCashCredited)
       })()
     } catch (_) {}
@@ -347,7 +407,8 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
 })
 
 router.get('/stocks', (req, res) => {
-  res.json(Object.entries(TRADEABLE_META).map(([ticker, name]) => ({ ticker, name })))
+  // Legacy endpoint — returns empty list; frontend now uses open ticker search
+  res.json([])
 })
 
-module.exports = { router, TRADEABLE, TRADEABLE_META }
+module.exports = { router }
