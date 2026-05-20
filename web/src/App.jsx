@@ -5,7 +5,6 @@ import PriceAlertBanner from './components/PriceAlertBanner'
 import WatchlistPersistence from './components/WatchlistPersistence'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { setPreferences, setIsPro } from './store/preferencesSlice'
-import { setWatchlistStocks } from './store/watchlistSlice'
 import Sidebar from './components/Sidebar'
 import BottomNav from './components/BottomNav'
 import Dashboard from './pages/Dashboard'
@@ -91,14 +90,6 @@ function AppInner() {
         isPro: meta.isPro ?? false,
       }))
 
-      // Sync watchlist into watchlistSlice so Stocks page picks up user's tickers
-      if (meta.watchlist?.length) {
-        const tickers = meta.watchlist
-          .map((w) => (typeof w === 'string' ? w : w.ticker))
-          .filter(Boolean)
-          .map((t) => t.toUpperCase())
-        dispatch(setWatchlistStocks(tickers))
-      }
     }
   }, [user, dispatch])
 
