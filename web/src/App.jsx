@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import PriceAlertBanner from './components/PriceAlertBanner'
+import WatchlistPersistence from './components/WatchlistPersistence'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { setPreferences, setIsPro } from './store/preferencesSlice'
 import { setWatchlistStocks } from './store/watchlistSlice'
@@ -53,6 +54,7 @@ function ProtectedLayout() {
 
   return (
     <div className={`flex min-h-screen ${isDark ? 'bg-[#0f0f0f] text-white' : 'bg-white text-[#0f0f0f]'}`}>
+      <WatchlistPersistence />
       <PriceAlertBanner tickers={watchlistTickers} />
       <Sidebar />
       <div className="flex-1 flex flex-col min-h-screen pb-16 md:pb-0">

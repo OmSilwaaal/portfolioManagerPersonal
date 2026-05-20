@@ -4,6 +4,7 @@ import { resetPreferences } from '../store/preferencesSlice'
 import { supabase } from '../utils/supabase/client'
 import { useAuth } from '../contexts/AuthContext'
 import { useGetMyProfileQuery } from '../api/profilesApi'
+import { useGetGroupsQuery } from '../api/groupsApi'
 
 const NAV_SECTIONS = [
   {
@@ -163,6 +164,17 @@ export default function Sidebar() {
     : (profile?.display_name ?? meta.full_name ?? meta.name ?? meta.display_name ?? null)
   const avatarUrl = profile?.avatar_url || meta.avatar_url || meta.picture || null
 
+  const { data: groups = [] } = useGetGroupsQuery(undefined, { skip: !user, pollingInterval: 60000 })
+
+  // Red dot: any group has notification-type posts newer than last visit
+  const SEEN_KEY = user ? `miq_seen_notifs_${user.id}` : null
+  const lastSeen = SEEN_KEY ? (parseInt(localStorage.getItem(SEEN_KEY) || '0', 10)) : 0
+  const hasGroupAlert = groups.some((g) => {
+    const postCount = g.postCount ?? 0
+    const stored = parseInt(localStorage.getItem(`miq_pc_${g.id}`) || '0', 10)
+    return postCount > stored
+  })
+
   const handleSignOut = async () => {
     await supabase.auth.signOut()
     dispatch(resetPreferences())
@@ -213,18 +225,32 @@ export default function Sidebar() {
                     backdropFilter: 'blur(8px)',
                   } : {}}
                 >
-                  {({ isActive }) => (
-                    <>
-                      {isActive && (
-                        <span
-                          className="absolute left-0 top-1/2 -translate-y-1/2 w-[2.5px] h-4 rounded-full"
-                          style={{ background: 'rgba(255,255,255,0.8)' }}
-                        />
-                      )}
-                      <span className={isActive ? 'text-white' : ''}>{item.icon}</span>
-                      <span>{item.label}</span>
-                    </>
-                  )}
+                  {({ isActive }) => {
+                    const showBadge = item.path === '/groups' && hasGroupAlert && !isActive
+                    if (isActive && item.path === '/groups' && SEEN_KEY) {
+                      // Mark as seen when visiting groups
+                      groups.forEach((g) => {
+                        localStorage.setItem(`miq_pc_${g.id}`, String(g.postCount ?? 0))
+                      })
+                    }
+                    return (
+                      <>
+                        {isActive && (
+                          <span
+                            className="absolute left-0 top-1/2 -translate-y-1/2 w-[2.5px] h-4 rounded-full"
+                            style={{ background: 'rgba(255,255,255,0.8)' }}
+                          />
+                        )}
+                        <span className={`relative ${isActive ? 'text-white' : ''}`}>
+                          {item.icon}
+                          {showBadge && (
+                            <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full" />
+                          )}
+                        </span>
+                        <span>{item.label}</span>
+                      </>
+                    )
+                  }}
                 </NavLink>
               ))}
             </div>

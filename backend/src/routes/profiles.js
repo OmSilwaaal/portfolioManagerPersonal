@@ -88,19 +88,21 @@ router.get('/:userId', requireAuth, async (req, res) => {
   try {
     const userId = req.params.userId
 
-    // Try to get real name from Supabase auth
+    // Try to get real name + join date from Supabase auth
     let displayName = null
+    let joined_at = null
     try {
       const { data: authData } = await supabase.auth.admin.getUserById(userId)
       const meta = authData?.user?.user_metadata ?? {}
       displayName = meta.full_name ?? meta.name ?? authData?.user?.email ?? null
+      joined_at = authData?.user?.created_at ?? null
     } catch (_) {}
 
     const profile = await upsertProfile(userId, displayName)
     if (!profile) return res.status(404).json({ error: true, message: 'Profile not found.' })
 
     const { user_id, username, bio, avatar_url, display_name, updated_at } = profile
-    res.json({ user_id, username, bio, avatar_url, display_name, updated_at })
+    res.json({ user_id, username, bio, avatar_url, display_name, updated_at, joined_at })
   } catch (err) {
     console.error('GET /profiles/:userId', err)
     res.status(500).json({ error: true, message: 'Failed to load profile.' })
