@@ -8,7 +8,6 @@ import TradingViewChart from '../components/TradingViewChart'
 import ProGate from '../components/ProGate'
 import StockLogo from '../components/StockLogo'
 
-// Debounce hook
 function useDebounce(value, delay) {
   const [debounced, setDebounced] = useState(value)
   useEffect(() => {
@@ -18,23 +17,20 @@ function useDebounce(value, delay) {
   return debounced
 }
 
-function MiniSparkline({ price, changePercent }) {
-  const positive = changePercent >= 0
-  const bars = Array.from({ length: 8 })
-  return (
-    <div className="flex items-end gap-px h-8 w-14">
-      {bars.map((_, i) => {
-        const h = 40 + Math.sin(i * 0.9 + (price % 7)) * 30
-        return (
-          <div
-            key={i}
-            className={`flex-1 rounded-sm ${positive ? 'bg-emerald-500' : 'bg-red-500'} opacity-70`}
-            style={{ height: `${Math.max(15, Math.min(90, h))}%` }}
-          />
-        )
-      })}
-    </div>
-  )
+function fmt(n) {
+  if (n == null) return '—'
+  if (n >= 1e12) return `$${(n / 1e12).toFixed(2)}T`
+  if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B`
+  if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`
+  return `$${n.toLocaleString()}`
+}
+
+function fmtVol(n) {
+  if (n == null) return '—'
+  if (n >= 1e9) return `${(n / 1e9).toFixed(2)}B`
+  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`
+  if (n >= 1e3) return `${(n / 1e3).toFixed(0)}K`
+  return String(n)
 }
 
 function StockCard({ ticker, isSelected, onClick }) {
@@ -42,8 +38,12 @@ function StockCard({ ticker, isSelected, onClick }) {
   const dispatch = useDispatch()
 
   const price = data?.price || 0
+  const change = data?.change || 0
   const changePercent = data?.changePercent || 0
   const positive = changePercent >= 0
+  const high = data?.high
+  const low = data?.low
+  const volume = data?.volume
 
   const handleRemove = (e) => {
     e.stopPropagation()
@@ -53,48 +53,62 @@ function StockCard({ ticker, isSelected, onClick }) {
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left rounded-xl border transition-all duration-150 px-4 py-3.5 group ${
+      className={`w-full text-left rounded-xl border transition-all duration-150 px-4 py-3 group ${
         isSelected
-          ? 'bg-white/[0.06] border-white/20'
-          : 'bg-[#111] border-[#222] hover:bg-[#141414] hover:border-[#2e2e2e]'
+          ? 'bg-white/[0.07] border-white/25'
+          : 'bg-[#111] border-[#1e1e1e] hover:bg-[#141414] hover:border-[#2a2a2a]'
       }`}
     >
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-start gap-3">
         <StockLogo ticker={ticker} size={36} />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="text-white font-bold text-sm">{ticker}</span>
-            {isSelected && (
-              <span className="w-1.5 h-1.5 rounded-full bg-white/50 flex-shrink-0" />
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-white font-bold text-sm">{ticker}</span>
+              {data?.name && <span className="text-[#6b7280] text-xs truncate">{data.name}</span>}
+            </div>
+            {!isLoading && !isError && (
+              <div className="text-right flex-shrink-0">
+                <p className="text-white text-sm font-bold">
+                  ${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </p>
+                <p className={`text-xs font-semibold ${positive ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {positive ? '+' : ''}{change.toFixed(2)} ({positive ? '+' : ''}{changePercent.toFixed(2)}%)
+                </p>
+              </div>
             )}
           </div>
-          {data?.name && (
-            <p className="text-[#6b7280] text-xs mt-0.5 truncate">{data.name}</p>
-          )}
-          {isLoading && <div className="h-3 w-20 bg-[#222] rounded animate-pulse mt-0.5" />}
-        </div>
 
-        {!isLoading && !isError && (
-          <div className="flex items-center gap-3 flex-shrink-0">
-            <MiniSparkline price={price} changePercent={changePercent} />
-            <div className="text-right">
-              <p className="text-white text-sm font-semibold">
-                ${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </p>
-              <p className={`text-xs font-medium ${positive ? 'text-emerald-400' : 'text-red-400'}`}>
-                {positive ? '+' : ''}{changePercent.toFixed(2)}%
-              </p>
+          {!isLoading && !isError && (
+            <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+              {high != null && low != null && (
+                <span className="text-[11px] text-white/35">
+                  H: <span className="text-white/55">${high.toFixed(2)}</span>
+                  {' · '}
+                  L: <span className="text-white/55">${low.toFixed(2)}</span>
+                </span>
+              )}
+              {volume != null && (
+                <span className="text-[11px] text-white/35">
+                  Vol: <span className="text-white/55">{fmtVol(volume)}</span>
+                </span>
+              )}
+              {data?.marketCap != null && (
+                <span className="text-[11px] text-white/35">
+                  Cap: <span className="text-white/55">{fmt(data.marketCap * 1e6)}</span>
+                </span>
+              )}
             </div>
-          </div>
-        )}
+          )}
 
-        {isError && (
-          <span className="text-[#4b5563] text-xs">Unavailable</span>
-        )}
+          {isLoading && <div className="h-3 w-32 bg-[#222] rounded animate-pulse mt-2" />}
+          {isError && <span className="text-[#4b5563] text-xs mt-1 block">Data unavailable</span>}
+        </div>
 
         <button
           onClick={handleRemove}
-          className="text-[#333] hover:text-red-500 transition-colors text-lg leading-none flex-shrink-0 ml-1 opacity-0 group-hover:opacity-100"
+          className="text-[#2a2a2a] hover:text-red-500 transition-colors text-base leading-none flex-shrink-0 opacity-0 group-hover:opacity-100 mt-0.5"
           aria-label={`Remove ${ticker}`}
         >
           ×
@@ -107,15 +121,16 @@ function StockCard({ ticker, isSelected, onClick }) {
 function DetailPanel({ ticker }) {
   const { data, isLoading } = useGetStockQuery(ticker)
   const price = data?.price || 0
+  const change = data?.change || 0
   const changePercent = data?.changePercent || 0
   const positive = changePercent >= 0
 
   return (
-    <div className="flex flex-col h-full overflow-y-auto">
+    <div className="flex flex-col h-full overflow-y-auto scrollbar-hide">
       <div className="px-6 py-5 border-b border-[#1e1e1e]">
-        <div className="flex items-start justify-between">
+        <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">
-            <StockLogo ticker={ticker} size={44} />
+            <StockLogo ticker={ticker} size={48} />
             <div>
               <h2 className="text-white font-bold text-xl">{ticker}</h2>
               {data?.name && <p className="text-[#6b7280] text-sm mt-0.5">{data.name}</p>}
@@ -127,12 +142,32 @@ function DetailPanel({ ticker }) {
                 ${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
               <p className={`text-sm font-semibold ${positive ? 'text-emerald-400' : 'text-red-400'}`}>
-                {positive ? '▲' : '▼'} {Math.abs(changePercent).toFixed(2)}%
+                {positive ? '▲' : '▼'} {Math.abs(change).toFixed(2)} ({positive ? '+' : ''}{changePercent.toFixed(2)}%)
               </p>
             </div>
           )}
         </div>
+
+        {/* Stats row */}
+        {!isLoading && data && (
+          <div className="grid grid-cols-4 gap-3 mt-4">
+            {[
+              { label: 'Open', value: data.open != null ? `$${data.open.toFixed(2)}` : '—' },
+              { label: 'Prev Close', value: data.previousClose != null ? `$${data.previousClose.toFixed(2)}` : '—' },
+              { label: 'Day High', value: data.high != null ? `$${data.high.toFixed(2)}` : '—' },
+              { label: 'Day Low', value: data.low != null ? `$${data.low.toFixed(2)}` : '—' },
+              { label: 'Volume', value: fmtVol(data.volume) },
+              { label: 'Mkt Cap', value: data.marketCap != null ? fmt(data.marketCap * 1e6) : '—' },
+            ].map(({ label, value }) => (
+              <div key={label} className="rounded-lg px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <p className="text-[10px] text-white/30 uppercase tracking-widest mb-0.5">{label}</p>
+                <p className="text-sm font-semibold text-white/80">{value}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
+
       <div className="px-6 py-4">
         <ProGate label="Full charts & AI news">
           <div className="space-y-5">
@@ -154,22 +189,20 @@ function DetailPanel({ ticker }) {
   )
 }
 
-function TickerSearchInput({ onAdd, fullWidth = false }) {
+function TickerSearch({ onAdd }) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const wrapRef = useRef(null)
   const inputRef = useRef(null)
 
   const debouncedQuery = useDebounce(query.trim(), 280)
-  // Only search when >= 3 chars (handles short companies too — NVDA, IBM — user has to type at least 3 chars regardless)
-  const shouldSearch = debouncedQuery.length >= 3
+  const shouldSearch = debouncedQuery.length >= 2
   const { data, isFetching } = useSearchSymbolsQuery(
     { q: debouncedQuery, type: 'stocks' },
     { skip: !shouldSearch }
   )
   const results = data?.results || []
 
-  // Close dropdown on outside click
   useEffect(() => {
     const handler = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false) }
     document.addEventListener('mousedown', handler)
@@ -184,47 +217,35 @@ function TickerSearchInput({ onAdd, fullWidth = false }) {
   }, [onAdd])
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      const t = query.trim().toUpperCase()
-      if (t) { handleSelect(t) }
-    }
+    if (e.key === 'Enter') { e.preventDefault(); const t = query.trim().toUpperCase(); if (t) handleSelect(t) }
     if (e.key === 'Escape') { setOpen(false); setQuery('') }
   }
 
   return (
-    <div ref={wrapRef} className="relative">
-      <div className="flex items-center gap-2">
-        <div className="relative">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-          </svg>
-          <input
-            ref={inputRef}
-            type="text"
-            value={query}
-            onChange={(e) => { setQuery(e.target.value); setOpen(true) }}
-            onFocus={() => query.length >= 3 && setOpen(true)}
-            onKeyDown={handleKeyDown}
-            placeholder="Search by company name or ticker…"
-            maxLength={50}
-            className={`${fullWidth ? 'w-full' : 'w-52'} pl-8 pr-3 py-2 text-sm bg-[#111] border border-[#222] text-white placeholder-[#4b5563] rounded-lg focus:outline-none focus:border-white/20 transition-colors`}
-          />
-        </div>
-        <button
-          type="button"
-          onClick={() => { const t = query.trim().toUpperCase(); if (t) handleSelect(t) }}
-          disabled={!query.trim()}
-          className="px-4 py-2 text-sm font-semibold bg-white text-[#0a0a0a] rounded-lg hover:bg-white/90 disabled:opacity-30 transition-colors"
-        >
-          Add
-        </button>
+    <div ref={wrapRef} className="relative w-full">
+      <div className="flex items-center gap-2 rounded-xl px-4 py-2.5" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.10)' }}>
+        <svg className="text-white/30 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input
+          ref={inputRef}
+          type="text"
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); setOpen(true) }}
+          onFocus={() => query.length >= 2 && setOpen(true)}
+          onKeyDown={handleKeyDown}
+          placeholder="Search by company name or ticker — e.g. Apple, NVDA…"
+          maxLength={50}
+          className="flex-1 bg-transparent text-sm text-white placeholder-white/25 focus:outline-none"
+        />
+        {query && (
+          <button onClick={() => { setQuery(''); setOpen(false) }} className="text-white/25 hover:text-white/60 transition-colors text-lg leading-none">×</button>
+        )}
       </div>
 
-      {/* Dropdown */}
       {open && shouldSearch && (
         <div
-          className={`absolute ${fullWidth ? 'left-0 right-0' : 'right-0'} top-full mt-1.5 ${fullWidth ? 'w-full' : 'w-72'} z-40 rounded-xl overflow-hidden`}
+          className="absolute left-0 right-0 top-full mt-1.5 z-40 rounded-xl overflow-hidden"
           style={{ background: '#141414', border: '1px solid rgba(255,255,255,0.10)', boxShadow: '0 8px 32px rgba(0,0,0,0.6)' }}
         >
           {isFetching && (
@@ -236,11 +257,11 @@ function TickerSearchInput({ onAdd, fullWidth = false }) {
           {!isFetching && results.length === 0 && (
             <div className="px-4 py-3">
               <p className="text-xs text-white/30">No results for &ldquo;{debouncedQuery}&rdquo;</p>
-              <p className="text-[10px] text-white/20 mt-0.5">Try the full company name or exact ticker</p>
+              <p className="text-[10px] text-white/20 mt-0.5">Try the full company name or exact ticker symbol</p>
             </div>
           )}
           {!isFetching && results.length > 0 && (
-            <div className="py-1 max-h-64 overflow-y-auto">
+            <div className="py-1 max-h-64 overflow-y-auto scrollbar-hide">
               {results.slice(0, 8).map((r) => (
                 <button
                   key={`${r.assetType}_${r.ticker}`}
@@ -257,11 +278,6 @@ function TickerSearchInput({ onAdd, fullWidth = false }) {
                   </span>
                 </button>
               ))}
-            </div>
-          )}
-          {!shouldSearch && query.length > 0 && (
-            <div className="px-4 py-3">
-              <p className="text-xs text-white/30">Type at least 3 characters to search</p>
             </div>
           )}
         </div>
@@ -287,39 +303,40 @@ export default function Stocks() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0 h-full">
-      {/* Top bar */}
+      {/* Header */}
       <header className="flex items-center gap-4 px-6 py-4 border-b border-[#1a1a1a] flex-shrink-0">
-        <div className="flex-1">
+        <div>
           <h1 className="text-lg font-bold text-white">Watchlist</h1>
           <p className="text-[#6b7280] text-xs">
-            {stocks.length} stock{stocks.length !== 1 ? 's' : ''} tracked
+            {stocks.length === 0 ? 'Track stocks you care about' : `${stocks.length} stock${stocks.length !== 1 ? 's' : ''} tracked`}
           </p>
         </div>
-        <TickerSearchInput onAdd={handleAdd} />
       </header>
 
       {/* Two-panel layout */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
         {/* Left: stock list */}
         <div
-          className={`flex flex-col overflow-y-auto border-r border-[#1a1a1a] transition-all duration-200 ${
-            selectedTicker ? 'w-72 flex-shrink-0' : 'flex-1'
+          className={`flex flex-col overflow-y-auto border-r border-[#1a1a1a] transition-all duration-200 scrollbar-hide ${
+            selectedTicker ? 'w-80 flex-shrink-0' : 'flex-1'
           }`}
         >
+          {/* Search bar — always visible at top of list */}
+          <div className="px-4 pt-4 pb-3 border-b border-[#1a1a1a] flex-shrink-0">
+            <TickerSearch onAdd={handleAdd} />
+          </div>
+
           {stocks.length === 0 ? (
-            <div className="flex flex-col items-center justify-center flex-1 py-20 gap-5">
+            <div className="flex flex-col items-center justify-center flex-1 py-16 gap-4">
               <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.20)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
                   <polyline points="16 7 22 7 22 13"/>
                 </svg>
               </div>
-              <div className="text-center">
-                <p className="text-white/50 text-sm font-medium">No stocks in watchlist</p>
-                <p className="text-[#4b5563] text-xs mt-1">Search by company name or ticker — try "Apple" or "NVDA"</p>
-              </div>
-              <div className="w-full max-w-sm px-6">
-                <TickerSearchInput onAdd={handleAdd} fullWidth />
+              <div className="text-center px-6">
+                <p className="text-white/40 text-sm font-medium">Your watchlist is empty</p>
+                <p className="text-white/20 text-xs mt-1">Search above and add stocks to start tracking prices, charts, and news</p>
               </div>
             </div>
           ) : (
@@ -337,11 +354,20 @@ export default function Stocks() {
         </div>
 
         {/* Right: detail panel */}
-        {selectedTicker && (
+        {selectedTicker ? (
           <div className="flex-1 min-w-0 bg-[#080808]">
             <DetailPanel ticker={selectedTicker} />
           </div>
-        )}
+        ) : stocks.length > 0 ? (
+          <div className="flex-1 flex items-center justify-center bg-[#080808]">
+            <div className="text-center">
+              <svg className="mx-auto mb-3" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
+              </svg>
+              <p className="text-white/25 text-sm">Select a stock to view details</p>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   )

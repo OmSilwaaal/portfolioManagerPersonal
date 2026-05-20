@@ -674,6 +674,17 @@ export default function GroupDetail() {
           <h1 className="text-base font-semibold text-white truncate">{group.name}</h1>
           {group.description && <p className="text-xs text-white/35 truncate">{group.description}</p>}
         </div>
+        <button
+          onClick={copyCode}
+          title="Copy invite code"
+          className="flex items-center gap-1.5 px-2 py-1 rounded-lg transition-colors flex-shrink-0"
+          style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)' }}
+        >
+          <span className="font-mono text-[11px] font-bold text-white/60 tracking-widest">{group.code}</span>
+          <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={codeCopied ? 'rgba(134,239,172,0.9)' : 'rgba(255,255,255,0.35)'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>
+        </button>
         <span
           className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded flex-shrink-0"
           style={{
@@ -726,154 +737,8 @@ export default function GroupDetail() {
       <main className="flex-1 overflow-hidden flex flex-col lg:flex-row">
         {/* Stream */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Post composer */}
-          {canPost && (activeChannel === 'stream' || isAdmin) && (
-            <div className="px-4 py-4 border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-              {pollMode ? (
-                <div className="flex flex-col gap-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-white/50 uppercase tracking-widest">Create Poll</span>
-                    <button
-                      type="button"
-                      onClick={() => { setPollMode(false); setPollQuestion(''); setPollOptions(['', '']) }}
-                      className="text-white/25 hover:text-white/60 text-xs transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                  <input
-                    type="text"
-                    value={pollQuestion}
-                    onChange={(e) => setPollQuestion(e.target.value.slice(0, 200))}
-                    placeholder="Ask a question…"
-                    className="w-full px-4 py-2.5 rounded-xl text-sm text-white placeholder-white/20 focus:outline-none"
-                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
-                  />
-                  <div className="flex flex-col gap-2">
-                    {pollOptions.map((opt, idx) => (
-                      <div key={idx} className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={opt}
-                          onChange={(e) => {
-                            const next = [...pollOptions]
-                            next[idx] = e.target.value.slice(0, 100)
-                            setPollOptions(next)
-                          }}
-                          placeholder={`Option ${idx + 1}`}
-                          className="flex-1 px-3 py-2 rounded-lg text-sm text-white placeholder-white/20 focus:outline-none"
-                          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
-                        />
-                        {pollOptions.length > 2 && (
-                          <button
-                            type="button"
-                            onClick={() => setPollOptions(pollOptions.filter((_, i) => i !== idx))}
-                            className="text-white/20 hover:text-red-400 transition-colors text-xs"
-                          >
-                            ✕
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    {pollOptions.length < 5 && (
-                      <button
-                        type="button"
-                        onClick={() => setPollOptions([...pollOptions, ''])}
-                        className="text-xs text-white/35 hover:text-white/60 transition-colors"
-                      >
-                        + Add option
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={handleCreatePoll}
-                      disabled={posting || !pollQuestion.trim() || pollOptions.filter(o => o.trim()).length < 2}
-                      className="ml-auto px-4 py-1.5 rounded-lg text-xs font-semibold bg-white text-[#0a0a0a] hover:bg-white/90 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                    >
-                      {posting ? 'Creating…' : 'Create Poll'}
-                    </button>
-                  </div>
-                  {postError && <p className="text-red-400 text-xs">{postError}</p>}
-                </div>
-              ) : (
-                <form onSubmit={handlePost} className="flex flex-col gap-2">
-                  <textarea
-                    value={content}
-                    onChange={(e) => {
-                      setContent(e.target.value.slice(0, 2000))
-                      setPostError('')
-                      if (channelRef.current && user?.id) {
-                        const uname = user.user_metadata?.full_name ?? user.email ?? user.id
-                        channelRef.current.track({ userId: user.id, username: uname, typing: true })
-                        clearTimeout(typingTimeoutRef.current)
-                        typingTimeoutRef.current = setTimeout(() => {
-                          channelRef.current?.track({ userId: user.id, username: uname, typing: false })
-                        }, 2000)
-                      }
-                    }}
-                    placeholder={
-                      activeChannel === 'announcements'
-                        ? 'Write an announcement…'
-                        : activeChannel === 'notifications'
-                        ? 'Send a notification to the group…'
-                        : 'Share something with the group…'
-                    }
-                    rows={3}
-                    className="w-full px-4 py-3 rounded-xl text-sm text-white placeholder-white/20 focus:outline-none resize-none"
-                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
-                  />
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      {isAdmin && activeChannel === 'stream' && (
-                        <div className="flex gap-1 p-0.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.06)' }}>
-                          {[['post','Post'],['announcement','Announcement'],['notification','Notification']].map(([val, label]) => (
-                            <button
-                              key={val}
-                              type="button"
-                              onClick={() => setPostType(val)}
-                              className="px-2.5 py-1 rounded-md text-xs font-medium transition-all"
-                              style={{
-                                background: postType === val ? 'rgba(255,255,255,0.15)' : 'transparent',
-                                color: postType === val ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.35)',
-                              }}
-                            >
-                              {label}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      {/* Poll button */}
-                      <button
-                        type="button"
-                        onClick={() => setPollMode(true)}
-                        className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-all"
-                        style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.40)' }}
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
-                        </svg>
-                        Poll
-                      </button>
-                      <span className="text-[10px] text-white/20">{content.length}/2000</span>
-                    </div>
-                    <button
-                      type="submit"
-                      disabled={posting || !content.trim()}
-                      className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-white text-[#0a0a0a] hover:bg-white/90 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                    >
-                      {posting ? 'Posting…' : 'Post'}
-                    </button>
-                  </div>
-                  {postError && <p className="text-red-400 text-xs">{postError}</p>}
-                </form>
-              )}
-            </div>
-          )}
-
-          {/* Posts — Discord-style, no uniform gap */}
-          <div className="flex-1 overflow-y-auto flex flex-col py-4">
+          {/* Posts — Discord-style, fills space, no scrollbar */}
+          <div className="flex-1 overflow-y-auto flex flex-col py-4 scrollbar-hide">
             {channelPosts.length === 0 ? (
               <div className="flex flex-col items-center justify-center flex-1 py-16 gap-2">
                 <p className="text-white/20 text-sm">
@@ -922,26 +787,156 @@ export default function GroupDetail() {
             )}
             <div ref={messagesEndRef} />
           </div>
+
+          {/* Poll composer — slides up above chat bar */}
+          {canPost && (activeChannel === 'stream' || isAdmin) && pollMode && (
+            <div className="flex-shrink-0 px-4 py-3 border-t" style={{ borderColor: 'rgba(255,255,255,0.06)', background: 'rgba(0,0,0,0.2)' }}>
+              <div className="flex flex-col gap-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-white/50 uppercase tracking-widest">Create Poll</span>
+                  <button
+                    type="button"
+                    onClick={() => { setPollMode(false); setPollQuestion(''); setPollOptions(['', '']) }}
+                    className="text-white/25 hover:text-white/60 text-xs transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={pollQuestion}
+                  onChange={(e) => setPollQuestion(e.target.value.slice(0, 200))}
+                  placeholder="Ask a question…"
+                  className="w-full px-3 py-2 rounded-xl text-sm text-white placeholder-white/20 focus:outline-none"
+                  style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
+                />
+                <div className="flex flex-col gap-1.5">
+                  {pollOptions.map((opt, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={opt}
+                        onChange={(e) => { const n = [...pollOptions]; n[idx] = e.target.value.slice(0, 100); setPollOptions(n) }}
+                        placeholder={`Option ${idx + 1}`}
+                        className="flex-1 px-3 py-1.5 rounded-lg text-sm text-white placeholder-white/20 focus:outline-none"
+                        style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
+                      />
+                      {pollOptions.length > 2 && (
+                        <button type="button" onClick={() => setPollOptions(pollOptions.filter((_, i) => i !== idx))} className="text-white/20 hover:text-red-400 transition-colors text-xs">✕</button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  {pollOptions.length < 5 && (
+                    <button type="button" onClick={() => setPollOptions([...pollOptions, ''])} className="text-xs text-white/35 hover:text-white/60 transition-colors">+ Add option</button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleCreatePoll}
+                    disabled={posting || !pollQuestion.trim() || pollOptions.filter(o => o.trim()).length < 2}
+                    className="ml-auto px-4 py-1.5 rounded-lg text-xs font-semibold bg-white text-[#0a0a0a] hover:bg-white/90 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {posting ? 'Creating…' : 'Create Poll'}
+                  </button>
+                </div>
+                {postError && <p className="text-red-400 text-xs">{postError}</p>}
+              </div>
+            </div>
+          )}
+
+          {/* Discord-style bottom chat bar */}
+          {canPost && (activeChannel === 'stream' || isAdmin) && !pollMode && (
+            <div className="flex-shrink-0 px-3 py-2.5 border-t" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+              {isAdmin && activeChannel === 'stream' && (
+                <div className="flex gap-1 mb-2 p-0.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.05)', width: 'fit-content' }}>
+                  {[['post','Post'],['announcement','Announce'],['notification','Notify']].map(([val, label]) => (
+                    <button
+                      key={val}
+                      type="button"
+                      onClick={() => setPostType(val)}
+                      className="px-2 py-0.5 rounded-md text-[11px] font-medium transition-all"
+                      style={{
+                        background: postType === val ? 'rgba(255,255,255,0.15)' : 'transparent',
+                        color: postType === val ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.30)',
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div
+                className="flex items-end gap-2 rounded-xl px-3 py-2"
+                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
+              >
+                {/* Poll icon */}
+                <button
+                  type="button"
+                  onClick={() => setPollMode(true)}
+                  title="Create poll"
+                  className="text-white/25 hover:text-white/60 transition-colors flex-shrink-0 pb-1"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                  </svg>
+                </button>
+
+                {/* Auto-resize textarea */}
+                <textarea
+                  value={content}
+                  rows={1}
+                  onInput={(e) => {
+                    e.target.style.height = 'auto'
+                    e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
+                  }}
+                  onChange={(e) => {
+                    setContent(e.target.value.slice(0, 2000))
+                    setPostError('')
+                    if (channelRef.current && user?.id) {
+                      const uname = user.user_metadata?.full_name ?? user.email ?? user.id
+                      channelRef.current.track({ userId: user.id, username: uname, typing: true })
+                      clearTimeout(typingTimeoutRef.current)
+                      typingTimeoutRef.current = setTimeout(() => {
+                        channelRef.current?.track({ userId: user.id, username: uname, typing: false })
+                      }, 2000)
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handlePost(e) }
+                  }}
+                  placeholder={
+                    activeChannel === 'announcements' ? 'Write an announcement…'
+                    : activeChannel === 'notifications' ? 'Send a notification…'
+                    : 'Message the group… (Enter to send)'
+                  }
+                  className="flex-1 bg-transparent resize-none text-sm text-white placeholder-white/20 focus:outline-none scrollbar-hide"
+                  style={{ minHeight: '22px', maxHeight: '120px', lineHeight: '1.5' }}
+                />
+
+                {/* Send button */}
+                <button
+                  type="button"
+                  onClick={handlePost}
+                  disabled={posting || !content.trim()}
+                  className="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-all pb-0.5"
+                  style={{
+                    background: content.trim() ? 'rgba(255,255,255,0.15)' : 'transparent',
+                    color: content.trim() ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.20)',
+                  }}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                  </svg>
+                </button>
+              </div>
+              {postError && <p className="text-red-400 text-[11px] mt-1">{postError}</p>}
+            </div>
+          )}
         </div>
 
         {/* Sidebar */}
         <aside className="lg:w-72 flex-shrink-0 border-t lg:border-t-0 lg:border-l overflow-y-auto p-4 flex flex-col gap-4" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-          {/* Invite code */}
-          <div className="rounded-xl p-4" style={glassStyle}>
-            <p className="text-[10px] uppercase tracking-widest text-white/30 mb-2">Invite Code</p>
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-xl font-bold text-white tracking-[0.2em] flex-1">{group.code}</span>
-              <button
-                onClick={copyCode}
-                className="text-xs px-3 py-1.5 rounded-lg border transition-colors"
-                style={{ borderColor: 'rgba(255,255,255,0.15)', color: codeCopied ? 'rgba(134,239,172,1)' : 'rgba(255,255,255,0.5)' }}
-              >
-                {codeCopied ? 'Copied!' : 'Copy'}
-              </button>
-            </div>
-            <p className="text-[10px] text-white/20 mt-2">Share this code to invite members</p>
-          </div>
-
           {/* Members */}
           <MemberList
             members={group.members ?? []}
@@ -962,6 +957,22 @@ export default function GroupDetail() {
           <div className="w-full max-w-md rounded-2xl p-6 overflow-y-auto max-h-[90vh]" style={glassStyle}>
             <h2 className="text-lg font-bold text-white mb-5">Edit group</h2>
             <div className="flex flex-col gap-4">
+
+              {/* Invite code */}
+              <div>
+                <label className="block text-xs uppercase tracking-widest text-white/30 mb-1.5">Invite Code</label>
+                <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <span className="font-mono text-lg font-bold text-white tracking-[0.25em] flex-1">{group.code}</span>
+                  <button
+                    onClick={copyCode}
+                    className="text-xs px-3 py-1.5 rounded-lg border transition-colors flex-shrink-0"
+                    style={{ borderColor: 'rgba(255,255,255,0.15)', color: codeCopied ? 'rgba(134,239,172,1)' : 'rgba(255,255,255,0.5)' }}
+                  >
+                    {codeCopied ? 'Copied!' : 'Copy'}
+                  </button>
+                </div>
+                <p className="text-[10px] text-white/20 mt-1">Share this code with people you want to invite</p>
+              </div>
 
               {/* Group image */}
               <div>
