@@ -4,6 +4,7 @@ import { paperTradingApi } from '../api/paperTradingApi'
 import themeReducer from './themeSlice'
 import watchlistReducer from './watchlistSlice'
 import preferencesReducer from './preferencesSlice'
+import feedReducer from './feedSlice'
 
 // Register API endpoint modules
 import '../api/govTradesApi'
@@ -18,6 +19,7 @@ export const store = configureStore({
     theme: themeReducer,
     watchlist: watchlistReducer,
     preferences: preferencesReducer,
+    feed: feedReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware()

@@ -1,115 +1,74 @@
-import { NavLink, Link, useNavigate } from 'react-router-dom'
+import { NavLink, Link, useNavigate, useLocation } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { resetPreferences } from '../store/preferencesSlice'
+import { setFeedFilter, setFeedSubFilter, toggleFeedExpanded } from '../store/feedSlice'
 import { supabase } from '../utils/supabase/client'
 import { useAuth } from '../contexts/AuthContext'
 import { useGetMyProfileQuery } from '../api/profilesApi'
 import { useGetGroupsQuery } from '../api/groupsApi'
 
-const NAV_SECTIONS = [
+const FEED_FILTERS = [
+  { id: 'all', label: 'All' },
+  { id: 'stocks', label: 'Stocks' },
+  { id: 'crypto', label: 'Crypto' },
+  { id: 'gov-trades', label: 'Gov Trades' },
+  { id: 'commodities', label: 'Commodities' },
+  { id: 'macro', label: 'Macro' },
+]
+
+const TOOLS_ITEMS = [
   {
-    label: 'Markets',
-    items: [
-      {
-        path: '/feed',
-        label: 'Feed',
-        icon: (
-          <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-            <polyline points="9 22 9 12 15 12 15 22"/>
-          </svg>
-        ),
-      },
-      {
-        path: '/stocks',
-        label: 'Stocks',
-        icon: (
-          <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>
-          </svg>
-        ),
-      },
-      {
-        path: '/crypto',
-        label: 'Crypto',
-        icon: (
-          <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10"/>
-            <path d="M9.5 8h3a2 2 0 0 1 0 4h-3v4M9.5 8V6M12.5 8V6M9.5 16v2M12.5 16v2"/>
-          </svg>
-        ),
-      },
-      {
-        path: '/gov-trades',
-        label: 'Gov Trades',
-        icon: (
-          <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
-            <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
-          </svg>
-        ),
-      },
-      {
-        path: '/commodities',
-        label: 'Commodities',
-        icon: (
-          <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 2C12 2 5 10 5 15.5a7 7 0 0 0 14 0C19 10 12 2 12 2z"/>
-          </svg>
-        ),
-      },
-    ],
+    path: '/stocks',
+    label: 'Watchlist',
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>
+      </svg>
+    ),
   },
   {
-    label: 'Tools',
-    items: [
-      {
-        path: '/alerts',
-        label: 'Alerts',
-        icon: (
-          <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-          </svg>
-        ),
-      },
-      {
-        path: '/paper-trading',
-        label: 'Paper Trading',
-        icon: (
-          <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-          </svg>
-        ),
-      },
-    ],
+    path: '/alerts',
+    label: 'Alerts',
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+        <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+      </svg>
+    ),
   },
   {
-    label: 'Community',
-    items: [
-      {
-        path: '/groups',
-        label: 'Groups',
-        icon: (
-          <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-            <circle cx="9" cy="7" r="4"/>
-            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-          </svg>
-        ),
-      },
-      {
-        path: '/settings',
-        label: 'Settings',
-        icon: (
-          <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-          </svg>
-        ),
-      },
-    ],
+    path: '/paper-trading',
+    label: 'Paper Trading',
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+      </svg>
+    ),
+  },
+]
+
+const COMMUNITY_ITEMS = [
+  {
+    path: '/groups',
+    label: 'Groups',
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+        <circle cx="9" cy="7" r="4"/>
+        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+      </svg>
+    ),
+  },
+  {
+    path: '/settings',
+    label: 'Settings',
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+    ),
   },
 ]
 
@@ -148,17 +107,57 @@ function UserAvatar({ user, size = 32 }) {
 
 export { UserAvatar }
 
+function NavItem({ item, hasAlert }) {
+  return (
+    <NavLink
+      to={item.path}
+      end
+      className={({ isActive }) =>
+        `relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 ${
+          isActive
+            ? 'text-white'
+            : 'text-white/35 hover:text-white/70 hover:bg-white/[0.04]'
+        }`
+      }
+      style={({ isActive }) => isActive ? {
+        background: 'rgba(255,255,255,0.07)',
+        backdropFilter: 'blur(8px)',
+      } : {}}
+    >
+      {({ isActive }) => (
+        <>
+          {isActive && (
+            <span
+              className="absolute left-0 top-1/2 -translate-y-1/2 w-[2.5px] h-4 rounded-full"
+              style={{ background: 'rgba(255,255,255,0.8)' }}
+            />
+          )}
+          <span className={`relative ${isActive ? 'text-white' : ''}`}>
+            {item.icon}
+            {hasAlert && !isActive && (
+              <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full" />
+            )}
+          </span>
+          <span>{item.label}</span>
+        </>
+      )}
+    </NavLink>
+  )
+}
+
 export default function Sidebar() {
   const navigate = useNavigate()
+  const location = useLocation()
   const dispatch = useDispatch()
   const { user } = useAuth()
   const isPro = useSelector((state) => state.preferences.isPro)
+  const { activeFilter, subFilter, expanded: feedExpanded } = useSelector((state) => state.feed)
+  const watchlistStocks = useSelector((state) => state.watchlist.stocks)
   const { data: profile } = useGetMyProfileQuery(undefined, { skip: !user })
 
   const meta = user?.user_metadata ?? {}
   const email = user?.email ?? null
 
-  // Prefer custom profile data over OAuth metadata
   const displayName = profile?.username
     ? `@${profile.username}`
     : (profile?.display_name ?? meta.full_name ?? meta.name ?? meta.display_name ?? null)
@@ -166,19 +165,30 @@ export default function Sidebar() {
 
   const { data: groups = [] } = useGetGroupsQuery(undefined, { skip: !user, pollingInterval: 60000 })
 
-  // Red dot: any group has notification-type posts newer than last visit
   const SEEN_KEY = user ? `miq_seen_notifs_${user.id}` : null
-  const lastSeen = SEEN_KEY ? (parseInt(localStorage.getItem(SEEN_KEY) || '0', 10)) : 0
   const hasGroupAlert = groups.some((g) => {
     const postCount = g.postCount ?? 0
     const stored = parseInt(localStorage.getItem(`miq_pc_${g.id}`) || '0', 10)
     return postCount > stored
   })
 
+  const isFeed = location.pathname === '/feed'
+
   const handleSignOut = async () => {
     await supabase.auth.signOut()
     dispatch(resetPreferences())
     navigate('/', { replace: true })
+  }
+
+  const handleFeedFilterClick = (filterId) => {
+    dispatch(setFeedFilter(filterId))
+    navigate('/feed')
+  }
+
+  const handleTickerClick = (ticker) => {
+    dispatch(setFeedFilter('stocks'))
+    dispatch(setFeedSubFilter(subFilter === ticker ? null : ticker))
+    navigate('/feed')
   }
 
   return (
@@ -203,59 +213,166 @@ export default function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 overflow-y-auto">
-        {NAV_SECTIONS.map((section, si) => (
-          <div key={section.label}>
-            {si > 0 && <div className="my-2 mx-0 border-t border-white/[0.06]" />}
-            <p className="text-[9px] font-semibold uppercase tracking-[0.15em] text-white/20 px-3 mb-1 mt-2">{section.label}</p>
-            <div className="space-y-0.5">
-              {section.items.map((item) => (
-                <NavLink
-                  key={item.path}
-                  to={item.path}
-                  end
-                  className={({ isActive }) =>
-                    `relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 ${
-                      isActive
-                        ? 'text-white'
-                        : 'text-white/35 hover:text-white/70 hover:bg-white/[0.04]'
-                    }`
+
+        {/* Markets */}
+        <p className="text-[9px] font-semibold uppercase tracking-[0.15em] text-white/20 px-3 mb-1 mt-2">Markets</p>
+        <div className="space-y-0.5">
+          {/* Feed — expandable */}
+          <div>
+            <div className="flex items-center rounded-lg overflow-hidden">
+              <NavLink
+                to="/feed"
+                end
+                onClick={() => dispatch(setFeedFilter(activeFilter === 'all' && !feedExpanded ? 'all' : activeFilter))}
+                className={({ isActive }) =>
+                  `relative flex-1 flex items-center gap-3 pl-3 pr-1 py-2 text-sm font-medium transition-all duration-150 ${
+                    isActive ? 'text-white' : 'text-white/35 hover:text-white/70'
+                  }`
+                }
+                style={({ isActive }) => isActive ? {
+                  background: 'rgba(255,255,255,0.07)',
+                  backdropFilter: 'blur(8px)',
+                } : {}}
+              >
+                {({ isActive }) => (
+                  <>
+                    {isActive && (
+                      <span
+                        className="absolute left-0 top-1/2 -translate-y-1/2 w-[2.5px] h-4 rounded-full"
+                        style={{ background: 'rgba(255,255,255,0.8)' }}
+                      />
+                    )}
+                    <span className={isActive ? 'text-white' : ''}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                        <polyline points="9 22 9 12 15 12 15 22"/>
+                      </svg>
+                    </span>
+                    <span>Feed</span>
+                  </>
+                )}
+              </NavLink>
+              <button
+                onClick={() => dispatch(toggleFeedExpanded())}
+                className="px-2 py-2 text-white/20 hover:text-white/60 transition-colors flex-shrink-0"
+                title={feedExpanded ? 'Collapse' : 'Expand'}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  {feedExpanded
+                    ? <polyline points="18 15 12 9 6 15" />
+                    : <polyline points="6 9 12 15 18 9" />
                   }
-                  style={({ isActive }) => isActive ? {
-                    background: 'rgba(255,255,255,0.07)',
-                    backdropFilter: 'blur(8px)',
-                  } : {}}
-                >
-                  {({ isActive }) => {
-                    const showBadge = item.path === '/groups' && hasGroupAlert && !isActive
-                    if (isActive && item.path === '/groups' && SEEN_KEY) {
-                      // Mark as seen when visiting groups
-                      groups.forEach((g) => {
-                        localStorage.setItem(`miq_pc_${g.id}`, String(g.postCount ?? 0))
-                      })
-                    }
-                    return (
-                      <>
-                        {isActive && (
-                          <span
-                            className="absolute left-0 top-1/2 -translate-y-1/2 w-[2.5px] h-4 rounded-full"
-                            style={{ background: 'rgba(255,255,255,0.8)' }}
-                          />
-                        )}
-                        <span className={`relative ${isActive ? 'text-white' : ''}`}>
-                          {item.icon}
-                          {showBadge && (
-                            <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full" />
-                          )}
-                        </span>
-                        <span>{item.label}</span>
-                      </>
-                    )
-                  }}
-                </NavLink>
-              ))}
+                </svg>
+              </button>
             </div>
+
+            {/* Feed sub-items */}
+            {feedExpanded && (
+              <div className="ml-3 mt-0.5 border-l border-white/[0.06] pl-2 space-y-0.5 pb-1">
+                {FEED_FILTERS.map((f) => {
+                  const isActive = isFeed && activeFilter === f.id
+                  return (
+                    <div key={f.id}>
+                      <button
+                        onClick={() => handleFeedFilterClick(f.id)}
+                        className={`w-full text-left text-xs py-1.5 px-2 rounded-md transition-all font-medium ${
+                          isActive
+                            ? 'text-white bg-white/[0.06]'
+                            : 'text-white/35 hover:text-white/60 hover:bg-white/[0.03]'
+                        }`}
+                      >
+                        {f.label}
+                      </button>
+                      {/* Watchlist tickers under Stocks */}
+                      {f.id === 'stocks' && isActive && watchlistStocks.length > 0 && (
+                        <div className="ml-2 mt-0.5 border-l border-white/[0.04] pl-2 space-y-0.5">
+                          {watchlistStocks.slice(0, 10).map((ticker) => {
+                            const isTickerActive = subFilter === ticker
+                            return (
+                              <button
+                                key={ticker}
+                                onClick={() => handleTickerClick(ticker)}
+                                className={`w-full text-left text-[11px] py-1 px-2 rounded transition-all font-mono tracking-wide ${
+                                  isTickerActive
+                                    ? 'text-white bg-white/[0.08]'
+                                    : 'text-white/25 hover:text-white/55'
+                                }`}
+                              >
+                                {ticker}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
-        ))}
+        </div>
+
+        {/* Tools */}
+        <div className="my-2 mx-0 border-t border-white/[0.06]" />
+        <p className="text-[9px] font-semibold uppercase tracking-[0.15em] text-white/20 px-3 mb-1 mt-2">Tools</p>
+        <div className="space-y-0.5">
+          {TOOLS_ITEMS.map((item) => (
+            <NavItem key={item.path} item={item} />
+          ))}
+        </div>
+
+        {/* Community */}
+        <div className="my-2 mx-0 border-t border-white/[0.06]" />
+        <p className="text-[9px] font-semibold uppercase tracking-[0.15em] text-white/20 px-3 mb-1 mt-2">Community</p>
+        <div className="space-y-0.5">
+          {COMMUNITY_ITEMS.map((item) => {
+            const isGroups = item.path === '/groups'
+            const showBadge = isGroups && hasGroupAlert
+            return (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                end
+                className={({ isActive }) =>
+                  `relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 ${
+                    isActive
+                      ? 'text-white'
+                      : 'text-white/35 hover:text-white/70 hover:bg-white/[0.04]'
+                  }`
+                }
+                style={({ isActive }) => isActive ? {
+                  background: 'rgba(255,255,255,0.07)',
+                  backdropFilter: 'blur(8px)',
+                } : {}}
+              >
+                {({ isActive }) => {
+                  if (isActive && isGroups && SEEN_KEY) {
+                    groups.forEach((g) => {
+                      localStorage.setItem(`miq_pc_${g.id}`, String(g.postCount ?? 0))
+                    })
+                  }
+                  return (
+                    <>
+                      {isActive && (
+                        <span
+                          className="absolute left-0 top-1/2 -translate-y-1/2 w-[2.5px] h-4 rounded-full"
+                          style={{ background: 'rgba(255,255,255,0.8)' }}
+                        />
+                      )}
+                      <span className={`relative ${isActive ? 'text-white' : ''}`}>
+                        {item.icon}
+                        {showBadge && !isActive && (
+                          <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full" />
+                        )}
+                      </span>
+                      <span>{item.label}</span>
+                    </>
+                  )
+                }}
+              </NavLink>
+            )
+          })}
+        </div>
       </nav>
 
       {/* Footer */}

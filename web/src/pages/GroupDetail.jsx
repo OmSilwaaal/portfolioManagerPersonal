@@ -427,12 +427,15 @@ export default function GroupDetail() {
 
   const [realtimePosts, setRealtimePosts] = useState([])
   const [realtimeUpdates, setRealtimeUpdates] = useState({})
+  const [typingUsers, setTypingUsers] = useState({})
   const messagesEndRef = useRef(null)
+  const channelRef = useRef(null)
+  const typingTimeoutRef = useRef(null)
 
-  // Supabase Realtime — posts (INSERT + UPDATE) and members (all events)
+  // Supabase Realtime — posts (INSERT + UPDATE), members (all events), and Presence (typing)
   useEffect(() => {
-    if (!id) return
-    const channel = supabase
+    if (!id || !user?.id) return
+    const ch = supabase
       .channel(`group_live_${id}`)
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'group_posts', filter: `group_id=eq.${id}` },
@@ -446,7 +449,6 @@ export default function GroupDetail() {
       .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'group_posts', filter: `group_id=eq.${id}` },
         (payload) => {
-          // Update poll votes and any other post edits in-place instantly
           setRealtimeUpdates((prev) => ({ ...prev, [payload.new.id]: payload.new }))
           setRealtimePosts((prev) => prev.map((p) => p.id === payload.new.id ? payload.new : p))
         }
@@ -459,9 +461,32 @@ export default function GroupDetail() {
         { event: 'UPDATE', schema: 'public', table: 'groups', filter: `id=eq.${id}` },
         () => { refetch() }
       )
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
-  }, [id, refetch])
+      .on('presence', { event: 'sync' }, () => {
+        const state = ch.presenceState()
+        const typing = {}
+        Object.values(state).flat().forEach((p) => {
+          if (p.userId && p.userId !== user.id && p.typing) {
+            typing[p.userId] = p.username || 'Someone'
+          }
+        })
+        setTypingUsers(typing)
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await ch.track({
+            userId: user.id,
+            username: user.user_metadata?.full_name ?? user.email ?? user.id,
+            typing: false,
+          })
+        }
+      })
+    channelRef.current = ch
+    return () => {
+      clearTimeout(typingTimeoutRef.current)
+      supabase.removeChannel(ch)
+      channelRef.current = null
+    }
+  }, [id, refetch, user?.id])
 
   const [activeChannel, setActiveChannel] = useState('stream')
   const [content, setContent] = useState('')
@@ -506,7 +531,9 @@ export default function GroupDetail() {
 
   // Auto-scroll to newest message whenever the list grows
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    })
   }, [channelPosts.length])
 
   if (isLoading) {
@@ -536,10 +563,22 @@ export default function GroupDetail() {
     : activeChannel === 'notifications' ? 'notification'
     : 'post'
 
+  const stopTyping = () => {
+    clearTimeout(typingTimeoutRef.current)
+    if (channelRef.current && user?.id) {
+      channelRef.current.track({
+        userId: user.id,
+        username: user.user_metadata?.full_name ?? user.email ?? user.id,
+        typing: false,
+      })
+    }
+  }
+
   const handlePost = async (e) => {
     e.preventDefault()
     if (!content.trim()) return
     setPostError('')
+    stopTyping()
     const type = isAdmin ? postType : defaultPostTypeForChannel
     try {
       await createPost({ groupId: id, content: content.trim(), type }).unwrap()
@@ -554,6 +593,7 @@ export default function GroupDetail() {
     const options = pollOptions.map(o => o.trim()).filter(Boolean)
     if (!question || options.length < 2) return
     setPostError('')
+    stopTyping()
     const pollContent = `__POLL__${JSON.stringify({ question, options, votes: {} })}`
     const type = isAdmin ? postType : defaultPostTypeForChannel
     try {
@@ -761,7 +801,18 @@ export default function GroupDetail() {
                 <form onSubmit={handlePost} className="flex flex-col gap-2">
                   <textarea
                     value={content}
-                    onChange={(e) => { setContent(e.target.value.slice(0, 2000)); setPostError('') }}
+                    onChange={(e) => {
+                      setContent(e.target.value.slice(0, 2000))
+                      setPostError('')
+                      if (channelRef.current && user?.id) {
+                        const uname = user.user_metadata?.full_name ?? user.email ?? user.id
+                        channelRef.current.track({ userId: user.id, username: uname, typing: true })
+                        clearTimeout(typingTimeoutRef.current)
+                        typingTimeoutRef.current = setTimeout(() => {
+                          channelRef.current?.track({ userId: user.id, username: uname, typing: false })
+                        }, 2000)
+                      }
+                    }}
                     placeholder={
                       activeChannel === 'announcements'
                         ? 'Write an announcement…'
@@ -851,6 +902,23 @@ export default function GroupDetail() {
                   />
                 )
               })
+            )}
+            {/* Typing indicator */}
+            {Object.keys(typingUsers).length > 0 && (
+              <div className="px-4 py-2 flex items-center gap-2">
+                <div className="flex gap-[3px] items-center">
+                  {[0, 1, 2].map((i) => (
+                    <span
+                      key={i}
+                      className="w-1.5 h-1.5 rounded-full bg-white/30 animate-bounce"
+                      style={{ animationDelay: `${i * 0.15}s`, animationDuration: '0.9s' }}
+                    />
+                  ))}
+                </div>
+                <span className="text-xs text-white/30 italic">
+                  {Object.values(typingUsers).join(', ')} {Object.keys(typingUsers).length === 1 ? 'is' : 'are'} typing…
+                </span>
+              </div>
             )}
             <div ref={messagesEndRef} />
           </div>

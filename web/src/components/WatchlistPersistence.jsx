@@ -10,34 +10,43 @@ export default function WatchlistPersistence() {
   const dispatch = useDispatch()
   const stocks = useSelector((state) => state.watchlist.stocks)
   const crypto = useSelector((state) => state.watchlist.crypto)
-  const initialized = useRef(false)
 
-  // Load saved watchlist when user logs in
+  // readyToSave starts false; set to true via setTimeout after the load
+  // dispatch has taken effect and caused a re-render. This prevents the
+  // save effects from overwriting localStorage with the empty initial Redux
+  // state before the loaded data has propagated.
+  const readyToSave = useRef(false)
+  const prevUserId = useRef(null)
+
   useEffect(() => {
-    if (!user?.id) { initialized.current = false; return }
-    if (initialized.current) return
-    initialized.current = true
+    if (!user?.id) {
+      readyToSave.current = false
+      prevUserId.current = null
+      return
+    }
+    if (user.id === prevUserId.current) return
+    prevUserId.current = user.id
+    readyToSave.current = false
+
     try {
       const savedStocks = JSON.parse(localStorage.getItem(KEY(user.id, 'stocks')) || '[]')
       const savedCrypto = JSON.parse(localStorage.getItem(KEY(user.id, 'crypto')) || '[]')
-      if (Array.isArray(savedStocks) && savedStocks.length > 0) {
-        dispatch(setWatchlistStocks(savedStocks))
-      }
-      if (Array.isArray(savedCrypto)) {
-        savedCrypto.forEach((s) => dispatch(addCrypto(s)))
-      }
+      if (Array.isArray(savedStocks) && savedStocks.length > 0) dispatch(setWatchlistStocks(savedStocks))
+      if (Array.isArray(savedCrypto) && savedCrypto.length > 0) savedCrypto.forEach((s) => dispatch(addCrypto(s)))
     } catch {}
+
+    // Defer enabling saves until after the dispatch above has re-rendered
+    const t = setTimeout(() => { readyToSave.current = true }, 50)
+    return () => clearTimeout(t)
   }, [user?.id, dispatch])
 
-  // Persist stocks whenever they change (skip the initial load frame)
   useEffect(() => {
-    if (!user?.id || !initialized.current) return
+    if (!user?.id || !readyToSave.current) return
     localStorage.setItem(KEY(user.id, 'stocks'), JSON.stringify(stocks))
   }, [user?.id, stocks])
 
-  // Persist crypto whenever it changes
   useEffect(() => {
-    if (!user?.id || !initialized.current) return
+    if (!user?.id || !readyToSave.current) return
     localStorage.setItem(KEY(user.id, 'crypto'), JSON.stringify(crypto))
   }, [user?.id, crypto])
 

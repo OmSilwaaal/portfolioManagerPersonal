@@ -18,7 +18,9 @@ const watchlistSlice = createSlice({
       }
     },
     removeStock(state, action) {
-      state.stocks = state.stocks.filter((t) => t !== action.payload.toUpperCase())
+      const ticker = action.payload.toUpperCase()
+      state.stocks = state.stocks.filter((t) => t !== ticker)
+      if (state.selectedTicker === ticker) state.selectedTicker = null
     },
     addCrypto(state, action) {
       const symbol = action.payload.toUpperCase()

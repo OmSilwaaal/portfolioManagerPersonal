@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
-import { useSelector } from 'react-redux'
+import { useEffect } from 'react'
+import { useSelector, useDispatch } from 'react-redux'
+import { setFeedFilter, setFeedSubFilter } from '../store/feedSlice'
 import { useAuth } from '../contexts/AuthContext'
 import FilterBar from '../components/feed/FilterBar'
 import FeedCard from '../components/feed/FeedCard'
@@ -105,8 +106,8 @@ function weekLabel() {
 const FREE_ITEM_LIMIT = 5
 
 export default function Feed() {
-  const [activeFilter, setActiveFilter] = useState('all')
-  const [subFilter, setSubFilter] = useState(null)
+  const dispatch = useDispatch()
+  const { activeFilter, subFilter } = useSelector((state) => state.feed)
   const preferences = useSelector((state) => state.preferences)
   const isPro = useSelector((state) => state.preferences.isPro)
   const watchlist = useSelector((state) => state.watchlist?.stocks || [])
@@ -131,10 +132,7 @@ export default function Feed() {
   const feedItems = usePersonalizedFeed(rawFeedItems, rawGovTrades, rawCommodities)
   const isLoading = feedLoading || govLoading || commoditiesLoading
 
-  // Reset subFilter whenever activeFilter changes
-  useEffect(() => {
-    setSubFilter(null)
-  }, [activeFilter])
+  // subFilter is cleared automatically by setFeedFilter in the slice
 
   // Compute sub-filter chips based on active filter
   const subFilterChips = (() => {
@@ -218,7 +216,7 @@ export default function Feed() {
 
       {/* Filter bar */}
       <div className="mb-2">
-        <FilterBar activeFilter={activeFilter} onChange={setActiveFilter} />
+        <FilterBar activeFilter={activeFilter} onChange={(f) => dispatch(setFeedFilter(f))} />
       </div>
 
       {/* Sub-filter chips */}
@@ -229,7 +227,7 @@ export default function Feed() {
             return (
               <button
                 key={chip}
-                onClick={() => setSubFilter(isActive ? null : chip)}
+                onClick={() => dispatch(setFeedSubFilter(isActive ? null : chip))}
                 className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all ${
                   isActive
                     ? 'bg-white/10 border-white/20 text-white'
