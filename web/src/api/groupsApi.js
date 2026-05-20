@@ -46,6 +46,14 @@ export const groupsApi = baseApi.injectEndpoints({
       query: (groupId) => ({ url: `/groups/${groupId}`, method: 'DELETE' }),
       invalidatesTags: ['Groups'],
     }),
+    votePoll: builder.mutation({
+      query: ({ groupId, postId, optionIndex }) => ({
+        url: `/groups/${groupId}/posts/${postId}/vote`,
+        method: 'POST',
+        body: { optionIndex },
+      }),
+      invalidatesTags: (result, error, { groupId }) => [{ type: 'Groups', id: groupId }],
+    }),
   }),
   overrideExisting: false,
 })
@@ -61,4 +69,5 @@ export const {
   useUpdateMemberMutation,
   useRemoveMemberMutation,
   useDeleteGroupMutation,
+  useVotePollMutation,
 } = groupsApi

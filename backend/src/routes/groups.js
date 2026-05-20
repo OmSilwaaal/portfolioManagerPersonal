@@ -230,6 +230,60 @@ router.post('/:id/posts', requireAuth, async (req, res) => {
   }
 })
 
+// POST /:id/posts/:postId/vote — vote on a poll (any member)
+router.post('/:id/posts/:postId/vote', requireAuth, async (req, res) => {
+  try {
+    const { id: groupId, postId } = req.params
+    const { optionIndex } = req.body
+
+    const member = await getMembership(groupId, req.user.id)
+    if (!member) return res.status(403).json({ error: true, message: 'Not a member.' })
+
+    const { data: post } = await supabase
+      .from('group_posts')
+      .select('*')
+      .eq('id', postId)
+      .eq('group_id', groupId)
+      .maybeSingle()
+    if (!post) return res.status(404).json({ error: true, message: 'Post not found.' })
+    if (!post.content.startsWith('__POLL__')) return res.status(400).json({ error: true, message: 'Not a poll.' })
+
+    // Parse poll, update votes
+    const firstNewline = post.content.indexOf('\n')
+    const jsonStr = firstNewline > -1 ? post.content.slice(8, firstNewline) : post.content.slice(8)
+    const rest = firstNewline > -1 ? post.content.slice(firstNewline) : ''
+    let pollData
+    try { pollData = JSON.parse(jsonStr) } catch { return res.status(400).json({ error: true, message: 'Corrupt poll data.' }) }
+
+    const idx = parseInt(optionIndex, 10)
+    if (isNaN(idx) || idx < 0 || idx >= pollData.options.length) {
+      return res.status(400).json({ error: true, message: 'Invalid option.' })
+    }
+
+    pollData.votes = pollData.votes || {}
+    // Toggle: remove vote if same option selected again
+    if (pollData.votes[req.user.id] === idx) {
+      delete pollData.votes[req.user.id]
+    } else {
+      pollData.votes[req.user.id] = idx
+    }
+
+    const newContent = `__POLL__${JSON.stringify(pollData)}${rest}`
+    const { data: updated, error } = await supabase
+      .from('group_posts')
+      .update({ content: newContent })
+      .eq('id', postId)
+      .select()
+      .single()
+    if (error) throw error
+
+    res.json(updated)
+  } catch (err) {
+    console.error('POST /groups/:id/posts/:postId/vote', err)
+    res.status(500).json({ error: true, message: 'Failed to record vote.' })
+  }
+})
+
 // DELETE /:id/posts/:postId — delete post (author or admin)
 router.delete('/:id/posts/:postId', requireAuth, async (req, res) => {
   try {

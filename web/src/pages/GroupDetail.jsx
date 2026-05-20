@@ -10,6 +10,7 @@ import {
   useRemoveMemberMutation,
   useUpdateGroupMutation,
   useDeleteGroupMutation,
+  useVotePollMutation,
 } from '../api/groupsApi'
 import '../api/profilesApi'
 
@@ -59,8 +60,19 @@ function resizeImageToDataUrl(file, maxSize = 200, quality = 0.75) {
 }
 
 // Parse article shares: handles __ARTICLE__{json} format and legacy "📰 [" format
+// Also handles __POLL__{json} format
 function parsePostContent(content) {
   if (!content) return { type: 'text', text: content }
+
+  // Poll format: __POLL__{"question":"...","options":["A","B"],"votes":{}}
+  if (content.startsWith('__POLL__')) {
+    try {
+      const firstNewline = content.indexOf('\n')
+      const jsonStr = firstNewline > -1 ? content.slice(8, firstNewline) : content.slice(8)
+      const { question, options, votes = {} } = JSON.parse(jsonStr)
+      return { type: 'poll', question, options, votes }
+    } catch { return { type: 'text', text: content } }
+  }
 
   // New rich format: __ARTICLE__{"headline":...}\nmessage
   if (content.startsWith('__ARTICLE__')) {
@@ -90,130 +102,165 @@ function parsePostContent(content) {
   return { type: 'text', text: content }
 }
 
-function PostCard({ post, groupId, isAdmin, currentUserId }) {
+// Discord-style user colors
+const USER_COLORS = [
+  '#60a5fa','#34d399','#f472b6','#fb923c','#a78bfa',
+  '#38bdf8','#4ade80','#fbbf24','#f87171','#c084fc',
+]
+function userColor(userId) {
+  if (!userId) return USER_COLORS[0]
+  let h = 0
+  for (let i = 0; i < userId.length; i++) h = (h * 31 + userId.charCodeAt(i)) >>> 0
+  return USER_COLORS[h % USER_COLORS.length]
+}
+
+function PollCard({ poll, post, groupId, currentUserId, votePoll }) {
+  const { question, options, votes = {} } = poll
+  const myVote = votes[currentUserId] ?? null
+  const total = Object.keys(votes).length
+
+  return (
+    <div className="mt-1 max-w-sm rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)' }}>
+      <div className="flex items-center gap-1.5 mb-3">
+        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+        </svg>
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-white/30">Poll</span>
+      </div>
+      <p className="text-sm font-semibold text-white/90 mb-3">{question}</p>
+      <div className="flex flex-col gap-2">
+        {options.map((opt, idx) => {
+          const count = Object.values(votes).filter(v => v === idx).length
+          const pct = total > 0 ? Math.round((count / total) * 100) : 0
+          const isMyVote = myVote === idx
+          return (
+            <button
+              key={idx}
+              onClick={() => votePoll({ groupId, postId: post.id, optionIndex: idx })}
+              className="relative w-full text-left rounded-lg px-3 py-2.5 overflow-hidden transition-all"
+              style={{
+                background: isMyVote ? 'rgba(96,165,250,0.15)' : 'rgba(255,255,255,0.04)',
+                border: isMyVote ? '1px solid rgba(96,165,250,0.4)' : '1px solid rgba(255,255,255,0.08)',
+              }}
+            >
+              {/* Progress fill */}
+              <div
+                className="absolute inset-0 rounded-lg transition-all duration-500"
+                style={{ width: `${pct}%`, background: isMyVote ? 'rgba(96,165,250,0.12)' : 'rgba(255,255,255,0.04)' }}
+              />
+              <div className="relative flex items-center justify-between">
+                <span className="text-sm text-white/80 font-medium">{opt}</span>
+                <div className="flex items-center gap-2">
+                  {isMyVote && <span className="text-[10px] text-blue-400">✓</span>}
+                  <span className="text-xs text-white/40">{pct}%</span>
+                </div>
+              </div>
+            </button>
+          )
+        })}
+      </div>
+      <p className="text-[11px] text-white/25 mt-2">{total} vote{total !== 1 ? 's' : ''}</p>
+    </div>
+  )
+}
+
+function PostCard({ post, groupId, isAdmin, currentUserId, isFirst, isLast }) {
   const isOwn = post.author_id === currentUserId
   const isAnnouncement = post.type === 'announcement'
   const isNotification = post.type === 'notification'
   const [deletePost] = useDeletePostMutation()
+  const [votePoll] = useVotePollMutation()
   const parsed = parsePostContent(post.content)
+  const color = userColor(post.author_id)
 
   const handleDelete = async () => {
     if (!confirm('Delete this post?')) return
     try { await deletePost({ groupId, postId: post.id }).unwrap() } catch (_) {}
   }
 
+  const leftBorderStyle = isAnnouncement
+    ? { borderLeft: '3px solid rgba(255,255,255,0.35)', paddingLeft: 12, background: 'rgba(255,255,255,0.03)' }
+    : isNotification
+    ? { borderLeft: '3px solid rgba(251,191,36,0.6)', paddingLeft: 12, background: 'rgba(251,191,36,0.04)' }
+    : {}
+
   return (
     <div
-      className="rounded-xl p-4 relative"
-      style={{
-        background: isNotification
-          ? 'linear-gradient(135deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.05) 100%)'
-          : isAnnouncement
-          ? 'rgba(255,255,255,0.06)'
-          : 'rgba(255,255,255,0.04)',
-        border: isNotification
-          ? '1px solid rgba(255,255,255,0.18)'
-          : isAnnouncement
-          ? '1px solid rgba(255,255,255,0.10)'
-          : '1px solid rgba(255,255,255,0.06)',
-      }}
+      className={`group relative flex gap-3 px-4 hover:bg-white/[0.02] transition-colors ${isFirst ? 'mt-4 pt-0.5' : 'mt-0.5'}`}
+      style={leftBorderStyle}
     >
-      {(isAnnouncement || isNotification) && (
-        <div className="flex items-center gap-1.5 mb-2">
-          {isNotification ? (
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-            </svg>
-          ) : (
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.41 2 2 0 0 1 3.6 1.24h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L7.91 9.91a16 16 0 0 0 6.18 6.18l1.83-1.83a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/>
-            </svg>
-          )}
-          <span className="text-[10px] font-semibold uppercase tracking-widest text-white/50">
-            {isNotification ? 'Notification' : 'Announcement'}
-          </span>
-        </div>
-      )}
-      <div className="flex items-start gap-3">
-        <div
-          className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0 text-white"
-          style={{ background: 'rgba(255,255,255,0.12)' }}
-        >
-          {initials(post.author_name)}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className="text-sm font-semibold text-white/80">{post.author_name ?? 'Unknown'}</span>
-            <span className="text-xs text-white/25">{fmtTime(post.created_at)}</span>
-          </div>
-
-          {parsed.type === 'article' ? (
-            <div className="flex flex-col gap-2">
-              {/* Article share preview */}
-              <div className="rounded-lg overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)' }}>
-                {parsed.image_url && (
-                  <img
-                    src={parsed.image_url}
-                    alt={parsed.headline}
-                    className="w-full max-h-32 object-cover rounded-t-lg"
-                  />
-                )}
-                <div className="p-3">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
-                    </svg>
-                    <span className="text-[10px] font-semibold uppercase tracking-widest text-white/30">Article</span>
-                  </div>
-                  <p className="text-sm font-semibold text-white/80 leading-snug mb-1">{parsed.headline}</p>
-                  {parsed.summary && (
-                    <p className="text-xs text-white/40 leading-relaxed line-clamp-2 mb-2">{parsed.summary}</p>
-                  )}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {parsed.ticker && (
-                      <span className="text-[10px] font-bold text-white/50 tracking-widest px-1.5 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.08)' }}>{parsed.ticker}</span>
-                    )}
-                    {parsed.sentiment && (() => {
-                      const s = parsed.sentiment
-                      const bg = s === 'Bullish' ? 'rgba(52,211,153,0.15)' : s === 'Bearish' ? 'rgba(239,68,68,0.15)' : 'rgba(255,255,255,0.08)'
-                      const color = s === 'Bullish' ? 'rgba(52,211,153,0.9)' : s === 'Bearish' ? 'rgba(239,68,68,0.9)' : 'rgba(255,255,255,0.45)'
-                      const label = s === 'Bullish' ? '↑ Bullish' : s === 'Bearish' ? '↓ Bearish' : '— Neutral'
-                      return (
-                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: bg, color }}>{label}</span>
-                      )
-                    })()}
-                    {parsed.url && (
-                      <a
-                        href={parsed.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[10px] text-white/40 hover:text-white/70 transition-colors ml-auto"
-                      >
-                        Read →
-                      </a>
-                    )}
-                  </div>
-                </div>
-              </div>
-              {parsed.message && (
-                <p className="text-sm text-white/60 leading-relaxed whitespace-pre-wrap break-words pl-1">{parsed.message}</p>
-              )}
-            </div>
-          ) : (
-            <p className="text-sm text-white/70 leading-relaxed whitespace-pre-wrap break-words">{parsed.text}</p>
-          )}
-        </div>
-        {(isAdmin || isOwn) && (
-          <button
-            onClick={handleDelete}
-            className="text-white/20 hover:text-red-400 transition-colors flex-shrink-0 mt-0.5"
+      {/* Avatar column — always 32px wide to keep alignment */}
+      <div className="w-8 flex-shrink-0 flex flex-col items-center">
+        {isFirst ? (
+          <div
+            className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5"
+            style={{ background: color + '22', color, border: `1px solid ${color}44` }}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
-            </svg>
-          </button>
+            {initials(post.author_name)}
+          </div>
+        ) : (
+          <span className="text-[10px] text-white/0 group-hover:text-white/25 transition-colors select-none mt-1.5 leading-none w-8 text-center">
+            {fmtTime(post.created_at).replace(' ago','').replace('just now','now')}
+          </span>
         )}
       </div>
+
+      {/* Content */}
+      <div className="flex-1 min-w-0 pb-0.5">
+        {isFirst && (
+          <div className="flex items-baseline gap-2 mb-0.5">
+            <span className="text-sm font-semibold" style={{ color }}>{post.author_name ?? 'Member'}</span>
+            <span className="text-[11px] text-white/25">{fmtTime(post.created_at)}</span>
+            {(isAnnouncement || isNotification) && (
+              <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded"
+                style={{ background: isNotification ? 'rgba(251,191,36,0.15)' : 'rgba(255,255,255,0.10)', color: isNotification ? 'rgba(251,191,36,0.9)' : 'rgba(255,255,255,0.5)' }}>
+                {isNotification ? 'Notification' : 'Announcement'}
+              </span>
+            )}
+          </div>
+        )}
+
+        {parsed.type === 'poll' ? (
+          <PollCard poll={parsed} post={post} groupId={groupId} currentUserId={currentUserId} votePoll={votePoll} />
+        ) : parsed.type === 'article' ? (
+          <div className="flex flex-col gap-2 mt-1">
+            <div className="rounded-lg overflow-hidden max-w-sm" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)' }}>
+              {parsed.image_url && (
+                <img src={parsed.image_url} alt={parsed.headline} className="w-full max-h-36 object-cover" />
+              )}
+              <div className="p-3">
+                <p className="text-sm font-semibold text-white/85 leading-snug mb-1">{parsed.headline}</p>
+                {parsed.summary && <p className="text-xs text-white/40 line-clamp-2 mb-2">{parsed.summary}</p>}
+                <div className="flex items-center gap-2 flex-wrap">
+                  {parsed.ticker && <span className="text-[10px] font-bold text-white/50 tracking-widest px-1.5 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.08)' }}>{parsed.ticker}</span>}
+                  {parsed.sentiment && (() => {
+                    const s = parsed.sentiment
+                    const bg = s === 'Bullish' ? 'rgba(52,211,153,0.15)' : s === 'Bearish' ? 'rgba(239,68,68,0.15)' : 'rgba(255,255,255,0.08)'
+                    const clr = s === 'Bullish' ? 'rgba(52,211,153,0.9)' : s === 'Bearish' ? 'rgba(239,68,68,0.9)' : 'rgba(255,255,255,0.45)'
+                    return <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: bg, color: clr }}>{s === 'Bullish' ? '↑ Bullish' : s === 'Bearish' ? '↓ Bearish' : '— Neutral'}</span>
+                  })()}
+                  {parsed.url && <a href={parsed.url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-white/40 hover:text-white/70 ml-auto">Read →</a>}
+                </div>
+              </div>
+            </div>
+            {parsed.message && <p className="text-sm text-white/70 leading-relaxed whitespace-pre-wrap break-words">{parsed.message}</p>}
+          </div>
+        ) : (
+          <p className="text-sm text-white/80 leading-relaxed whitespace-pre-wrap break-words">{parsed.text}</p>
+        )}
+      </div>
+
+      {/* Delete button — hover only */}
+      {(isAdmin || isOwn) && (
+        <button
+          onClick={handleDelete}
+          className="absolute top-1 right-3 text-white/0 group-hover:text-white/30 hover:!text-red-400 transition-colors"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>
+          </svg>
+        </button>
+      )}
     </div>
   )
 }
@@ -404,6 +451,11 @@ export default function GroupDetail() {
   const [postType, setPostType] = useState('post')
   const [postError, setPostError] = useState('')
 
+  // Poll composer state
+  const [pollMode, setPollMode] = useState(false)
+  const [pollQuestion, setPollQuestion] = useState('')
+  const [pollOptions, setPollOptions] = useState(['', ''])
+
   const [codeCopied, setCodeCopied] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [editName, setEditName] = useState('')
@@ -475,6 +527,23 @@ export default function GroupDetail() {
       setContent('')
     } catch (err) {
       setPostError(err?.data?.message ?? 'Failed to post.')
+    }
+  }
+
+  const handleCreatePoll = async () => {
+    const question = pollQuestion.trim()
+    const options = pollOptions.map(o => o.trim()).filter(Boolean)
+    if (!question || options.length < 2) return
+    setPostError('')
+    const pollContent = `__POLL__${JSON.stringify({ question, options, votes: {} })}`
+    const type = isAdmin ? postType : defaultPostTypeForChannel
+    try {
+      await createPost({ groupId: id, content: pollContent, type }).unwrap()
+      setPollMode(false)
+      setPollQuestion('')
+      setPollOptions(['', ''])
+    } catch (err) {
+      setPostError(err?.data?.message ?? 'Failed to create poll.')
     }
   }
 
@@ -601,58 +670,140 @@ export default function GroupDetail() {
           {/* Post composer */}
           {canPost && (activeChannel === 'stream' || isAdmin) && (
             <div className="px-4 py-4 border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-              <form onSubmit={handlePost} className="flex flex-col gap-2">
-                <textarea
-                  value={content}
-                  onChange={(e) => { setContent(e.target.value.slice(0, 2000)); setPostError('') }}
-                  placeholder={
-                    activeChannel === 'announcements'
-                      ? 'Write an announcement…'
-                      : activeChannel === 'notifications'
-                      ? 'Send a notification to the group…'
-                      : 'Share something with the group…'
-                  }
-                  rows={3}
-                  className="w-full px-4 py-3 rounded-xl text-sm text-white placeholder-white/20 focus:outline-none resize-none"
-                  style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
-                />
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    {isAdmin && activeChannel === 'stream' && (
-                      <div className="flex gap-1 p-0.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.06)' }}>
-                        {[['post','Post'],['announcement','Announcement'],['notification','Notification']].map(([val, label]) => (
-                          <button
-                            key={val}
-                            type="button"
-                            onClick={() => setPostType(val)}
-                            className="px-2.5 py-1 rounded-md text-xs font-medium transition-all"
-                            style={{
-                              background: postType === val ? 'rgba(255,255,255,0.15)' : 'transparent',
-                              color: postType === val ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.35)',
-                            }}
-                          >
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    <span className="text-[10px] text-white/20">{content.length}/2000</span>
+              {pollMode ? (
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-white/50 uppercase tracking-widest">Create Poll</span>
+                    <button
+                      type="button"
+                      onClick={() => { setPollMode(false); setPollQuestion(''); setPollOptions(['', '']) }}
+                      className="text-white/25 hover:text-white/60 text-xs transition-colors"
+                    >
+                      Cancel
+                    </button>
                   </div>
-                  <button
-                    type="submit"
-                    disabled={posting || !content.trim()}
-                    className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-white text-[#0a0a0a] hover:bg-white/90 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                  >
-                    {posting ? 'Posting…' : 'Post'}
-                  </button>
+                  <input
+                    type="text"
+                    value={pollQuestion}
+                    onChange={(e) => setPollQuestion(e.target.value.slice(0, 200))}
+                    placeholder="Ask a question…"
+                    className="w-full px-4 py-2.5 rounded-xl text-sm text-white placeholder-white/20 focus:outline-none"
+                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
+                  />
+                  <div className="flex flex-col gap-2">
+                    {pollOptions.map((opt, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={opt}
+                          onChange={(e) => {
+                            const next = [...pollOptions]
+                            next[idx] = e.target.value.slice(0, 100)
+                            setPollOptions(next)
+                          }}
+                          placeholder={`Option ${idx + 1}`}
+                          className="flex-1 px-3 py-2 rounded-lg text-sm text-white placeholder-white/20 focus:outline-none"
+                          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
+                        />
+                        {pollOptions.length > 2 && (
+                          <button
+                            type="button"
+                            onClick={() => setPollOptions(pollOptions.filter((_, i) => i !== idx))}
+                            className="text-white/20 hover:text-red-400 transition-colors text-xs"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    {pollOptions.length < 5 && (
+                      <button
+                        type="button"
+                        onClick={() => setPollOptions([...pollOptions, ''])}
+                        className="text-xs text-white/35 hover:text-white/60 transition-colors"
+                      >
+                        + Add option
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleCreatePoll}
+                      disabled={posting || !pollQuestion.trim() || pollOptions.filter(o => o.trim()).length < 2}
+                      className="ml-auto px-4 py-1.5 rounded-lg text-xs font-semibold bg-white text-[#0a0a0a] hover:bg-white/90 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {posting ? 'Creating…' : 'Create Poll'}
+                    </button>
+                  </div>
+                  {postError && <p className="text-red-400 text-xs">{postError}</p>}
                 </div>
-                {postError && <p className="text-red-400 text-xs">{postError}</p>}
-              </form>
+              ) : (
+                <form onSubmit={handlePost} className="flex flex-col gap-2">
+                  <textarea
+                    value={content}
+                    onChange={(e) => { setContent(e.target.value.slice(0, 2000)); setPostError('') }}
+                    placeholder={
+                      activeChannel === 'announcements'
+                        ? 'Write an announcement…'
+                        : activeChannel === 'notifications'
+                        ? 'Send a notification to the group…'
+                        : 'Share something with the group…'
+                    }
+                    rows={3}
+                    className="w-full px-4 py-3 rounded-xl text-sm text-white placeholder-white/20 focus:outline-none resize-none"
+                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
+                  />
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      {isAdmin && activeChannel === 'stream' && (
+                        <div className="flex gap-1 p-0.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                          {[['post','Post'],['announcement','Announcement'],['notification','Notification']].map(([val, label]) => (
+                            <button
+                              key={val}
+                              type="button"
+                              onClick={() => setPostType(val)}
+                              className="px-2.5 py-1 rounded-md text-xs font-medium transition-all"
+                              style={{
+                                background: postType === val ? 'rgba(255,255,255,0.15)' : 'transparent',
+                                color: postType === val ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.35)',
+                              }}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {/* Poll button */}
+                      <button
+                        type="button"
+                        onClick={() => setPollMode(true)}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-all"
+                        style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.40)' }}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                        </svg>
+                        Poll
+                      </button>
+                      <span className="text-[10px] text-white/20">{content.length}/2000</span>
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={posting || !content.trim()}
+                      className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-white text-[#0a0a0a] hover:bg-white/90 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {posting ? 'Posting…' : 'Post'}
+                    </button>
+                  </div>
+                  {postError && <p className="text-red-400 text-xs">{postError}</p>}
+                </form>
+              )}
             </div>
           )}
 
-          {/* Posts */}
-          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
+          {/* Posts — Discord-style, no uniform gap */}
+          <div className="flex-1 overflow-y-auto flex flex-col py-4">
             {channelPosts.length === 0 ? (
               <div className="flex flex-col items-center justify-center flex-1 py-16 gap-2">
                 <p className="text-white/20 text-sm">
@@ -663,15 +814,24 @@ export default function GroupDetail() {
                 )}
               </div>
             ) : (
-              channelPosts.map((post) => (
-                <PostCard
-                  key={post.id}
-                  post={post}
-                  groupId={id}
-                  isAdmin={isAdmin}
-                  currentUserId={currentUserId}
-                />
-              ))
+              channelPosts.map((post, idx) => {
+                const prev = channelPosts[idx - 1]
+                const isFirst = !prev || prev.author_id !== post.author_id || prev.type !== post.type ||
+                  (new Date(post.created_at) - new Date(prev.created_at)) > 5 * 60 * 1000
+                const next = channelPosts[idx + 1]
+                const isLast = !next || next.author_id !== post.author_id || next.type !== post.type
+                return (
+                  <PostCard
+                    key={post.id}
+                    post={post}
+                    groupId={id}
+                    isAdmin={isAdmin}
+                    currentUserId={currentUserId}
+                    isFirst={isFirst}
+                    isLast={isLast}
+                  />
+                )
+              })
             )}
             <div ref={messagesEndRef} />
           </div>
