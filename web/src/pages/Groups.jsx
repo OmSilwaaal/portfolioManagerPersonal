@@ -44,7 +44,7 @@ function GroupCard({ group, onDragStart, onDragOver, onDrop, onDragEnd, isDraggi
       onDragEnd={onDragEnd}
       style={{
         ...glassStyle,
-        opacity: isDragging ? 0.4 : 1,
+        opacity: isDragging ? 0 : 1,
         cursor: 'grab',
         transition: 'opacity 0.15s, transform 0.15s',
       }}
@@ -94,7 +94,8 @@ export default function Groups() {
   const isPro = useSelector((state) => state.preferences.isPro)
 
   const [groups, setGroups] = useState([])
-  const dragIdx = useRef(null)
+  const dragIdxRef = useRef(null)
+  const [draggingIdx, setDraggingIdx] = useState(null)
 
   useEffect(() => {
     if (rawGroups.length > 0) {
@@ -128,15 +129,23 @@ export default function Groups() {
   }
 
   /* ── Drag-to-reorder handlers ── */
-  const handleDragStart = (idx) => { dragIdx.current = idx }
+  const handleDragStart = (e, idx) => {
+    dragIdxRef.current = idx
+    setDraggingIdx(idx)
+    const ghost = document.createElement('div')
+    ghost.style.cssText = 'position:absolute;top:-1000px;'
+    document.body.appendChild(ghost)
+    e.dataTransfer.setDragImage(ghost, 0, 0)
+    setTimeout(() => document.body.removeChild(ghost), 0)
+  }
 
   const handleDragOver = (e, idx) => {
     e.preventDefault()
-    if (dragIdx.current == null || dragIdx.current === idx) return
+    if (dragIdxRef.current == null || dragIdxRef.current === idx) return
     const next = [...groups]
-    const [moved] = next.splice(dragIdx.current, 1)
+    const [moved] = next.splice(dragIdxRef.current, 1)
     next.splice(idx, 0, moved)
-    dragIdx.current = idx
+    dragIdxRef.current = idx
     setGroups(next)
   }
 
@@ -144,7 +153,8 @@ export default function Groups() {
 
   const handleDragEnd = () => {
     saveOrder(groups)
-    dragIdx.current = null
+    dragIdxRef.current = null
+    setDraggingIdx(null)
   }
 
   return (
@@ -214,8 +224,8 @@ export default function Groups() {
               <GroupCard
                 key={g.id}
                 group={g}
-                isDragging={dragIdx.current === idx}
-                onDragStart={() => handleDragStart(idx)}
+                isDragging={draggingIdx === idx}
+                onDragStart={(e) => handleDragStart(e, idx)}
                 onDragOver={(e) => handleDragOver(e, idx)}
                 onDrop={handleDrop}
                 onDragEnd={handleDragEnd}
