@@ -193,7 +193,7 @@ export default function Sidebar() {
 
   return (
     <aside
-      className="hidden md:flex flex-col w-[200px] flex-shrink-0 min-h-screen border-r"
+      className="hidden md:flex flex-col w-[200px] fixed left-0 top-0 bottom-0 z-40 overflow-y-auto border-r"
       style={{
         background: 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)',
         backdropFilter: 'blur(24px)',

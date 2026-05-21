@@ -56,7 +56,7 @@ function ProtectedLayout() {
       <WatchlistPersistence />
       <PriceAlertBanner tickers={watchlistTickers} />
       <Sidebar />
-      <div className="flex-1 flex flex-col min-h-screen pb-16 md:pb-0">
+      <div className="flex-1 md:ml-[200px] flex flex-col min-h-screen pb-16 md:pb-0">
         <Outlet />
       </div>
       <BottomNav />
@@ -129,16 +129,12 @@ function AppInner() {
         <Route path="/paper-trading" element={<PaperTrading />} />
         <Route path="/groups" element={<Groups />} />
         <Route path="/groups/new" element={<CreateGroup />} />
+        <Route path="/groups/:id" element={<GroupDetail />} />
         <Route path="/profile/:userId" element={<Profile />} />
         <Route path="/gov-trades" element={<GovTrades />} />
         <Route path="/commodities" element={<Commodities />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/pricing" element={<Pricing />} />
-      </Route>
-
-      {/* Protected — no sidebar (immersive views) */}
-      <Route element={<ProtectedLayoutMinimal />}>
-        <Route path="/groups/:id" element={<GroupDetail />} />
       </Route>
     </Routes>
   )
