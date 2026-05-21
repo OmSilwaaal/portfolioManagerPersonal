@@ -5,10 +5,5 @@
   "installCommand": "npm install",
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
-  ],
-  "env": {
-    "VITE_SUPABASE_URL": "@vite_supabase_url",
-    "VITE_SUPABASE_KEY": "@vite_supabase_key",
-    "VITE_API_URL": "@vite_api_url"
-  }
+  ]
 }
