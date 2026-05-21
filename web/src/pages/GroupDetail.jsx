@@ -657,12 +657,6 @@ export default function GroupDetail() {
     <div className="flex-1 flex flex-col min-h-0 bg-[#0a0a0a]">
       {/* Header */}
       <header className="flex items-center gap-4 px-6 py-4 border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-        <Link to="/groups" className="text-white/40 hover:text-white transition-colors flex-shrink-0">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
-          </svg>
-        </Link>
-
         {groupAvatar ? (
           <img src={groupAvatar} alt={group.name} className="w-9 h-9 rounded-xl object-cover flex-shrink-0" />
         ) : (
@@ -741,10 +735,11 @@ export default function GroupDetail() {
       <main className="flex-1 overflow-hidden flex flex-col lg:flex-row">
         {/* Stream */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Posts — Discord-style, fills space, no scrollbar */}
+          {/* Posts — Discord-style, fills space, scrollable */}
+          <div className="relative flex-1 overflow-hidden">
           <div
             ref={scrollContainerRef}
-            className="flex-1 overflow-y-auto flex flex-col py-4 scrollbar-hide"
+            className="absolute inset-0 overflow-y-auto py-4 scrollbar-hide"
             onScroll={() => {
               const el = scrollContainerRef.current
               if (!el) return
@@ -798,6 +793,7 @@ export default function GroupDetail() {
               </div>
             )}
             <div ref={messagesEndRef} />
+          </div>
           </div>
 
           {/* Poll composer — slides up above chat bar */}

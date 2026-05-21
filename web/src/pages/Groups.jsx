@@ -32,56 +32,41 @@ function applyStoredOrder(groups) {
   }
 }
 
-function GroupCard({ group, onDragStart, onDragOver, onDrop, onDragEnd, isDragging }) {
+function GroupCard({ group }) {
   const initial = group.name.charAt(0).toUpperCase()
 
   return (
-    <div
-      draggable
-      onDragStart={onDragStart}
-      onDragOver={onDragOver}
-      onDrop={onDrop}
-      onDragEnd={onDragEnd}
-      style={{
-        ...glassStyle,
-        opacity: isDragging ? 0 : 1,
-        cursor: 'grab',
-        transition: 'opacity 0.15s, transform 0.15s',
-      }}
-      className="rounded-2xl overflow-hidden select-none"
-    >
-      <Link to={`/groups/${group.id}`} className="block" draggable={false}>
-        <div className="h-1.5 w-full" style={{ background: group.color }} />
-        <div className="p-5">
-          <div className="flex items-start gap-3 mb-3">
-            <div
-              className="w-11 h-11 rounded-xl flex items-center justify-center text-xl flex-shrink-0 font-bold"
-              style={{ background: group.color + '22', border: `1px solid ${group.color}55`, color: group.color }}
-            >
-              {group.emoji || initial}
-            </div>
-            <div className="min-w-0 flex-1">
-              <h3 className="font-semibold text-white text-sm truncate">{group.name}</h3>
-              <p className="text-xs text-white/40 truncate mt-0.5 leading-snug">
-                {group.description || 'No description'}
-              </p>
-            </div>
-            <span
-              className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded flex-shrink-0"
-              style={{ background: group.role === 'admin' ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.06)', color: group.role === 'admin' ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.35)' }}
-            >
-              {group.role}
-            </span>
+    <div style={glassStyle} className="rounded-2xl overflow-hidden select-none">
+      <div className="h-1.5 w-full" style={{ background: group.color }} />
+      <div className="p-5">
+        <div className="flex items-start gap-3 mb-3">
+          <div
+            className="w-11 h-11 rounded-xl flex items-center justify-center text-xl flex-shrink-0 font-bold"
+            style={{ background: group.color + '22', border: `1px solid ${group.color}55`, color: group.color }}
+          >
+            {group.emoji || initial}
           </div>
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-white/25">{group.memberCount ?? 0} members · {group.postCount ?? 0} posts</p>
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
-              <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
-            </svg>
+          <div className="min-w-0 flex-1">
+            <h3 className="font-semibold text-white text-sm truncate">{group.name}</h3>
+            <p className="text-xs text-white/40 truncate mt-0.5 leading-snug">
+              {group.description || 'No description'}
+            </p>
           </div>
+          <span
+            className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded flex-shrink-0"
+            style={{ background: group.role === 'admin' ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.06)', color: group.role === 'admin' ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.35)' }}
+          >
+            {group.role}
+          </span>
         </div>
-      </Link>
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-white/25">{group.memberCount ?? 0} members · {group.postCount ?? 0} posts</p>
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+            <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+          </svg>
+        </div>
+      </div>
     </div>
   )
 }
@@ -94,14 +79,84 @@ export default function Groups() {
   const isPro = useSelector((state) => state.preferences.isPro)
 
   const [groups, setGroups] = useState([])
-  const dragIdxRef = useRef(null)
-  const [draggingIdx, setDraggingIdx] = useState(null)
 
   useEffect(() => {
     if (rawGroups.length > 0) {
       setGroups(applyStoredOrder(rawGroups))
     }
   }, [rawGroups])
+
+  // Pointer-based drag-to-reorder
+  const [isActuallyDragging, setIsActuallyDragging] = useState(false)
+  const [draggingIdx, setDraggingIdx] = useState(null)
+  const [dragPos, setDragPos] = useState({ x: 0, y: 0 })
+  const [floatingGroup, setFloatingGroup] = useState(null)
+  const [floatingSize, setFloatingSize] = useState({ w: 300, h: 150, ox: 0, oy: 0 })
+  const cardRefs = useRef([])
+  const wasDrag = useRef(false)
+
+  const handleMouseDown = (e, idx) => {
+    if (e.button !== 0) return
+    const el = cardRefs.current[idx]
+    const rect = el?.getBoundingClientRect() ?? { left: e.clientX, top: e.clientY, width: 300, height: 150 }
+    const meta = {
+      fromIdx: idx,
+      startX: e.clientX,
+      startY: e.clientY,
+      offsetX: e.clientX - rect.left,
+      offsetY: e.clientY - rect.top,
+      cardW: rect.width,
+      cardH: rect.height,
+      didDrag: false,
+      group: groups[idx],
+    }
+
+    const onMove = (ev) => {
+      if (!meta.didDrag) {
+        if (Math.hypot(ev.clientX - meta.startX, ev.clientY - meta.startY) > 4) {
+          meta.didDrag = true
+          setDraggingIdx(idx)
+          setFloatingGroup(meta.group)
+          setFloatingSize({ w: meta.cardW, h: meta.cardH, ox: meta.offsetX, oy: meta.offsetY })
+          setIsActuallyDragging(true)
+        } else return
+      }
+      setDragPos({ x: ev.clientX, y: ev.clientY })
+    }
+
+    const onUp = (ev) => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+
+      if (meta.didDrag) {
+        wasDrag.current = true
+        let best = idx
+        let bestDist = Infinity
+        cardRefs.current.forEach((el, i) => {
+          if (!el || i === idx) return
+          const r = el.getBoundingClientRect()
+          const dist = Math.hypot(ev.clientX - (r.left + r.width / 2), ev.clientY - (r.top + r.height / 2))
+          if (dist < bestDist) { bestDist = dist; best = i }
+        })
+        if (best !== idx) {
+          setGroups((prev) => {
+            const next = [...prev]
+            const [moved] = next.splice(idx, 1)
+            next.splice(best, 0, moved)
+            saveOrder(next)
+            return next
+          })
+        }
+      }
+
+      setIsActuallyDragging(false)
+      setDraggingIdx(null)
+      setFloatingGroup(null)
+    }
+
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
 
   const [joinModal, setJoinModal] = useState(false)
   const [profileGate, setProfileGate] = useState(false)
@@ -126,35 +181,6 @@ export default function Groups() {
       const msg = err?.data?.message ?? (typeof err?.data?.error === 'string' ? err.data.error : null) ?? 'Invalid code. Please try again.'
       setJoinError(msg)
     }
-  }
-
-  /* ── Drag-to-reorder handlers ── */
-  const handleDragStart = (e, idx) => {
-    dragIdxRef.current = idx
-    setDraggingIdx(idx)
-    const ghost = document.createElement('div')
-    ghost.style.cssText = 'position:absolute;top:-1000px;'
-    document.body.appendChild(ghost)
-    e.dataTransfer.setDragImage(ghost, 0, 0)
-    setTimeout(() => document.body.removeChild(ghost), 0)
-  }
-
-  const handleDragOver = (e, idx) => {
-    e.preventDefault()
-    if (dragIdxRef.current == null || dragIdxRef.current === idx) return
-    const next = [...groups]
-    const [moved] = next.splice(dragIdxRef.current, 1)
-    next.splice(idx, 0, moved)
-    dragIdxRef.current = idx
-    setGroups(next)
-  }
-
-  const handleDrop = (e) => { e.preventDefault() }
-
-  const handleDragEnd = () => {
-    saveOrder(groups)
-    dragIdxRef.current = null
-    setDraggingIdx(null)
   }
 
   return (
@@ -221,19 +247,46 @@ export default function Groups() {
         ) : (
           <div className="max-w-screen-xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {groups.map((g, idx) => (
-              <GroupCard
+              <div
                 key={g.id}
-                group={g}
-                isDragging={draggingIdx === idx}
-                onDragStart={(e) => handleDragStart(e, idx)}
-                onDragOver={(e) => handleDragOver(e, idx)}
-                onDrop={handleDrop}
-                onDragEnd={handleDragEnd}
-              />
+                ref={(el) => { cardRefs.current[idx] = el }}
+                onMouseDown={(e) => handleMouseDown(e, idx)}
+                onClick={(e) => {
+                  if (wasDrag.current) { e.preventDefault(); e.stopPropagation(); wasDrag.current = false }
+                }}
+                style={{
+                  opacity: draggingIdx === idx && isActuallyDragging ? 0.2 : 1,
+                  cursor: 'grab',
+                  transition: 'opacity 0.15s',
+                }}
+              >
+                <Link to={`/groups/${g.id}`} draggable={false}>
+                  <GroupCard group={g} />
+                </Link>
+              </div>
             ))}
           </div>
         )}
       </main>
+
+      {/* Floating card that follows the cursor during drag */}
+      {isActuallyDragging && floatingGroup && (
+        <div
+          style={{
+            position: 'fixed',
+            left: dragPos.x - floatingSize.ox,
+            top: dragPos.y - floatingSize.oy,
+            width: floatingSize.w,
+            zIndex: 9999,
+            pointerEvents: 'none',
+            transform: 'rotate(1.5deg) scale(1.04)',
+            boxShadow: '0 24px 64px rgba(0,0,0,0.7)',
+            borderRadius: '1rem',
+          }}
+        >
+          <GroupCard group={floatingGroup} />
+        </div>
+      )}
 
       {profileGate && (
         <div
