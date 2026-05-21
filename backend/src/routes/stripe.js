@@ -33,9 +33,28 @@ router.post('/pro-checkout', requireAuth, async (req, res) => {
   }
 })
 
+// GET /api/stripe/status — sanity check (no auth needed)
+router.get('/status', (req, res) => {
+  res.json({
+    stripeConfigured: !!stripe,
+    priceIdConfigured: !!process.env.STRIPE_PRO_PRICE_ID,
+    webhookSecretConfigured: !!process.env.STRIPE_PRO_WEBHOOK_SECRET,
+  })
+})
+
 // POST /api/stripe/pro-webhook — Stripe sends events here
 router.post('/pro-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-  if (!stripe) return res.sendStatus(200)
+  console.log('[stripe] webhook received, event type will follow after sig check')
+
+  if (!stripe) {
+    console.warn('[stripe] webhook hit but Stripe not initialised — check STRIPE_SECRET_KEY')
+    return res.sendStatus(200)
+  }
+
+  if (!process.env.STRIPE_PRO_WEBHOOK_SECRET) {
+    console.warn('[stripe] STRIPE_PRO_WEBHOOK_SECRET not set — cannot verify signature')
+    return res.status(400).send('Webhook secret not configured')
+  }
 
   let event
   try {
@@ -45,28 +64,38 @@ router.post('/pro-webhook', express.raw({ type: 'application/json' }), async (re
       process.env.STRIPE_PRO_WEBHOOK_SECRET,
     )
   } catch (err) {
-    console.error('stripe webhook sig check failed', err.message)
+    console.error('[stripe] signature check failed:', err.message)
     return res.status(400).send(`Webhook error: ${err.message}`)
   }
+
+  console.log('[stripe] event verified:', event.type)
 
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object
     const userId = session.client_reference_id || session.metadata?.userId
+    console.log('[stripe] checkout completed, userId:', userId)
     if (userId) {
       const { error } = await supabase.auth.admin.updateUserById(userId, {
         user_metadata: { isPro: true },
       })
-      if (error) console.error('stripe webhook: failed to set isPro', error)
+      if (error) {
+        console.error('[stripe] failed to set isPro on user', userId, error)
+      } else {
+        console.log('[stripe] user', userId, 'marked as Pro ✓')
+      }
+    } else {
+      console.warn('[stripe] checkout.session.completed received but no userId found in session')
     }
   }
 
   if (event.type === 'customer.subscription.deleted') {
     const sub = event.data.object
-    // Look up user by customer ID
+    console.log('[stripe] subscription cancelled, customer:', sub.customer)
     const { data: sessions } = await supabase.auth.admin.listUsers()
     const user = sessions?.users?.find((u) => u.user_metadata?.stripeCustomerId === sub.customer)
     if (user) {
       await supabase.auth.admin.updateUserById(user.id, { user_metadata: { isPro: false } })
+      console.log('[stripe] user', user.id, 'downgraded from Pro')
     }
   }
 
