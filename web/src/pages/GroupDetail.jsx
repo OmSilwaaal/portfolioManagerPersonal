@@ -657,6 +657,13 @@ export default function GroupDetail() {
     <div className="flex-1 flex flex-col min-h-0 bg-[#0a0a0a]">
       {/* Header */}
       <header className="flex items-center gap-4 px-6 py-4 border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+        {/* Back arrow — mobile only; desktop uses the left sidebar */}
+        <Link to="/groups" className="md:hidden text-white/40 hover:text-white transition-colors flex-shrink-0">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
+          </svg>
+        </Link>
+
         {groupAvatar ? (
           <img src={groupAvatar} alt={group.name} className="w-9 h-9 rounded-xl object-cover flex-shrink-0" />
         ) : (
