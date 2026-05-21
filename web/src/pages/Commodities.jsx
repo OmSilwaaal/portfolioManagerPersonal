@@ -5,6 +5,7 @@ import { useGetCommoditiesQuery } from '../api/commoditiesApi'
 import { addStock } from '../store/watchlistSlice'
 import ProGate from '../components/ProGate'
 import CommodityIcon from '../components/CommodityIcon'
+import JargonTooltip from '../components/JargonTooltip'
 
 const SECTORS = ['All', 'Energy', 'Metals', 'Agriculture']
 
@@ -82,7 +83,7 @@ function CommodityCard({ commodity }) {
 
       {relatedETFs.length > 0 && (
         <div className="mt-auto border-t border-[#1f1f1f] pt-3">
-          <p className="text-[#a1a1aa] text-xs mb-2">Related ETFs</p>
+          <p className="text-[#a1a1aa] text-xs mb-2"><JargonTooltip term="Related ETFs">Related ETFs</JargonTooltip></p>
           <div className="flex flex-wrap gap-1.5">
             {relatedETFs.map((etf) => (
               <Link

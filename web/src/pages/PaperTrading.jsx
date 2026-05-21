@@ -11,6 +11,7 @@ import {
   usePurchaseCashMutation,
 } from '../api/paperTradingApi'
 import { useGetStockQuery } from '../api/stocksApi'
+import JargonTooltip from '../components/JargonTooltip'
 
 /* ─── Access gate ─────────────────────────────────────────────────────────── */
 const VALID_CODES = new Set(['MARKETIQ2026', 'PAPERTRADER', 'EARLYACCESS', 'TRADEBETA'])
@@ -704,7 +705,7 @@ function PaperTradingInner({ userId }) {
                     <Stat label="Prev Close" value={stockData.previousClose != null ? `$${fmt(stockData.previousClose)}` : '—'} />
                     <Stat label="Day High" value={stockData.high != null ? `$${fmt(stockData.high)}` : '—'} />
                     <Stat label="Day Low" value={stockData.low != null ? `$${fmt(stockData.low)}` : '—'} />
-                    <Stat label="Volume" value={stockData.volume != null ? fmtCompact(stockData.volume).replace('$', '') : '—'} />
+                    <Stat label={<JargonTooltip term="Volume">Volume</JargonTooltip>} value={stockData.volume != null ? fmtCompact(stockData.volume).replace('$', '') : '—'} />
                     <Stat label="Mkt Cap" value={stockData.marketCap != null ? fmtCompact(stockData.marketCap * 1e6) : '—'} />
                     {currentPosition && (
                       <>

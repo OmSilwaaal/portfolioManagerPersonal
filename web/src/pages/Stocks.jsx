@@ -7,6 +7,7 @@ import NewsCard from '../components/NewsCard'
 import TradingViewChart from '../components/TradingViewChart'
 import ProGate from '../components/ProGate'
 import StockLogo from '../components/StockLogo'
+import JargonTooltip from '../components/JargonTooltip'
 
 function useDebounce(value, delay) {
   const [debounced, setDebounced] = useState(value)
@@ -156,7 +157,7 @@ function DetailPanel({ ticker }) {
               { label: 'Prev Close', value: data.previousClose != null ? `$${data.previousClose.toFixed(2)}` : '—' },
               { label: 'Day High', value: data.high != null ? `$${data.high.toFixed(2)}` : '—' },
               { label: 'Day Low', value: data.low != null ? `$${data.low.toFixed(2)}` : '—' },
-              { label: 'Volume', value: fmtVol(data.volume) },
+              { label: <JargonTooltip term="Volume">Volume</JargonTooltip>, value: fmtVol(data.volume) },
               { label: 'Mkt Cap', value: data.marketCap != null ? fmt(data.marketCap * 1e6) : '—' },
             ].map(({ label, value }) => (
               <div key={label} className="rounded-lg px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>

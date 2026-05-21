@@ -2,6 +2,7 @@ import { useSelector } from 'react-redux'
 import { useGetCryptoQuery } from '../api/cryptoApi'
 import ProGate from '../components/ProGate'
 import TradingViewChart from '../components/TradingViewChart'
+import JargonTooltip from '../components/JargonTooltip'
 
 const DEFAULT_CRYPTOS = ['BTC', 'ETH', 'SOL', 'DOGE']
 
@@ -16,7 +17,7 @@ function CryptoCard({ symbol, isLocked }) {
   const { data, isLoading, isError } = useGetCryptoQuery(symbol)
 
   const content = (
-    <div className="p-4 bg-surface dark:bg-surface bg-[#f9f9f9] border border-border-subtle dark:border-border-subtle border-[#e5e7eb] rounded-md shadow-[0_1px_3px_rgba(0,0,0,0.3)]">
+    <div className="p-4 bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)] rounded-md shadow-[0_1px_3px_rgba(0,0,0,0.3)]">
       {isLoading ? (
         <div className="animate-pulse space-y-2">
           <div className="h-5 bg-[#1f1f1f] rounded w-1/3" />
@@ -26,7 +27,7 @@ function CryptoCard({ symbol, isLocked }) {
       ) : isError || !data ? (
         <div>
           <div className="flex items-center justify-between mb-1">
-            <span className="font-semibold text-white dark:text-white text-[#0f0f0f]">{symbol}</span>
+            <span className="font-semibold text-white">{symbol}</span>
             <span className="text-xs text-[#a1a1aa]">{CRYPTO_NAMES[symbol]}</span>
           </div>
           <p className="text-sm text-[#a1a1aa]">Price data unavailable</p>
@@ -35,7 +36,7 @@ function CryptoCard({ symbol, isLocked }) {
         <div>
           <div className="flex items-center justify-between mb-2">
             <div>
-              <span className="font-semibold text-white dark:text-white text-[#0f0f0f] text-lg">
+              <span className="font-semibold text-white text-lg">
                 {symbol}
               </span>
               <span className="ml-2 text-sm text-[#a1a1aa]">{data.name}</span>
@@ -49,13 +50,13 @@ function CryptoCard({ symbol, isLocked }) {
               {(data.changePercent24h || 0).toFixed(2)}%
             </span>
           </div>
-          <p className="text-2xl font-semibold text-white dark:text-white text-[#0f0f0f] mb-3">
+          <p className="text-2xl font-semibold text-white mb-3">
             ${(data.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
           <TradingViewChart ticker={symbol} />
           {data.volume24h && (
             <p className="text-xs text-[#6b7280] mt-2">
-              24h Volume: {data.volume24h.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+              <JargonTooltip term="24h Volume">24h Volume</JargonTooltip>: {data.volume24h.toLocaleString(undefined, { maximumFractionDigits: 0 })}
             </p>
           )}
         </div>
@@ -73,7 +74,7 @@ export default function Crypto() {
     <div className="flex-1 flex flex-col min-h-0">
       <header className="flex items-center justify-between px-6 py-4 border-b border-[#1f1f1f] dark:border-[#1f1f1f] border-[#e5e7eb]">
         <div>
-          <h1 className="text-xl font-semibold text-white dark:text-white text-[#0f0f0f]">Crypto</h1>
+          <h1 className="text-xl font-semibold text-white">Crypto</h1>
           <p className="text-sm text-[#a1a1aa]">Cryptocurrency prices and news</p>
         </div>
       </header>

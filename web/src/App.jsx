@@ -32,6 +32,7 @@ import './api/feedApi'
 import './api/alertsApi'
 import './api/searchApi'
 import './api/notificationsApi'
+import './api/explainerApi'
 
 function Spinner() {
   return (

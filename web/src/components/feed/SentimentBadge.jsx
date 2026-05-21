@@ -1,3 +1,5 @@
+import JargonTooltip from '../JargonTooltip'
+
 export default function SentimentBadge({ sentiment }) {
   if (!sentiment) return null
 
@@ -15,10 +17,16 @@ export default function SentimentBadge({ sentiment }) {
       ? 'text-red-400'
       : 'text-gray-400'
 
+  const isJargon = sentiment === 'Bullish' || sentiment === 'Bearish'
+
   return (
     <span className={`inline-flex items-center gap-1 text-xs font-medium ${textClass}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${dotClass}`} />
-      {sentiment}
+      {isJargon ? (
+        <JargonTooltip term={sentiment}>{sentiment}</JargonTooltip>
+      ) : (
+        sentiment
+      )}
     </span>
   )
 }

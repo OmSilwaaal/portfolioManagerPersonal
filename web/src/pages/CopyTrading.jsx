@@ -39,7 +39,7 @@ export default function CopyTrading() {
     <div className="flex-1 flex flex-col min-h-0">
       <header className="flex items-center justify-between px-6 py-4 border-b border-[#1f1f1f] dark:border-[#1f1f1f] border-[#e5e7eb]">
         <div>
-          <h1 className="text-xl font-semibold text-white dark:text-white text-[#0f0f0f]">Copy Trading</h1>
+          <h1 className="text-xl font-semibold text-white">Copy Trading</h1>
           <p className="text-sm text-[#a1a1aa]">AI-generated trade signals</p>
         </div>
       </header>
@@ -58,7 +58,7 @@ export default function CopyTrading() {
 
           {/* Trade signals */}
           <div>
-            <h2 className="text-base font-semibold text-white dark:text-white text-[#0f0f0f] mb-4">
+            <h2 className="text-base font-semibold text-white mb-4">
               AI Trade Signals
               <span className="ml-2 text-xs font-normal text-[#a1a1aa]">(Simulated data)</span>
             </h2>
@@ -73,8 +73,8 @@ export default function CopyTrading() {
           </div>
 
           {/* How it works */}
-          <div className="p-4 bg-surface dark:bg-surface bg-[#f9f9f9] border border-border-subtle dark:border-border-subtle border-[#e5e7eb] rounded-md">
-            <h3 className="text-sm font-semibold text-white dark:text-white text-[#0f0f0f] mb-3">
+          <div className="p-4 bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)] rounded-md">
+            <h3 className="text-sm font-semibold text-white mb-3">
               How This Works
             </h3>
             <div className="space-y-2 text-sm text-[#a1a1aa]">
