@@ -4,11 +4,22 @@ import { setFeedFilter, setFeedSubFilter } from '../store/feedSlice'
 import { useAuth } from '../contexts/AuthContext'
 import FilterBar from '../components/feed/FilterBar'
 import FeedCard from '../components/feed/FeedCard'
+import WhyMovingCard from '../components/WhyMovingCard'
 import { useGetGovTradesQuery } from '../api/govTradesApi'
 import { useGetCommoditiesQuery } from '../api/commoditiesApi'
 import { useGetFeedQuery, useGetFeedBriefQuery } from '../api/feedApi'
+import { useGetStockQuery } from '../api/stocksApi'
 import { usePersonalizedFeed } from '../hooks/usePersonalizedFeed'
 import ProGate from '../components/ProGate'
+
+function WatchlistMover({ ticker }) {
+  const { data, isLoading } = useGetStockQuery(ticker)
+  if (isLoading || !data) return null
+  const changePercent = data.changePercent ?? data.change_percent ?? data.regularMarketChangePercent ?? 0
+  if (Math.abs(changePercent) < 2) return null
+  const price = data.price ?? data.regularMarketPrice ?? 0
+  return <WhyMovingCard ticker={ticker} price={price} changePercent={changePercent} />
+}
 
 function SkeletonCard() {
   return (
@@ -213,6 +224,15 @@ export default function Feed() {
           <BriefCard brief={briefData.brief} bullets={briefData.bullets} />
         ) : null}
       </div>
+
+      {/* Watchlist movers — "Why Is It Moving?" */}
+      {watchlist.length > 0 && (
+        <div className="mb-6 space-y-3">
+          {watchlist.slice(0, 6).map((ticker) => (
+            <WatchlistMover key={ticker} ticker={ticker.toUpperCase()} />
+          ))}
+        </div>
+      )}
 
       {/* Filter bar */}
       <div className="mb-2">
