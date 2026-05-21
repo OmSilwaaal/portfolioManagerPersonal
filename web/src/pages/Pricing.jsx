@@ -5,6 +5,7 @@ import { setIsPro } from '../store/preferencesSlice'
 import { supabase } from '../utils/supabase/client'
 
 const PROMO_CODE = 'ADMIN12'
+const PRO_PRICE = '$12'
 
 const FREE_FEATURES = [
   '5 feed items per day',
@@ -49,6 +50,31 @@ export default function Pricing() {
   const [codeSuccess, setCodeSuccess] = useState(false)
   const [applying, setApplying] = useState(false)
   const [showCode, setShowCode] = useState(false)
+  const [checkoutLoading, setCheckoutLoading] = useState(false)
+  const [checkoutError, setCheckoutError] = useState('')
+
+  const handleStripeCheckout = async () => {
+    setCheckoutLoading(true)
+    setCheckoutError('')
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const apiBase = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api'
+      const res = await fetch(`${apiBase}/stripe/pro-checkout`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session?.access_token}`, 'Content-Type': 'application/json' },
+      })
+      const body = await res.json()
+      if (!res.ok || !body.url) {
+        setCheckoutError(body.message || 'Could not start checkout. Please try again.')
+        return
+      }
+      window.location.href = body.url
+    } catch {
+      setCheckoutError('Could not connect to payment server. Please try again.')
+    } finally {
+      setCheckoutLoading(false)
+    }
+  }
 
   const handleApplyCode = async (e) => {
     e.preventDefault()
@@ -136,7 +162,7 @@ export default function Pricing() {
             <div className="mb-5">
               <p className="text-[#f59e0b] text-sm font-semibold uppercase tracking-wide mb-2">Pro</p>
               <div className="flex items-baseline gap-1">
-                <p className="text-3xl font-bold text-white">$9</p>
+                <p className="text-3xl font-bold text-white">{PRO_PRICE}</p>
                 <p className="text-[#6b7280] text-sm">/month</p>
               </div>
               <p className="text-[#6b7280] text-sm mt-1">Full access, cancel anytime</p>
@@ -150,12 +176,13 @@ export default function Pricing() {
               ))}
             </ul>
             <button
-              className="w-full bg-[#f59e0b] hover:bg-[#d97706] text-[#0a0a0a] text-sm font-bold py-3 rounded-xl transition-colors"
-              onClick={() => setShowCode(true)}
+              className="w-full bg-[#f59e0b] hover:bg-[#d97706] disabled:opacity-50 text-[#0a0a0a] text-sm font-bold py-3 rounded-xl transition-colors"
+              onClick={handleStripeCheckout}
+              disabled={checkoutLoading}
             >
-              Get Pro — $9/mo
+              {checkoutLoading ? 'Redirecting…' : `Get Pro — ${PRO_PRICE}/mo`}
             </button>
-            <p className="text-[#6b7280] text-xs text-center mt-2">Stripe integration coming soon</p>
+            {checkoutError && <p className="text-red-400 text-xs text-center mt-2">{checkoutError}</p>}
           </div>
         </div>
       )}

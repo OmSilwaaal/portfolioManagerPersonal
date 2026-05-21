@@ -25,11 +25,80 @@ function IconBell() {
   )
 }
 
+function IconTrend() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>
+    </svg>
+  )
+}
+function IconShield() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+    </svg>
+  )
+}
+function IconUsers() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+    </svg>
+  )
+}
+function IconDollar() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+    </svg>
+  )
+}
+
 /* ─── Data ───────────────────────────────────────────────────────────────── */
 const features = [
   { icon: <IconBuilding />, title: 'Congressional Trades', description: 'Every STOCK Act disclosure, surfaced with AI context on committee overlap and urgency.' },
   { icon: <IconBrain />,    title: 'AI Market Summaries',  description: 'Hundreds of news items distilled into plain-English urgency-scored briefs.' },
   { icon: <IconBell />,     title: 'Price Alerts',         description: 'Set threshold alerts on any stock or crypto and get notified instantly.' },
+]
+
+const detailedFeatures = [
+  {
+    icon: <IconBrain />,
+    title: 'Plain-English explanations',
+    description: 'Every stock, every move, explained like a friend would — no tickers, no jargon, no finance degree required. Ask "why is Apple down today?" and get a real answer.',
+  },
+  {
+    icon: <IconBuilding />,
+    title: 'Follow the money in Congress',
+    description: 'Politicians trade stocks on information regular investors never see. MarketIQ surfaces every STOCK Act filing instantly so you know what moves are being made.',
+  },
+  {
+    icon: <IconTrend />,
+    title: 'Paper trading — zero risk',
+    description: 'Practice investing with $500 of virtual cash. Build your strategy, track your returns, and compete on a real leaderboard — all without risking a dollar.',
+  },
+  {
+    icon: <IconBell />,
+    title: 'Alerts that actually matter',
+    description: 'Set a price target. Walk away. Get notified the moment your stock or crypto hits it — not a spam blast, just the one thing you care about.',
+  },
+  {
+    icon: <IconUsers />,
+    title: 'Groups & shared watchlists',
+    description: 'Create a private investment club, share ideas, and see what your group is watching. Perfect for friends, families, or communities learning together.',
+  },
+  {
+    icon: <IconDollar />,
+    title: 'Commodities & macro',
+    description: 'Gold, oil, wheat — the things that affect everything else. See real-time commodity prices with AI context on what they mean for your portfolio.',
+  },
+]
+
+const steps = [
+  { num: '01', title: 'Tell us what you care about', body: 'Pick the stocks, sectors, or assets you want to follow. No spreadsheets, no Bloomberg terminal.' },
+  { num: '02', title: 'Get a feed made for you', body: 'Every morning your personalized feed surfaces the news, trades, and signals that actually affect your holdings.' },
+  { num: '03', title: 'Understand it in seconds', body: 'AI turns complex market events into clear, concise summaries. You decide what to do — MarketIQ just makes sure you understand it.' },
 ]
 
 const NAV_SECTIONS = [
@@ -370,8 +439,28 @@ export default function Landing() {
         <ScrollVideoSection />
       </div>
 
-      {/* ── FEATURES ── */}
-      <section id="section-features" className="max-w-6xl mx-auto px-6 py-14" style={{ position: 'relative', zIndex: 2 }}>
+      {/* ── HOW IT WORKS ── */}
+      <section id="section-features" className="max-w-6xl mx-auto px-6 py-20" style={{ position: 'relative', zIndex: 2 }}>
+        <div className="text-center mb-14">
+          <p className="text-xs font-semibold uppercase tracking-widest text-white/25 mb-3">How it works</p>
+          <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">Three steps to actually understanding the market</h2>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+          {steps.map((s) => (
+            <div key={s.num} className="flex flex-col gap-4 rounded-2xl p-7 relative overflow-hidden" style={glassStyle}>
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent pointer-events-none" />
+              <span className="text-4xl font-black text-white/08 select-none leading-none">{s.num}</span>
+              <div>
+                <h3 className="text-white font-semibold text-sm mb-2">{s.title}</h3>
+                <p className="text-white/40 text-sm leading-relaxed">{s.body}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── FEATURE HIGHLIGHTS (3 cards) ── */}
+      <section className="max-w-6xl mx-auto px-6 pb-14" style={{ position: 'relative', zIndex: 2 }}>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
           {features.map((feature) => (
             <div
@@ -379,13 +468,9 @@ export default function Landing() {
               className="rounded-2xl p-7 relative overflow-hidden group transition-all duration-300 hover:scale-[1.02]"
               style={glassStyle}
             >
-              {/* Top specular line */}
               <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/45 to-transparent pointer-events-none" />
-              {/* Left edge catch */}
               <div className="absolute inset-y-0 left-0 w-px bg-gradient-to-b from-white/25 via-white/10 to-transparent pointer-events-none" />
-              {/* Inner corner glow */}
               <div className="absolute top-0 left-0 w-24 h-24 bg-white/[0.04] rounded-br-full pointer-events-none" />
-
               <div className="relative">
                 <div className="text-white/50 group-hover:text-white/80 mb-4 transition-colors duration-300">{feature.icon}</div>
                 <h3 className="text-white font-semibold text-sm mb-2">{feature.title}</h3>
@@ -396,21 +481,67 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* ── DETAILED FEATURES ── */}
+      <section className="max-w-6xl mx-auto px-6 py-16" style={{ position: 'relative', zIndex: 2 }}>
+        <div className="text-center mb-14">
+          <p className="text-xs font-semibold uppercase tracking-widest text-white/25 mb-3">Everything inside</p>
+          <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">Built for people, not professionals</h2>
+          <p className="text-white/35 text-sm mt-4 max-w-xl mx-auto leading-relaxed">
+            MarketIQ strips away the noise and the jargon. Every feature is designed so that someone with zero finance background can open the app and immediately understand what&apos;s happening.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {detailedFeatures.map((f) => (
+            <div key={f.title} className="rounded-2xl p-6 relative overflow-hidden group transition-all duration-300 hover:scale-[1.01]" style={glassStyle}>
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent pointer-events-none" />
+              <div className="relative">
+                <div className="text-white/40 group-hover:text-white/70 mb-4 transition-colors duration-300">{f.icon}</div>
+                <h3 className="text-white font-semibold text-sm mb-2">{f.title}</h3>
+                <p className="text-white/40 text-sm leading-relaxed">{f.description}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
 
-{/* ── CTA ── */}
-      <section id="section-cta" className="max-w-6xl mx-auto px-6 py-16 text-center" style={{ position: 'relative', zIndex: 2 }}>
-        <h2 className="text-3xl font-bold text-white tracking-tight mb-3">
-          The market doesn't wait.
+      {/* ── POSITIONING STRIP ── */}
+      <section className="max-w-6xl mx-auto px-6 py-10" style={{ position: 'relative', zIndex: 2 }}>
+        <div className="rounded-2xl p-10 text-center relative overflow-hidden" style={glassStyle}>
+          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/40 to-transparent pointer-events-none" />
+          <p className="text-xs font-semibold uppercase tracking-widest text-white/25 mb-4">Our promise</p>
+          <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight mb-4">
+            The stock market isn&apos;t just for Wall Street.
+          </h2>
+          <p className="text-white/40 text-sm max-w-2xl mx-auto leading-relaxed">
+            For too long, real-time market intelligence was locked behind paywalls, Bloomberg terminals, and finance degrees. MarketIQ gives everyone the same information — explained in plain English, personalised to what you own, and delivered in seconds.
+          </p>
+        </div>
+      </section>
+
+      {/* ── CTA ── */}
+      <section id="section-cta" className="max-w-6xl mx-auto px-6 py-20 text-center" style={{ position: 'relative', zIndex: 2 }}>
+        <p className="text-xs font-semibold uppercase tracking-widest text-white/25 mb-4">Get started today</p>
+        <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight mb-4">
+          The market doesn&apos;t wait.
         </h2>
-        <p className="text-white/35 text-sm mb-8">
-          Join investors who track what really moves markets.
+        <p className="text-white/35 text-sm mb-3 max-w-md mx-auto leading-relaxed">
+          Free to start. Upgrade to Pro for $12/month and unlock unlimited feed, full charts, and priority alerts.
         </p>
-        <Link
-          to="/onboarding"
-          className="inline-block bg-white hover:bg-gray-100 text-[#0a0a0a] font-bold px-8 py-4 rounded-xl text-sm tracking-wide transition-colors"
-        >
-          Get started
-        </Link>
+        <p className="text-white/20 text-xs mb-10">No credit card required to sign up. Cancel anytime.</p>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+          <Link
+            to="/onboarding"
+            className="bg-white hover:bg-gray-100 text-[#0a0a0a] font-bold px-8 py-4 rounded-xl text-sm tracking-wide transition-colors"
+          >
+            Start free
+          </Link>
+          <Link
+            to="/pricing"
+            className="text-white/50 hover:text-white text-sm transition-colors underline underline-offset-4"
+          >
+            View pricing
+          </Link>
+        </div>
       </section>
 
       {/* ── FOOTER ── */}
