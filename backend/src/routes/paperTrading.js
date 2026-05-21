@@ -1,6 +1,6 @@
 const express = require('express')
 const router = express.Router()
-const { getDb } = require('../db/schema')
+const { supabase } = require('../services/supabaseAdmin')
 const { getStockQuote } = require('../services/finnhub')
 const { requireAuth } = require('../middleware/auth')
 
@@ -8,9 +8,23 @@ const stripe = process.env.STRIPE_SECRET_KEY
   ? require('stripe')(process.env.STRIPE_SECRET_KEY)
   : null
 
-function ensurePortfolio(db, userId) {
-  db.prepare('INSERT OR IGNORE INTO paper_portfolios (userId, cashBalance) VALUES (?, 500)').run(userId)
-  return db.prepare('SELECT * FROM paper_portfolios WHERE userId = ?').get(userId)
+async function ensurePortfolio(userId) {
+  const { data: existing } = await supabase
+    .from('paper_portfolios')
+    .select('*')
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (existing) return existing
+
+  const { data: created, error } = await supabase
+    .from('paper_portfolios')
+    .insert({ user_id: userId, cash_balance: 500 })
+    .select()
+    .single()
+
+  if (error) throw error
+  return created
 }
 
 async function fetchQuoteSafe(ticker) {
@@ -25,12 +39,15 @@ async function fetchQuoteSafe(ticker) {
 
 router.get('/portfolio', requireAuth, async (req, res, next) => {
   try {
-    const db = getDb()
     const userId = req.user.id
-    const portfolio = ensurePortfolio(db, userId)
-    const positions = db.prepare(
-      'SELECT * FROM paper_positions WHERE userId = ? AND shares > 0'
-    ).all(userId)
+    const portfolio = await ensurePortfolio(userId)
+
+    const { data: positions, error: posErr } = await supabase
+      .from('paper_positions')
+      .select('*')
+      .eq('user_id', userId)
+      .gt('shares', 0)
+    if (posErr) throw posErr
 
     let totalPositionsValue = 0
     const autoSoldItems = []
@@ -42,26 +59,53 @@ router.get('/portfolio', requireAuth, async (req, res, next) => {
 
         // Auto-sell on TP/SL hit
         if (currentPrice != null) {
-          const hitTP = pos.targetPrice != null && currentPrice >= pos.targetPrice
-          const hitSL = pos.stopLoss != null && currentPrice <= pos.stopLoss
+          const hitTP = pos.target_price != null && currentPrice >= pos.target_price
+          const hitSL = pos.stop_loss != null && currentPrice <= pos.stop_loss
           if (hitTP || hitSL) {
             const sellTotal = currentPrice * pos.shares
-            db.transaction(() => {
-              db.prepare(
-                "UPDATE paper_portfolios SET cashBalance = cashBalance + ?, updatedAt = datetime('now') WHERE userId = ?"
-              ).run(sellTotal, userId)
-              db.prepare('DELETE FROM paper_positions WHERE userId = ? AND ticker = ?').run(userId, pos.ticker)
-              db.prepare(
-                "INSERT INTO paper_transactions (userId, type, ticker, shares, price, total) VALUES (?, 'sell', ?, ?, ?, ?)"
-              ).run(userId, pos.ticker, pos.shares, currentPrice, sellTotal)
-            })()
-            autoSoldItems.push({ ticker: pos.ticker, reason: hitTP ? 'target_price' : 'stop_loss', price: currentPrice })
+
+            // Fetch fresh cash balance before updating
+            const { data: freshPort } = await supabase
+              .from('paper_portfolios')
+              .select('cash_balance')
+              .eq('user_id', userId)
+              .single()
+
+            const newCash = (freshPort?.cash_balance ?? portfolio.cash_balance) + sellTotal
+
+            await supabase
+              .from('paper_portfolios')
+              .update({ cash_balance: newCash, updated_at: new Date().toISOString() })
+              .eq('user_id', userId)
+
+            await supabase
+              .from('paper_positions')
+              .delete()
+              .eq('user_id', userId)
+              .eq('ticker', pos.ticker)
+
+            await supabase
+              .from('paper_transactions')
+              .insert({
+                user_id: userId,
+                type: 'sell',
+                ticker: pos.ticker,
+                shares: pos.shares,
+                price: currentPrice,
+                total: sellTotal,
+              })
+
+            autoSoldItems.push({
+              ticker: pos.ticker,
+              reason: hitTP ? 'target_price' : 'stop_loss',
+              price: currentPrice,
+            })
             return null
           }
         }
 
         const currentValue = currentPrice != null ? currentPrice * pos.shares : null
-        const costBasis = pos.avgCost * pos.shares
+        const costBasis = pos.avg_cost * pos.shares
         const pnl = currentValue != null ? currentValue - costBasis : null
         const pnlPct = pnl != null && costBasis !== 0 ? (pnl / costBasis) * 100 : null
 
@@ -70,9 +114,9 @@ router.get('/portfolio', requireAuth, async (req, res, next) => {
         return {
           ticker: pos.ticker,
           shares: pos.shares,
-          avgCost: pos.avgCost,
-          targetPrice: pos.targetPrice,
-          stopLoss: pos.stopLoss,
+          avgCost: pos.avg_cost,
+          targetPrice: pos.target_price,
+          stopLoss: pos.stop_loss,
           currentPrice,
           currentValue,
           pnl,
@@ -82,12 +126,18 @@ router.get('/portfolio', requireAuth, async (req, res, next) => {
     )
 
     // Refresh cash after potential auto-sells
-    const freshPortfolio = db.prepare('SELECT * FROM paper_portfolios WHERE userId = ?').get(userId)
+    const { data: freshPortfolio } = await supabase
+      .from('paper_portfolios')
+      .select('cash_balance')
+      .eq('user_id', userId)
+      .single()
+
+    const cashBalance = freshPortfolio?.cash_balance ?? portfolio.cash_balance
 
     res.json({
-      cashBalance: freshPortfolio.cashBalance,
+      cashBalance,
       positions: enriched.filter(Boolean),
-      totalValue: freshPortfolio.cashBalance + totalPositionsValue,
+      totalValue: cashBalance + totalPositionsValue,
       autoSold: autoSoldItems,
     })
   } catch (err) {
@@ -97,7 +147,6 @@ router.get('/portfolio', requireAuth, async (req, res, next) => {
 
 router.post('/buy', requireAuth, async (req, res, next) => {
   try {
-    const db = getDb()
     const userId = req.user.id
     let { ticker, shares, targetPrice, stopLoss } = req.body
 
@@ -119,43 +168,67 @@ router.post('/buy', requireAuth, async (req, res, next) => {
     const price = quote.price
     const total = price * shares
 
-    const portfolio = ensurePortfolio(db, userId)
-    if (portfolio.cashBalance < total) {
+    const portfolio = await ensurePortfolio(userId)
+    if (portfolio.cash_balance < total) {
       return res.status(400).json({
         error: 'Insufficient cash balance',
         required: total,
-        available: portfolio.cashBalance,
+        available: portfolio.cash_balance,
       })
     }
 
     const tp = typeof targetPrice === 'number' && targetPrice > 0 ? targetPrice : null
     const sl = typeof stopLoss === 'number' && stopLoss > 0 ? stopLoss : null
 
-    db.transaction(() => {
-      db.prepare(
-        "UPDATE paper_portfolios SET cashBalance = cashBalance - ?, updatedAt = datetime('now') WHERE userId = ?"
-      ).run(total, userId)
+    // Deduct cash
+    const { error: cashErr } = await supabase
+      .from('paper_portfolios')
+      .update({ cash_balance: portfolio.cash_balance - total, updated_at: new Date().toISOString() })
+      .eq('user_id', userId)
+    if (cashErr) throw cashErr
 
-      const existing = db.prepare(
-        'SELECT shares, avgCost FROM paper_positions WHERE userId = ? AND ticker = ?'
-      ).get(userId, ticker)
+    // Upsert position
+    const { data: existing } = await supabase
+      .from('paper_positions')
+      .select('shares, avg_cost')
+      .eq('user_id', userId)
+      .eq('ticker', ticker)
+      .maybeSingle()
 
-      if (existing) {
-        const newShares = existing.shares + shares
-        const newAvgCost = (existing.avgCost * existing.shares + price * shares) / newShares
-        db.prepare(
-          "UPDATE paper_positions SET shares = ?, avgCost = ?, targetPrice = COALESCE(?, targetPrice), stopLoss = COALESCE(?, stopLoss), updatedAt = datetime('now') WHERE userId = ? AND ticker = ?"
-        ).run(newShares, newAvgCost, tp, sl, userId, ticker)
-      } else {
-        db.prepare(
-          'INSERT INTO paper_positions (userId, ticker, shares, avgCost, targetPrice, stopLoss) VALUES (?, ?, ?, ?, ?, ?)'
-        ).run(userId, ticker, shares, price, tp, sl)
-      }
+    if (existing) {
+      const newShares = Number(existing.shares) + shares
+      const newAvgCost = (Number(existing.avg_cost) * Number(existing.shares) + price * shares) / newShares
+      const { error: posErr } = await supabase
+        .from('paper_positions')
+        .update({
+          shares: newShares,
+          avg_cost: newAvgCost,
+          target_price: tp !== null ? tp : undefined,
+          stop_loss: sl !== null ? sl : undefined,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', userId)
+        .eq('ticker', ticker)
+      if (posErr) throw posErr
+    } else {
+      const { error: posErr } = await supabase
+        .from('paper_positions')
+        .insert({
+          user_id: userId,
+          ticker,
+          shares,
+          avg_cost: price,
+          target_price: tp,
+          stop_loss: sl,
+        })
+      if (posErr) throw posErr
+    }
 
-      db.prepare(
-        "INSERT INTO paper_transactions (userId, type, ticker, shares, price, total) VALUES (?, 'buy', ?, ?, ?, ?)"
-      ).run(userId, ticker, shares, price, total)
-    })()
+    // Record transaction
+    const { error: txErr } = await supabase
+      .from('paper_transactions')
+      .insert({ user_id: userId, type: 'buy', ticker, shares, price, total })
+    if (txErr) throw txErr
 
     res.json({ success: true, ticker, shares, price, total })
   } catch (err) {
@@ -165,7 +238,6 @@ router.post('/buy', requireAuth, async (req, res, next) => {
 
 router.post('/sell', requireAuth, async (req, res, next) => {
   try {
-    const db = getDb()
     const userId = req.user.id
     let { ticker, shares } = req.body
 
@@ -177,11 +249,14 @@ router.post('/sell', requireAuth, async (req, res, next) => {
       return res.status(400).json({ error: 'shares must be a positive number' })
     }
 
-    const position = db.prepare(
-      'SELECT shares FROM paper_positions WHERE userId = ? AND ticker = ?'
-    ).get(userId, ticker)
+    const { data: position } = await supabase
+      .from('paper_positions')
+      .select('shares')
+      .eq('user_id', userId)
+      .eq('ticker', ticker)
+      .maybeSingle()
 
-    if (!position || position.shares < shares) {
+    if (!position || Number(position.shares) < shares) {
       return res.status(400).json({
         error: 'Insufficient shares',
         held: position ? position.shares : 0,
@@ -196,24 +271,45 @@ router.post('/sell', requireAuth, async (req, res, next) => {
     const price = quote.price
     const total = price * shares
 
-    db.transaction(() => {
-      db.prepare(
-        "UPDATE paper_portfolios SET cashBalance = cashBalance + ?, updatedAt = datetime('now') WHERE userId = ?"
-      ).run(total, userId)
+    // Fetch current cash
+    const { data: portfolio } = await supabase
+      .from('paper_portfolios')
+      .select('cash_balance')
+      .eq('user_id', userId)
+      .single()
 
-      const remaining = position.shares - shares
-      if (remaining === 0) {
-        db.prepare('DELETE FROM paper_positions WHERE userId = ? AND ticker = ?').run(userId, ticker)
-      } else {
-        db.prepare(
-          "UPDATE paper_positions SET shares = ?, updatedAt = datetime('now') WHERE userId = ? AND ticker = ?"
-        ).run(remaining, userId, ticker)
-      }
+    const newCash = (portfolio?.cash_balance ?? 0) + total
 
-      db.prepare(
-        "INSERT INTO paper_transactions (userId, type, ticker, shares, price, total) VALUES (?, 'sell', ?, ?, ?, ?)"
-      ).run(userId, ticker, shares, price, total)
-    })()
+    // Update cash balance
+    const { error: cashErr } = await supabase
+      .from('paper_portfolios')
+      .update({ cash_balance: newCash, updated_at: new Date().toISOString() })
+      .eq('user_id', userId)
+    if (cashErr) throw cashErr
+
+    // Update or delete position
+    const remaining = Number(position.shares) - shares
+    if (remaining === 0) {
+      const { error: delErr } = await supabase
+        .from('paper_positions')
+        .delete()
+        .eq('user_id', userId)
+        .eq('ticker', ticker)
+      if (delErr) throw delErr
+    } else {
+      const { error: posErr } = await supabase
+        .from('paper_positions')
+        .update({ shares: remaining, updated_at: new Date().toISOString() })
+        .eq('user_id', userId)
+        .eq('ticker', ticker)
+      if (posErr) throw posErr
+    }
+
+    // Record transaction
+    const { error: txErr } = await supabase
+      .from('paper_transactions')
+      .insert({ user_id: userId, type: 'sell', ticker, shares, price, total })
+    if (txErr) throw txErr
 
     res.json({ success: true, ticker, shares, price, total })
   } catch (err) {
@@ -221,14 +317,19 @@ router.post('/sell', requireAuth, async (req, res, next) => {
   }
 })
 
-router.patch('/positions/:ticker', requireAuth, (req, res, next) => {
+router.patch('/positions/:ticker', requireAuth, async (req, res, next) => {
   try {
-    const db = getDb()
     const userId = req.user.id
     const ticker = req.params.ticker.toUpperCase()
     const { targetPrice, stopLoss } = req.body
 
-    const position = db.prepare('SELECT id FROM paper_positions WHERE userId = ? AND ticker = ?').get(userId, ticker)
+    const { data: position } = await supabase
+      .from('paper_positions')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('ticker', ticker)
+      .maybeSingle()
+
     if (!position) {
       return res.status(404).json({ error: `No position found for ${ticker}` })
     }
@@ -236,9 +337,12 @@ router.patch('/positions/:ticker', requireAuth, (req, res, next) => {
     const tp = typeof targetPrice === 'number' && targetPrice > 0 ? targetPrice : null
     const sl = typeof stopLoss === 'number' && stopLoss > 0 ? stopLoss : null
 
-    db.prepare(
-      "UPDATE paper_positions SET targetPrice = ?, stopLoss = ?, updatedAt = datetime('now') WHERE userId = ? AND ticker = ?"
-    ).run(tp, sl, userId, ticker)
+    const { error } = await supabase
+      .from('paper_positions')
+      .update({ target_price: tp, stop_loss: sl, updated_at: new Date().toISOString() })
+      .eq('user_id', userId)
+      .eq('ticker', ticker)
+    if (error) throw error
 
     res.json({ success: true, ticker, targetPrice: tp, stopLoss: sl })
   } catch (err) {
@@ -246,40 +350,51 @@ router.patch('/positions/:ticker', requireAuth, (req, res, next) => {
   }
 })
 
-router.get('/leaderboard', requireAuth, (req, res, next) => {
+router.get('/leaderboard', requireAuth, async (req, res, next) => {
   try {
-    const db = getDb()
     const STARTING_BALANCE = 500
 
-    const portfolios = db.prepare('SELECT * FROM paper_portfolios').all()
+    const { data: portfolios, error: portErr } = await supabase
+      .from('paper_portfolios')
+      .select('*')
+    if (portErr) throw portErr
 
-    const board = portfolios.map((p) => {
-      const positions = db.prepare(
-        'SELECT shares, avgCost FROM paper_positions WHERE userId = ? AND shares > 0'
-      ).all(p.userId)
-      const positionsValue = positions.reduce((s, pos) => s + pos.shares * pos.avgCost, 0)
-      const totalValue = p.cashBalance + positionsValue
+    const board = await Promise.all(
+      portfolios.map(async (p) => {
+        const { data: positions } = await supabase
+          .from('paper_positions')
+          .select('shares, avg_cost')
+          .eq('user_id', p.user_id)
+          .gt('shares', 0)
 
-      // Extra cash purchased (deposits) — excluded from performance calc
-      const extraDeposits = db.prepare(
-        "SELECT COALESCE(SUM(total), 0) AS t FROM paper_transactions WHERE userId = ? AND type = 'deposit'"
-      ).get(p.userId).t
+        const positionsValue = (positions ?? []).reduce(
+          (s, pos) => s + Number(pos.shares) * Number(pos.avg_cost),
+          0
+        )
+        const totalValue = Number(p.cash_balance) + positionsValue
 
-      // Trading P&L = current value minus what they started with, ignoring top-ups
-      const tradingPnl = totalValue - STARTING_BALANCE - extraDeposits
-      // Return % based purely on the original $500, not purchased cash
-      const returnPct = (tradingPnl / STARTING_BALANCE) * 100
+        // Sum deposit transactions
+        const { data: depositRows } = await supabase
+          .from('paper_transactions')
+          .select('total')
+          .eq('user_id', p.user_id)
+          .eq('type', 'deposit')
 
-      return {
-        userId: p.userId,
-        totalValue,
-        tradingPnl,
-        returnPct,
-        positionCount: positions.length,
-      }
-    })
+        const extraDeposits = (depositRows ?? []).reduce((s, t) => s + Number(t.total), 0)
 
-    // Rank by pure trading return %, not portfolio size
+        const tradingPnl = totalValue - STARTING_BALANCE - extraDeposits
+        const returnPct = (tradingPnl / STARTING_BALANCE) * 100
+
+        return {
+          userId: p.user_id,
+          totalValue,
+          tradingPnl,
+          returnPct,
+          positionCount: (positions ?? []).length,
+        }
+      })
+    )
+
     board.sort((a, b) => b.returnPct - a.returnPct)
 
     res.json({ leaderboard: board.slice(0, 50) })
@@ -288,19 +403,33 @@ router.get('/leaderboard', requireAuth, (req, res, next) => {
   }
 })
 
-router.get('/transactions', requireAuth, (req, res, next) => {
+router.get('/transactions', requireAuth, async (req, res, next) => {
   try {
-    const db = getDb()
     const userId = req.user.id
     let limit = parseInt(req.query.limit, 10)
     if (isNaN(limit) || limit < 1) limit = 30
     if (limit > 100) limit = 100
 
-    const transactions = db.prepare(
-      'SELECT * FROM paper_transactions WHERE userId = ? ORDER BY createdAt DESC LIMIT ?'
-    ).all(userId, limit)
+    const { data: transactions, error } = await supabase
+      .from('paper_transactions')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(limit)
+    if (error) throw error
 
-    res.json({ transactions })
+    const mapped = (transactions ?? []).map((t) => ({
+      id: t.id,
+      userId: t.user_id,
+      type: t.type,
+      ticker: t.ticker,
+      shares: t.shares,
+      price: t.price,
+      total: t.total,
+      createdAt: t.created_at,
+    }))
+
+    res.json({ transactions: mapped })
   } catch (err) {
     next(err)
   }
@@ -308,7 +437,6 @@ router.get('/transactions', requireAuth, (req, res, next) => {
 
 router.post('/purchase-cash', requireAuth, async (req, res, next) => {
   try {
-    const db = getDb()
     const userId = req.user.id
     const { units } = req.body
 
@@ -323,18 +451,27 @@ router.post('/purchase-cash', requireAuth, async (req, res, next) => {
     const usdPaid = units * 5
 
     if (!stripe) {
-      ensurePortfolio(db, userId)
-      db.transaction(() => {
-        db.prepare(
-          "UPDATE paper_portfolios SET cashBalance = cashBalance + ?, updatedAt = datetime('now') WHERE userId = ?"
-        ).run(paperCashCredited, userId)
-        db.prepare(
-          "INSERT INTO paper_cash_purchases (userId, usdPaid, paperCashCredited, status) VALUES (?, ?, ?, 'completed')"
-        ).run(userId, usdPaid, paperCashCredited)
-        db.prepare(
-          "INSERT INTO paper_transactions (userId, type, total) VALUES (?, 'deposit', ?)"
-        ).run(userId, paperCashCredited)
-      })()
+      const portfolio = await ensurePortfolio(userId)
+
+      const { error: cashErr } = await supabase
+        .from('paper_portfolios')
+        .update({
+          cash_balance: Number(portfolio.cash_balance) + paperCashCredited,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', userId)
+      if (cashErr) throw cashErr
+
+      const { error: purchErr } = await supabase
+        .from('paper_cash_purchases')
+        .insert({ user_id: userId, usd_paid: usdPaid, paper_cash_credited: paperCashCredited, status: 'completed' })
+      if (purchErr) throw purchErr
+
+      const { error: txErr } = await supabase
+        .from('paper_transactions')
+        .insert({ user_id: userId, type: 'deposit', total: paperCashCredited })
+      if (txErr) throw txErr
+
       return res.json({ success: true, devMode: true, credited: paperCashCredited })
     }
 
@@ -358,9 +495,16 @@ router.post('/purchase-cash', requireAuth, async (req, res, next) => {
       cancel_url: `${process.env.FRONTEND_URL}/paper-trading?payment=cancelled`,
     })
 
-    db.prepare(
-      "INSERT INTO paper_cash_purchases (userId, usdPaid, paperCashCredited, stripeSessionId, status) VALUES (?, ?, ?, ?, 'pending')"
-    ).run(userId, usdPaid, paperCashCredited, session.id)
+    const { error: purchErr } = await supabase
+      .from('paper_cash_purchases')
+      .insert({
+        user_id: userId,
+        usd_paid: usdPaid,
+        paper_cash_credited: paperCashCredited,
+        stripe_session_id: session.id,
+        status: 'pending',
+      })
+    if (purchErr) throw purchErr
 
     res.json({ url: session.url })
   } catch (err) {
@@ -391,19 +535,24 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     const paperCashCredited = units * 500
 
     try {
-      const db = getDb()
-      db.transaction(() => {
-        ensurePortfolio(db, userId)
-        db.prepare(
-          "UPDATE paper_portfolios SET cashBalance = cashBalance + ?, updatedAt = datetime('now') WHERE userId = ?"
-        ).run(paperCashCredited, userId)
-        db.prepare(
-          "UPDATE paper_cash_purchases SET status = 'completed' WHERE stripeSessionId = ?"
-        ).run(session.id)
-        db.prepare(
-          "INSERT INTO paper_transactions (userId, type, total) VALUES (?, 'deposit', ?)"
-        ).run(userId, paperCashCredited)
-      })()
+      const portfolio = await ensurePortfolio(userId)
+
+      await supabase
+        .from('paper_portfolios')
+        .update({
+          cash_balance: Number(portfolio.cash_balance) + paperCashCredited,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', userId)
+
+      await supabase
+        .from('paper_cash_purchases')
+        .update({ status: 'completed' })
+        .eq('stripe_session_id', session.id)
+
+      await supabase
+        .from('paper_transactions')
+        .insert({ user_id: userId, type: 'deposit', total: paperCashCredited })
     } catch (_) {}
   }
 
