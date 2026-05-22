@@ -103,14 +103,14 @@ export default function Pricing() {
             <path d="M2 4l3 12h14l3-12-6 5-4-5-4 5-6-5z"/>
             <path d="M5 20h14"/>
           </svg>
-          MarketIQ Pro
+          Travauxus Pro
         </div>
         <h1 className="text-3xl font-bold text-white mb-3">
           {isPro ? 'You\'re on Pro' : 'Upgrade your intelligence'}
         </h1>
         <p className="text-[#6b7280] text-base">
           {isPro
-            ? 'You have full access to all MarketIQ Pro features.'
+            ? 'You have full access to all Travauxus Pro features.'
             : 'Get unlimited access to AI summaries, full charts, government trades, and more.'}
         </p>
       </div>
@@ -225,7 +225,7 @@ export default function Pricing() {
                   </div>
                   <div>
                     <p className="text-white font-semibold">Pro unlocked!</p>
-                    <p className="text-[#6b7280] text-sm mt-1">You now have full access to MarketIQ Pro.</p>
+                    <p className="text-[#6b7280] text-sm mt-1">You now have full access to Travauxus Pro.</p>
                   </div>
                   <button
                     onClick={() => navigate('/feed')}
@@ -261,7 +261,7 @@ export default function Pricing() {
       )}
 
       <p className="text-[#4b5563] text-xs text-center mt-8">
-        Not financial advice. MarketIQ is for educational purposes only.
+        Not financial advice. Travauxus is for educational purposes only.
       </p>
     </main>
   )

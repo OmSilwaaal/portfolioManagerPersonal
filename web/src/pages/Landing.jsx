@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import Logo from '../components/Logo'
 
 /* ─── Icons ──────────────────────────────────────────────────────────────── */
 function IconBuilding() {
@@ -71,7 +72,7 @@ const detailedFeatures = [
   {
     icon: <IconBuilding />,
     title: 'Follow the money in Congress',
-    description: 'Politicians trade stocks on information regular investors never see. MarketIQ surfaces every STOCK Act filing instantly so you know what moves are being made.',
+    description: 'Politicians trade stocks on information regular investors never see. Travauxus surfaces every STOCK Act filing instantly so you know what moves are being made.',
   },
   {
     icon: <IconTrend />,
@@ -98,7 +99,7 @@ const detailedFeatures = [
 const steps = [
   { num: '01', title: 'Tell us what you care about', body: 'Pick the stocks, sectors, or assets you want to follow. No spreadsheets, no Bloomberg terminal.' },
   { num: '02', title: 'Get a feed made for you', body: 'Every morning your personalized feed surfaces the news, trades, and signals that actually affect your holdings.' },
-  { num: '03', title: 'Understand it in seconds', body: 'AI turns complex market events into clear, concise summaries. You decide what to do — MarketIQ just makes sure you understand it.' },
+  { num: '03', title: 'Understand it in seconds', body: 'AI turns complex market events into clear, concise summaries. You decide what to do — Travauxus just makes sure you understand it.' },
 ]
 
 const NAV_SECTIONS = [
@@ -219,19 +220,6 @@ function SidebarNav({ active }) {
   )
 }
 
-/* ─── Logo ───────────────────────────────────────────────────────────────── */
-function Logo() {
-  return (
-    <div className="flex items-center gap-2">
-      <div className="w-7 h-7 bg-white rounded-md flex items-center justify-center flex-shrink-0">
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0a0a0a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
-        </svg>
-      </div>
-      <span className="font-semibold text-white text-base tracking-tight">MarketIQ</span>
-    </div>
-  )
-}
 
 
 /* ─── Canvas frame-scrub section ─────────────────────────────────────────── */
@@ -487,7 +475,7 @@ export default function Landing() {
           <p className="text-xs font-semibold uppercase tracking-widest text-white/25 mb-3">Everything inside</p>
           <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">Built for people, not professionals</h2>
           <p className="text-white/35 text-sm mt-4 max-w-xl mx-auto leading-relaxed">
-            MarketIQ strips away the noise and the jargon. Every feature is designed so that someone with zero finance background can open the app and immediately understand what&apos;s happening.
+            Travauxus strips away the noise and the jargon. Every feature is designed so that someone with zero finance background can open the app and immediately understand what&apos;s happening.
           </p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -513,7 +501,7 @@ export default function Landing() {
             The stock market isn&apos;t just for Wall Street.
           </h2>
           <p className="text-white/40 text-sm max-w-2xl mx-auto leading-relaxed">
-            For too long, real-time market intelligence was locked behind paywalls, Bloomberg terminals, and finance degrees. MarketIQ gives everyone the same information — explained in plain English, personalised to what you own, and delivered in seconds.
+            For too long, real-time market intelligence was locked behind paywalls, Bloomberg terminals, and finance degrees. Travauxus gives everyone the same information — explained in plain English, personalised to what you own, and delivered in seconds.
           </p>
         </div>
       </section>
@@ -559,7 +547,7 @@ export default function Landing() {
             </div>
           </div>
           <div className="mt-8 pt-6 border-t border-white/5 text-center">
-            <p className="text-xs text-white/15">&copy; 2026 MarketIQ. Built with Claude AI.</p>
+            <p className="text-xs text-white/15">&copy; 2026 Travauxus. Built with Claude AI.</p>
           </div>
         </div>
       </footer>

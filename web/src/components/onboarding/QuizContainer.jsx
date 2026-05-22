@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import Logo from '../Logo'
 import { useNavigate } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
 import { setPreferences, setOnboardingComplete } from '../../store/preferencesSlice'
@@ -162,13 +163,8 @@ function SignUpScreen({ onNameStored }) {
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] flex flex-col items-center justify-center px-6">
-      <div className="flex items-center gap-2 mb-12">
-        <div className="w-8 h-8 bg-[#3b82f6] rounded-lg flex items-center justify-center">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
-          </svg>
-        </div>
-        <span className="font-semibold text-white text-lg tracking-tight">MarketIQ</span>
+      <div className="mb-12">
+        <Logo size="lg" />
       </div>
 
       <div className="w-full max-w-sm">

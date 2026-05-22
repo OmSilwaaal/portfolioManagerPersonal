@@ -1,4 +1,5 @@
 import { NavLink, Link, useNavigate, useLocation } from 'react-router-dom'
+import Logo from './Logo'
 import { useDispatch, useSelector } from 'react-redux'
 import { resetPreferences } from '../store/preferencesSlice'
 import { setFeedFilter, setFeedSubFilter, setFeedExpanded, toggleFeedExpanded } from '../store/feedSlice'
@@ -202,13 +203,8 @@ export default function Sidebar() {
       }}
     >
       {/* Logo */}
-      <div className="flex items-center gap-2.5 px-5 py-5 border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-        <div className="w-7 h-7 bg-white rounded-md flex items-center justify-center flex-shrink-0">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0a0a0a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
-          </svg>
-        </div>
-        <span className="font-semibold text-white text-base tracking-tight">MarketIQ</span>
+      <div className="flex items-center px-5 py-5 border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+        <Logo />
       </div>
 
       {/* Nav */}

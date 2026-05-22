@@ -1,3 +1,4 @@
+import Logo from '../components/Logo'
 import { useGetFeedQuery } from '../api/feedApi'
 import { useGetStockQuery } from '../api/stocksApi'
 import NewsCard from '../components/NewsCard'
@@ -80,14 +81,7 @@ export default function Dashboard() {
 
       {/* Mobile header */}
       <header className="flex items-center px-5 py-4 border-b md:hidden" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 bg-white rounded-md flex items-center justify-center">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0a0a0a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
-            </svg>
-          </div>
-          <span className="font-semibold text-white text-base tracking-tight">MarketIQ</span>
-        </div>
+        <Logo />
       </header>
 
       {/* Desktop header */}

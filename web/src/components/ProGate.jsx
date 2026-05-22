@@ -26,7 +26,7 @@ export default function ProGate({ children, label = 'Pro feature', compact = fal
           {!compact && (
             <div>
               <p className="text-white font-semibold text-sm">{label}</p>
-              <p className="text-white/35 text-xs mt-0.5">Available on MarketIQ Pro</p>
+              <p className="text-white/35 text-xs mt-0.5">Available on Travauxus Pro</p>
             </div>
           )}
           <Link

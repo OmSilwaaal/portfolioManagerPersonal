@@ -329,7 +329,7 @@ export default function Groups() {
               </svg>
             </div>
             <h2 className="text-base font-bold text-white mb-1">Pro required to create groups</h2>
-            <p className="text-sm text-white/40 mb-5">Upgrade to MarketIQ Pro to create investment clubs. Joining is always free.</p>
+            <p className="text-sm text-white/40 mb-5">Upgrade to Travauxus Pro to create investment clubs. Joining is always free.</p>
             <div className="flex gap-2">
               <button onClick={() => setProGate(false)} className="flex-1 py-2.5 rounded-lg text-sm font-medium text-white/50 hover:text-white border transition-colors" style={{ borderColor: 'rgba(255,255,255,0.12)' }}>Cancel</button>
               <Link to="/pricing" className="flex-1 py-2.5 rounded-lg text-sm font-semibold bg-white text-[#0a0a0a] hover:bg-white/90 transition-colors text-center">Upgrade to Pro</Link>
