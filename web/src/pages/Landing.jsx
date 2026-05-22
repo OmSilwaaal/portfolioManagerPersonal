@@ -1,557 +1,616 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import Logo from '../components/Logo'
 
-/* ─── Icons ──────────────────────────────────────────────────────────────── */
-function IconBuilding() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
-    </svg>
-  )
-}
-function IconBrain() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 2a4 4 0 0 1 4 4 4 4 0 0 1 2 7.46V18a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-4.54A4 4 0 0 1 8 6a4 4 0 0 1 4-4z"/>
-      <path d="M12 6v6M9 9h6"/>
-    </svg>
-  )
-}
-function IconBell() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-    </svg>
-  )
-}
+// ── Scramble hook ─────────────────────────────────────────────────────────────
+const SC = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%&*-_+|;:,.<>?'
 
-function IconTrend() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>
-    </svg>
-  )
-}
-function IconShield() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-    </svg>
-  )
-}
-function IconUsers() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
-      <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-    </svg>
-  )
-}
-function IconDollar() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-    </svg>
-  )
-}
-
-/* ─── Data ───────────────────────────────────────────────────────────────── */
-const features = [
-  { icon: <IconBuilding />, title: 'Congressional Trades', description: 'Every STOCK Act disclosure, surfaced with AI context on committee overlap and urgency.' },
-  { icon: <IconBrain />,    title: 'AI Market Summaries',  description: 'Hundreds of news items distilled into plain-English urgency-scored briefs.' },
-  { icon: <IconBell />,     title: 'Price Alerts',         description: 'Set threshold alerts on any stock or crypto and get notified instantly.' },
-]
-
-const detailedFeatures = [
-  {
-    icon: <IconBrain />,
-    title: 'Plain-English explanations',
-    description: 'Every stock, every move, explained like a friend would — no tickers, no jargon, no finance degree required. Ask "why is Apple down today?" and get a real answer.',
-  },
-  {
-    icon: <IconBuilding />,
-    title: 'Follow the money in Congress',
-    description: 'Politicians trade stocks on information regular investors never see. Travauxus surfaces every STOCK Act filing instantly so you know what moves are being made.',
-  },
-  {
-    icon: <IconTrend />,
-    title: 'Paper trading — zero risk',
-    description: 'Practice investing with $500 of virtual cash. Build your strategy, track your returns, and compete on a real leaderboard — all without risking a dollar.',
-  },
-  {
-    icon: <IconBell />,
-    title: 'Alerts that actually matter',
-    description: 'Set a price target. Walk away. Get notified the moment your stock or crypto hits it — not a spam blast, just the one thing you care about.',
-  },
-  {
-    icon: <IconUsers />,
-    title: 'Groups & shared watchlists',
-    description: 'Create a private investment club, share ideas, and see what your group is watching. Perfect for friends, families, or communities learning together.',
-  },
-  {
-    icon: <IconDollar />,
-    title: 'Commodities & macro',
-    description: 'Gold, oil, wheat — the things that affect everything else. See real-time commodity prices with AI context on what they mean for your portfolio.',
-  },
-]
-
-const steps = [
-  { num: '01', title: 'Tell us what you care about', body: 'Pick the stocks, sectors, or assets you want to follow. No spreadsheets, no Bloomberg terminal.' },
-  { num: '02', title: 'Get a feed made for you', body: 'Every morning your personalized feed surfaces the news, trades, and signals that actually affect your holdings.' },
-  { num: '03', title: 'Understand it in seconds', body: 'AI turns complex market events into clear, concise summaries. You decide what to do — Travauxus just makes sure you understand it.' },
-]
-
-const NAV_SECTIONS = [
-  { id: 'section-hero',     label: 'Overview'   },
-  { id: 'section-features', label: 'Features'   },
-  { id: 'section-cta',      label: 'Get started' },
-]
-
-/* ─── Liquid glass style ─────────────────────────────────────────────────── */
-const glassStyle = {
-  background: 'linear-gradient(145deg, rgba(255,255,255,0.13) 0%, rgba(255,255,255,0.05) 50%, rgba(255,255,255,0.10) 100%)',
-  backdropFilter: 'blur(32px) saturate(200%)',
-  WebkitBackdropFilter: 'blur(32px) saturate(200%)',
-  border: '1px solid rgba(255,255,255,0.18)',
-  boxShadow: [
-    '0 16px 48px rgba(0,0,0,0.55)',
-    'inset 0 1px 0 rgba(255,255,255,0.22)',
-    'inset 0 -1px 0 rgba(255,255,255,0.06)',
-    'inset 1px 0 0 rgba(255,255,255,0.10)',
-  ].join(', '),
-}
-
-/* ─── Scroll-reactive light orb ─────────────────────────────────────────── */
-function ScrollLight() {
-  const lightRef = useRef(null)
-  const posRef   = useRef({ x: 50, y: 12 })
-  const targetRef = useRef({ x: 50, y: 12 })
-  const rafRef   = useRef(null)
-
+function useScramble(text, delay = 0, duration = 1600) {
+  const [out, setOut] = useState('')
   useEffect(() => {
-    const onScroll = () => {
-      const maxScroll = document.body.scrollHeight - window.innerHeight
-      const p = maxScroll > 0 ? window.scrollY / maxScroll : 0
-      // Light descends from 12 % → 88 % as the user scrolls to the bottom
-      targetRef.current.y = 12 + p * 76
+    let start = null
+    let raf = null
+    const tick = (ts) => {
+      if (!start) start = ts
+      const elapsed = ts - start - delay
+      if (elapsed < 0) { raf = requestAnimationFrame(tick); return }
+      const p = Math.min(elapsed / duration, 1)
+      const revealed = Math.floor(p * text.length)
+      setOut(text.split('').map((c, i) => {
+        if (c === ' ') return ' '
+        if (i < revealed) return c
+        return SC[Math.floor(Math.random() * SC.length)]
+      }).join(''))
+      if (p < 1) raf = requestAnimationFrame(tick)
+      else setOut(text)
     }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [text, delay, duration])
+  return out
+}
 
-    const onMouse = (e) => {
-      // Drifts 35 %–65 % horizontally following the cursor
-      targetRef.current.x = 35 + (e.clientX / window.innerWidth) * 30
-    }
-
-    const tick = () => {
-      const cur = posRef.current
-      const tgt = targetRef.current
-      // Smooth lerp — slow enough to feel weighted
-      cur.x += (tgt.x - cur.x) * 0.035
-      cur.y += (tgt.y - cur.y) * 0.035
-
-      if (lightRef.current) {
-        lightRef.current.style.background = [
-          `radial-gradient(ellipse 800px 600px at ${cur.x.toFixed(2)}% ${cur.y.toFixed(2)}%,`,
-          ' rgba(255,255,255,0.07) 0%,',
-          ' rgba(255,255,255,0.025) 38%,',
-          ' transparent 68%)',
-        ].join('')
-      }
-      rafRef.current = requestAnimationFrame(tick)
-    }
-
-    window.addEventListener('scroll',    onScroll, { passive: true })
-    window.addEventListener('mousemove', onMouse,  { passive: true })
-    rafRef.current = requestAnimationFrame(tick)
-
-    return () => {
-      window.removeEventListener('scroll',    onScroll)
-      window.removeEventListener('mousemove', onMouse)
-      cancelAnimationFrame(rafRef.current)
-    }
+// ── Fade-in on scroll ─────────────────────────────────────────────────────────
+function useFadeIn(threshold = 0.12) {
+  const ref = useRef(null)
+  const [visible, setVisible] = useState(false)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const obs = new IntersectionObserver(
+      ([e]) => { if (e.isIntersecting) { setVisible(true); obs.disconnect() } },
+      { threshold }
+    )
+    obs.observe(el)
+    return () => obs.disconnect()
   }, [])
+  return [ref, visible]
+}
 
+// ── Translations ──────────────────────────────────────────────────────────────
+const LANGS = [
+  { code: 'en', label: 'EN' },
+  { code: 'fr', label: 'FR' },
+  { code: 'zh', label: '中文' },
+]
+
+const T = {
+  en: {
+    tagline: 'Investment intelligence platform',
+    hero1: 'The market,',
+    hero2: 'explained.',
+    heroSub: 'Real-time intelligence in plain English.\nNo jargon. No noise. Just what matters.',
+    cta: 'Get started free',
+    ctaSub: 'No credit card required',
+    whatInside: "What's inside",
+    features: [
+      { n: '01', t: 'Plain-English AI', d: 'Every stock move explained like a friend would. Ask why a stock is down — get a real answer.' },
+      { n: '02', t: 'Congressional trades', d: 'Every STOCK Act disclosure surfaced instantly with AI context on why it matters.' },
+      { n: '03', t: 'Paper trading', d: 'Practice with $500 virtual cash, track your returns, compete on a live leaderboard.' },
+      { n: '04', t: 'Price alerts', d: 'Set a target price. Walk away. Get notified the exact moment it hits.' },
+      { n: '05', t: 'Investment groups', d: 'Create a private club, share trade ideas, post theses, run polls with your members.' },
+      { n: '06', t: 'Commodities & crypto', d: 'Gold, oil, wheat, BTC — all in one feed with plain-English AI context.' },
+    ],
+    promise: 'The stock market isn\'t just for Wall Street.',
+    promiseSub: 'For too long, real-time market intelligence was locked behind Bloomberg terminals and finance degrees. Travauxus gives everyone the same information — in plain English, personalised to what you own.',
+    pricingLabel: 'Simple pricing',
+    free: 'Free',
+    pro: 'Pro',
+    freePrice: '$0',
+    proPrice: '$12',
+    perMonth: '/ month',
+    freeDesc: 'Limited feed · Basic prices · 5 gov trades',
+    proDesc: 'Unlimited feed · Full charts · All features',
+    viewPricing: 'View full pricing',
+    ctaFinal: 'Start understanding\nthe market today.',
+    ctaFinalSub: 'Free forever. Upgrade when you\'re ready.',
+    footerDisclaimer: 'Not financial advice. For educational use only.',
+    copyright: '© 2026 Travauxus.',
+    privacy: 'Privacy',
+    support: 'Support',
+  },
+  fr: {
+    tagline: 'Plateforme d\'intelligence financière',
+    hero1: 'Le marché,',
+    hero2: 'expliqué.',
+    heroSub: 'Informations en temps réel en langage simple.\nSans jargon. Sans bruit. L\'essentiel.',
+    cta: 'Commencer gratuitement',
+    ctaSub: 'Sans carte bancaire',
+    whatInside: 'Ce que contient l\'app',
+    features: [
+      { n: '01', t: 'IA en langage clair', d: 'Chaque mouvement expliqué simplement. Demandez pourquoi une action baisse — obtenez une vraie réponse.' },
+      { n: '02', t: 'Trades du Congrès', d: 'Chaque déclaration STOCK Act remontée instantanément avec contexte IA.' },
+      { n: '03', t: 'Trading fictif', d: 'Pratiquez avec 500 $ virtuels, suivez vos rendements, rivalisez sur un classement réel.' },
+      { n: '04', t: 'Alertes de prix', d: 'Définissez un objectif. Partez. Soyez notifié dès qu\'il est atteint.' },
+      { n: '05', t: 'Groupes d\'investissement', d: 'Créez un club privé, partagez des idées, publiez des thèses, faites des sondages.' },
+      { n: '06', t: 'Matières premières & crypto', d: 'Or, pétrole, blé, BTC — tout en un avec contexte IA.' },
+    ],
+    promise: 'Le marché financier n\'est pas réservé à Wall Street.',
+    promiseSub: 'Travauxus donne à chacun la même intelligence financière — en langage clair, personnalisée selon ce que vous détenez.',
+    pricingLabel: 'Tarification simple',
+    free: 'Gratuit',
+    pro: 'Pro',
+    freePrice: '0 $',
+    proPrice: '12 $',
+    perMonth: '/ mois',
+    freeDesc: 'Fil limité · Prix de base · 5 trades du Congrès',
+    proDesc: 'Fil illimité · Graphiques complets · Toutes les fonctionnalités',
+    viewPricing: 'Voir les tarifs complets',
+    ctaFinal: 'Commencez à comprendre\nle marché aujourd\'hui.',
+    ctaFinalSub: 'Gratuit pour toujours. Mettez à niveau quand vous êtes prêt.',
+    footerDisclaimer: 'Pas de conseil financier. À des fins éducatives uniquement.',
+    copyright: '© 2026 Travauxus.',
+    privacy: 'Confidentialité',
+    support: 'Support',
+  },
+  zh: {
+    tagline: '投资智能平台',
+    hero1: '市场，',
+    hero2: '一目了然。',
+    heroSub: '实时市场资讯，简单明了。\n无术语，无噪音——只有重要的内容。',
+    cta: '免费开始',
+    ctaSub: '无需信用卡',
+    whatInside: '功能一览',
+    features: [
+      { n: '01', t: 'AI 简明解释', d: '每次股价波动用简单语言解释。问为什么某只股票下跌，得到真实答案。' },
+      { n: '02', t: '国会交易追踪', d: '每份 STOCK Act 披露即时呈现，附 AI 背景分析。' },
+      { n: '03', t: '模拟交易', d: '用 500 美元虚拟资金练习，追踪收益，在排行榜上竞争。' },
+      { n: '04', t: '价格提醒', d: '设定目标价。放松等待。价格触达时立即通知。' },
+      { n: '05', t: '投资群组', d: '创建私人俱乐部，分享想法，发布交易论点，发起投票。' },
+      { n: '06', t: '大宗商品与加密货币', d: '黄金、石油、小麦、比特币——一站汇聚，附 AI 解读。' },
+    ],
+    promise: '股市不只属于华尔街。',
+    promiseSub: 'Travauxus 让每个人都能获得同样的市场智能——用简单语言呈现，根据您的持仓个性化定制。',
+    pricingLabel: '简单定价',
+    free: '免费',
+    pro: '专业版',
+    freePrice: '$0',
+    proPrice: '$12',
+    perMonth: '/ 月',
+    freeDesc: '有限资讯流 · 基础价格 · 5条国会交易',
+    proDesc: '无限资讯流 · 完整图表 · 所有功能',
+    viewPricing: '查看完整定价',
+    ctaFinal: '立即开始\n读懂市场。',
+    ctaFinalSub: '永久免费。准备好时再升级。',
+    footerDisclaimer: '非财务建议。仅供教育用途。',
+    copyright: '© 2026 Travauxus.',
+    privacy: '隐私政策',
+    support: '支持',
+  },
+}
+
+// ── Fade wrapper ──────────────────────────────────────────────────────────────
+function Fade({ children, delay = 0 }) {
+  const [ref, visible] = useFadeIn()
   return (
     <div
-      ref={lightRef}
-      className="fixed inset-0 pointer-events-none"
+      ref={ref}
       style={{
-        zIndex: 1,
-        background: 'radial-gradient(ellipse 800px 600px at 50% 12%, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.025) 38%, transparent 68%)',
+        opacity: visible ? 1 : 0,
+        transform: visible ? 'translateY(0)' : 'translateY(24px)',
+        transition: `opacity 0.8s ease ${delay}s, transform 0.8s ease ${delay}s`,
       }}
-    />
+    >
+      {children}
+    </div>
   )
 }
 
-/* ─── Dot sidebar nav ────────────────────────────────────────────────────── */
-function SidebarNav({ active }) {
-  const scrollTo = (id) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
-  }
+// ── Language switcher ─────────────────────────────────────────────────────────
+function LangSwitcher({ lang, setLang }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const current = LANGS.find(l => l.code === lang)
 
   return (
-    <nav className="fixed right-5 top-1/2 -translate-y-1/2 z-50 flex flex-col items-end gap-5 select-none">
-      {NAV_SECTIONS.map((s) => {
-        const isActive = active === s.id
-        return (
-          <button
-            key={s.id}
-            onClick={() => scrollTo(s.id)}
-            aria-label={s.label}
-            className="group flex items-center gap-3"
-          >
-            <span className="text-[11px] tracking-widest uppercase text-white/0 group-hover:text-white/40 transition-all duration-200 whitespace-nowrap">
-              {s.label}
-            </span>
-            <span
-              className="block rounded-full transition-all duration-300 flex-shrink-0"
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: '6px',
+          background: 'transparent',
+          border: '1px solid rgba(255,255,255,0.12)',
+          color: 'rgba(255,255,255,0.6)',
+          fontSize: '11px', fontWeight: '600', letterSpacing: '0.08em',
+          padding: '6px 12px', borderRadius: '6px',
+          cursor: 'pointer', transition: 'all 0.2s',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)'; e.currentTarget.style.color = '#fff' }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)'; e.currentTarget.style.color = 'rgba(255,255,255,0.6)' }}
+      >
+        {current.label}
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 8px)', right: 0,
+          background: '#111', border: '1px solid rgba(255,255,255,0.10)',
+          borderRadius: '8px', overflow: 'hidden', minWidth: '90px',
+          boxShadow: '0 16px 48px rgba(0,0,0,0.6)',
+          zIndex: 100,
+        }}>
+          {LANGS.map(l => (
+            <button
+              key={l.code}
+              onClick={() => { setLang(l.code); setOpen(false) }}
               style={{
-                width:      isActive ? 10 : 7,
-                height:     isActive ? 10 : 7,
-                background: isActive ? 'rgba(255,255,255,0.9)' : 'transparent',
-                border:     isActive ? '1.5px solid rgba(255,255,255,0.9)' : '1.5px solid rgba(255,255,255,0.30)',
-                boxShadow:  isActive ? '0 0 10px rgba(255,255,255,0.6), 0 0 24px rgba(255,255,255,0.2)' : 'none',
+                display: 'block', width: '100%', textAlign: 'left',
+                padding: '9px 14px',
+                background: l.code === lang ? 'rgba(255,255,255,0.06)' : 'transparent',
+                color: l.code === lang ? '#fff' : 'rgba(255,255,255,0.5)',
+                fontSize: '12px', fontWeight: '500',
+                border: 'none', cursor: 'pointer', transition: 'background 0.15s',
               }}
-            />
-          </button>
-        )
-      })}
-    </nav>
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'}
+              onMouseLeave={e => e.currentTarget.style.background = l.code === lang ? 'rgba(255,255,255,0.06)' : 'transparent'}
+            >
+              {l.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
-
-
-/* ─── Canvas frame-scrub section ─────────────────────────────────────────── */
-const TOTAL_FRAMES = 227
-const FRAME_URL = (i) => `/frames/ezgif-frame-${String(i + 1).padStart(3, '0')}.jpg`
-
-const PHASE_LINES = [
-  ['The intelligence', 'layer for markets.'],
-  ['AI summaries.', 'Congressional trades.', 'Real-time signals.'],
-  ['One feed.', 'Everything that matters.'],
-]
-
-function drawToCanvas(canvas, img) {
-  if (!canvas || !img || !img.complete) return
-  const ctx = canvas.getContext('2d')
-  const cw = canvas.width, ch = canvas.height
-  const iw = img.naturalWidth, ih = img.naturalHeight
-  if (!iw || !ih) return
-  const scale = Math.max(cw / iw, ch / ih)
-  const sw = iw * scale, sh = ih * scale
-  ctx.drawImage(img, (cw - sw) / 2, (ch - sh) / 2, sw, sh)
+// ── Divider ───────────────────────────────────────────────────────────────────
+function Divider() {
+  return <div style={{ width: '100%', height: '1px', background: 'rgba(255,255,255,0.07)' }} />
 }
 
-const MIN_PHASE_DWELL_MS = 800
-
-function ScrollVideoSection() {
-  const sectionRef         = useRef(null)
-  const canvasRef          = useRef(null)
-  const framesRef          = useRef([])
-  const targetRef          = useRef(0)
-  const currentRef         = useRef(0)
-  const rafRef             = useRef(null)
-  const phaseRef           = useRef(0)
-  const lastPhaseChangeRef = useRef(0)
-  const [phase, setPhase]       = useState(0)
-  const [scrolled, setScrolled] = useState(false)
-  const [ready, setReady]       = useState(false)
-
-  const sizeCanvas = () => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    canvas.width  = window.innerWidth
-    canvas.height = window.innerHeight
-    const f = framesRef.current[Math.round(currentRef.current)]
-    if (f) drawToCanvas(canvas, f)
-  }
-
-  useEffect(() => {
-    sizeCanvas()
-    window.addEventListener('resize', sizeCanvas)
-    const frames = new Array(TOTAL_FRAMES)
-    framesRef.current = frames
-    let firstDone = false
-    for (let i = 0; i < TOTAL_FRAMES; i++) {
-      const img = new Image()
-      img.src = FRAME_URL(i)
-      img.onload = () => {
-        frames[i] = img
-        if (i === 0 && !firstDone) {
-          firstDone = true
-          drawToCanvas(canvasRef.current, img)
-          setReady(true)
-        }
-      }
-    }
-    return () => window.removeEventListener('resize', sizeCanvas)
-  }, []) // eslint-disable-line
-
-  useEffect(() => {
-    let lastDrawn = -1
-    const tick = () => {
-      const diff = targetRef.current - currentRef.current
-      if (Math.abs(diff) > 0.1) {
-        currentRef.current += diff * 0.2
-      } else {
-        currentRef.current = targetRef.current
-      }
-      const idx = Math.round(currentRef.current)
-      if (idx !== lastDrawn) {
-        const img = framesRef.current[idx]
-        if (img) drawToCanvas(canvasRef.current, img)
-        lastDrawn = idx
-      }
-      rafRef.current = requestAnimationFrame(tick)
-    }
-    rafRef.current = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(rafRef.current)
-  }, [])
-
-  useEffect(() => {
-    const onScroll = () => {
-      const el = sectionRef.current
-      if (!el) return
-      const p = Math.max(0, Math.min(1,
-        -el.getBoundingClientRect().top / (el.offsetHeight - window.innerHeight)
-      ))
-      targetRef.current = p * (TOTAL_FRAMES - 1)
-      const desired = p < 0.33 ? 0 : p < 0.67 ? 1 : 2
-      if (desired !== phaseRef.current) {
-        const advancing = desired > phaseRef.current
-        if (!advancing || Date.now() - lastPhaseChangeRef.current >= MIN_PHASE_DWELL_MS) {
-          phaseRef.current = desired
-          lastPhaseChangeRef.current = Date.now()
-          setPhase(desired)
-        }
-      }
-      if (p > 0.015) setScrolled(true)
-    }
-    window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
-  }, [])
-
-  return (
-    <section ref={sectionRef} style={{ height: '320vh' }} className="relative">
-      <div className="sticky top-0 h-screen overflow-hidden bg-[#0a0a0a]">
-        <canvas
-          ref={canvasRef}
-          className="absolute inset-0 w-full h-full"
-          style={{ opacity: ready ? 1 : 0, transition: 'opacity 0.4s ease' }}
-        />
-        <div className="absolute inset-0 bg-black/45 pointer-events-none" />
-        <div className="absolute top-0 inset-x-0 h-44 bg-gradient-to-b from-[#0a0a0a] to-transparent pointer-events-none" />
-        <div className="absolute bottom-0 inset-x-0 h-44 bg-gradient-to-t from-[#0a0a0a] to-transparent pointer-events-none" />
-
-        {PHASE_LINES.map((lines, i) => (
-          <div
-            key={i}
-            className="absolute inset-0 flex items-center justify-center px-6 text-center pointer-events-none"
-            style={{ opacity: i === phase ? 1 : 0, transition: 'opacity 0.7s ease' }}
-          >
-            <h2 className="text-5xl sm:text-6xl md:text-7xl font-bold text-white tracking-tight leading-[1.06]">
-              {lines.map((line, j) => (
-                <span key={j} className="block">{line}</span>
-              ))}
-            </h2>
-          </div>
-        ))}
-
-        <div
-          className="absolute bottom-20 inset-x-0 flex justify-center z-10"
-          style={{ opacity: phase === 2 ? 1 : 0, transition: 'opacity 0.7s ease' }}
-        >
-          <Link
-            to="/onboarding"
-            className="bg-white hover:bg-gray-100 text-[#0a0a0a] font-bold px-8 py-4 rounded-xl text-sm tracking-wide transition-colors"
-          >
-            Get started
-          </Link>
-        </div>
-
-        <div
-          className="absolute bottom-10 inset-x-0 flex flex-col items-center gap-2 pointer-events-none"
-          style={{ opacity: scrolled ? 0 : 1, transition: 'opacity 0.6s ease' }}
-        >
-          <span className="text-white/30 text-xs tracking-widest uppercase">Scroll</span>
-          <div className="w-px h-8 bg-gradient-to-b from-white/30 to-transparent animate-pulse" />
-        </div>
-      </div>
-    </section>
-  )
-}
-
-/* ─── Main Landing ───────────────────────────────────────────────────────── */
+// ── Main ──────────────────────────────────────────────────────────────────────
 export default function Landing() {
-  const [activeSection, setActiveSection] = useState('section-hero')
+  const [lang, setLang] = useState('en')
+  const t = T[lang]
 
-  useEffect(() => {
-    const observers = []
-    NAV_SECTIONS.forEach(({ id }) => {
-      const el = document.getElementById(id)
-      if (!el) return
-      const obs = new IntersectionObserver(
-        ([entry]) => { if (entry.isIntersecting) setActiveSection(id) },
-        { threshold: 0.3 }
-      )
-      obs.observe(el)
-      observers.push(obs)
-    })
-    return () => observers.forEach((o) => o.disconnect())
-  }, [])
+  const line1 = useScramble(t.hero1, 100, 1200)
+  const line2 = useScramble(t.hero2, 600, 1400)
+
+  // Re-trigger scramble on lang change by using key
+  const [scrambleKey, setScrambleKey] = useState(0)
+  useEffect(() => { setScrambleKey(k => k + 1) }, [lang])
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white font-sans">
+    <div style={{ background: '#080808', color: '#fff', minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}>
 
-      {/* Global scroll-reactive light — sits above background, below all content */}
-      <ScrollLight />
+      {/* ── FIXED HEADER ── */}
+      <header style={{
+        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '0',
+        borderBottom: '1px solid rgba(255,255,255,0.07)',
+        background: 'rgba(8,8,8,0.85)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+      }}>
+        {/* Logo cell — bordered box on left */}
+        <div style={{
+          display: 'flex', alignItems: 'center',
+          padding: '14px 24px',
+          borderRight: '1px solid rgba(255,255,255,0.07)',
+        }}>
+          <Logo size="sm" />
+        </div>
 
-      <SidebarNav active={activeSection} />
-
-      {/* ── NAV ── */}
-      <header className="sticky top-0 z-50 backdrop-blur-md border-b border-white/5" style={{ background: 'rgba(10,10,10,0.75)' }}>
-        <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
-          <Logo />
+        {/* Right side */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '0 24px' }}>
+          <LangSwitcher lang={lang} setLang={setLang} />
           <Link
             to="/onboarding"
-            className="bg-white hover:bg-gray-100 text-[#0a0a0a] text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+            style={{
+              fontSize: '12px', fontWeight: '600', letterSpacing: '0.04em',
+              color: '#080808', background: '#fff',
+              padding: '7px 16px', borderRadius: '6px',
+              textDecoration: 'none', transition: 'opacity 0.2s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
+            onMouseLeave={e => e.currentTarget.style.opacity = '1'}
           >
-            Get started
+            {t.cta}
           </Link>
         </div>
       </header>
 
-      {/* ── STICKY SCROLL VIDEO ── */}
-      <div id="section-hero" style={{ position: 'relative', zIndex: 2 }}>
-        <ScrollVideoSection />
-      </div>
-
-      {/* ── HOW IT WORKS ── */}
-      <section id="section-features" className="max-w-6xl mx-auto px-6 py-20" style={{ position: 'relative', zIndex: 2 }}>
-        <div className="text-center mb-14">
-          <p className="text-xs font-semibold uppercase tracking-widest text-white/25 mb-3">How it works</p>
-          <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">Three steps to actually understanding the market</h2>
+      {/* ── HERO ── */}
+      <section style={{
+        minHeight: '100vh',
+        display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
+        padding: '0 48px 80px',
+        paddingTop: '80px',
+        position: 'relative',
+        overflow: 'hidden',
+      }}>
+        {/* Tagline top-left */}
+        <div style={{
+          position: 'absolute', top: '96px', left: '48px',
+          fontSize: '11px', fontWeight: '500', letterSpacing: '0.14em',
+          color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase',
+        }}>
+          {t.tagline}
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-          {steps.map((s) => (
-            <div key={s.num} className="flex flex-col gap-4 rounded-2xl p-7 relative overflow-hidden" style={glassStyle}>
-              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent pointer-events-none" />
-              <span className="text-4xl font-black text-white/08 select-none leading-none">{s.num}</span>
-              <div>
-                <h3 className="text-white font-semibold text-sm mb-2">{s.title}</h3>
-                <p className="text-white/40 text-sm leading-relaxed">{s.body}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
 
-      {/* ── FEATURE HIGHLIGHTS (3 cards) ── */}
-      <section className="max-w-6xl mx-auto px-6 pb-14" style={{ position: 'relative', zIndex: 2 }}>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-          {features.map((feature) => (
-            <div
-              key={feature.title}
-              className="rounded-2xl p-7 relative overflow-hidden group transition-all duration-300 hover:scale-[1.02]"
-              style={glassStyle}
+        {/* Main text block */}
+        <div style={{ maxWidth: '820px' }}>
+          <h1 key={`h1-${scrambleKey}`} style={{
+            fontSize: 'clamp(52px, 9vw, 120px)',
+            fontWeight: '700',
+            lineHeight: '1.0',
+            letterSpacing: '-0.03em',
+            margin: '0 0 24px 0',
+            color: '#fff',
+          }}>
+            <span style={{ display: 'block' }}>{line1 || ' '}</span>
+            <span style={{ display: 'block', color: 'rgba(255,255,255,0.35)' }}>{line2 || ' '}</span>
+          </h1>
+
+          <p style={{
+            fontSize: 'clamp(15px, 1.8vw, 18px)',
+            color: 'rgba(255,255,255,0.45)',
+            lineHeight: '1.7',
+            maxWidth: '420px',
+            margin: '0 0 40px 0',
+            whiteSpace: 'pre-line',
+          }}>
+            {t.heroSub}
+          </p>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
+            <Link
+              to="/onboarding"
+              style={{
+                display: 'inline-block',
+                background: '#fff', color: '#080808',
+                fontSize: '13px', fontWeight: '700', letterSpacing: '0.02em',
+                padding: '13px 28px', borderRadius: '8px',
+                textDecoration: 'none', transition: 'opacity 0.2s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
+              onMouseLeave={e => e.currentTarget.style.opacity = '1'}
             >
-              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/45 to-transparent pointer-events-none" />
-              <div className="absolute inset-y-0 left-0 w-px bg-gradient-to-b from-white/25 via-white/10 to-transparent pointer-events-none" />
-              <div className="absolute top-0 left-0 w-24 h-24 bg-white/[0.04] rounded-br-full pointer-events-none" />
-              <div className="relative">
-                <div className="text-white/50 group-hover:text-white/80 mb-4 transition-colors duration-300">{feature.icon}</div>
-                <h3 className="text-white font-semibold text-sm mb-2">{feature.title}</h3>
-                <p className="text-white/45 text-sm leading-relaxed">{feature.description}</p>
-              </div>
-            </div>
-          ))}
+              {t.cta}
+            </Link>
+            <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.2)' }}>{t.ctaSub}</span>
+          </div>
+        </div>
+
+        {/* Scroll indicator */}
+        <div style={{
+          position: 'absolute', bottom: '32px', right: '48px',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
+        }}>
+          <div style={{
+            width: '1px', height: '48px',
+            background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.25))',
+            animation: 'scrollPulse 2s ease-in-out infinite',
+          }} />
         </div>
       </section>
 
-      {/* ── DETAILED FEATURES ── */}
-      <section className="max-w-6xl mx-auto px-6 py-16" style={{ position: 'relative', zIndex: 2 }}>
-        <div className="text-center mb-14">
-          <p className="text-xs font-semibold uppercase tracking-widest text-white/25 mb-3">Everything inside</p>
-          <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">Built for people, not professionals</h2>
-          <p className="text-white/35 text-sm mt-4 max-w-xl mx-auto leading-relaxed">
-            Travauxus strips away the noise and the jargon. Every feature is designed so that someone with zero finance background can open the app and immediately understand what&apos;s happening.
+      <Divider />
+
+      {/* ── FEATURES ── */}
+      <section style={{ padding: '100px 48px' }}>
+        <Fade>
+          <p style={{
+            fontSize: '11px', fontWeight: '600', letterSpacing: '0.16em',
+            color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase',
+            marginBottom: '64px',
+          }}>
+            {t.whatInside}
           </p>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {detailedFeatures.map((f) => (
-            <div key={f.title} className="rounded-2xl p-6 relative overflow-hidden group transition-all duration-300 hover:scale-[1.01]" style={glassStyle}>
-              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent pointer-events-none" />
-              <div className="relative">
-                <div className="text-white/40 group-hover:text-white/70 mb-4 transition-colors duration-300">{f.icon}</div>
-                <h3 className="text-white font-semibold text-sm mb-2">{f.title}</h3>
-                <p className="text-white/40 text-sm leading-relaxed">{f.description}</p>
+        </Fade>
+
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          {t.features.map((f, i) => (
+            <Fade key={`${lang}-${f.n}`} delay={i * 0.05}>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '60px 1fr 1fr',
+                  gap: '0 40px',
+                  padding: '28px 0',
+                  borderBottom: '1px solid rgba(255,255,255,0.06)',
+                  alignItems: 'start',
+                  transition: 'background 0.2s',
+                  cursor: 'default',
+                  borderRadius: '4px',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              >
+                <span style={{ fontSize: '11px', fontWeight: '500', color: 'rgba(255,255,255,0.2)', letterSpacing: '0.08em', paddingTop: '2px' }}>
+                  {f.n}
+                </span>
+                <span style={{ fontSize: 'clamp(15px, 1.8vw, 18px)', fontWeight: '500', color: '#fff', letterSpacing: '-0.01em' }}>
+                  {f.t}
+                </span>
+                <span style={{ fontSize: '14px', color: 'rgba(255,255,255,0.38)', lineHeight: '1.6' }}>
+                  {f.d}
+                </span>
               </div>
-            </div>
+            </Fade>
           ))}
         </div>
       </section>
 
-      {/* ── POSITIONING STRIP ── */}
-      <section className="max-w-6xl mx-auto px-6 py-10" style={{ position: 'relative', zIndex: 2 }}>
-        <div className="rounded-2xl p-10 text-center relative overflow-hidden" style={glassStyle}>
-          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/40 to-transparent pointer-events-none" />
-          <p className="text-xs font-semibold uppercase tracking-widest text-white/25 mb-4">Our promise</p>
-          <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight mb-4">
-            The stock market isn&apos;t just for Wall Street.
+      <Divider />
+
+      {/* ── PROMISE ── */}
+      <section style={{ padding: '120px 48px', maxWidth: '900px' }}>
+        <Fade>
+          <p style={{
+            fontSize: 'clamp(28px, 4.5vw, 56px)',
+            fontWeight: '600', lineHeight: '1.15',
+            letterSpacing: '-0.02em',
+            color: '#fff',
+            marginBottom: '28px',
+          }}>
+            {t.promise}
+          </p>
+          <p style={{
+            fontSize: '16px', lineHeight: '1.75',
+            color: 'rgba(255,255,255,0.4)',
+            maxWidth: '560px',
+          }}>
+            {t.promiseSub}
+          </p>
+        </Fade>
+      </section>
+
+      <Divider />
+
+      {/* ── PRICING ── */}
+      <section style={{ padding: '100px 48px' }}>
+        <Fade>
+          <p style={{
+            fontSize: '11px', fontWeight: '600', letterSpacing: '0.16em',
+            color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase',
+            marginBottom: '56px',
+          }}>
+            {t.pricingLabel}
+          </p>
+        </Fade>
+
+        <Fade delay={0.1}>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+            gap: '1px',
+            background: 'rgba(255,255,255,0.07)',
+            border: '1px solid rgba(255,255,255,0.07)',
+            borderRadius: '12px',
+            overflow: 'hidden',
+            maxWidth: '640px',
+          }}>
+            {/* Free */}
+            <div style={{ background: '#080808', padding: '40px 36px' }}>
+              <p style={{ fontSize: '11px', fontWeight: '600', letterSpacing: '0.12em', color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', marginBottom: '16px' }}>
+                {t.free}
+              </p>
+              <p style={{ fontSize: '42px', fontWeight: '700', letterSpacing: '-0.02em', color: '#fff', lineHeight: 1, marginBottom: '8px' }}>
+                {t.freePrice}
+              </p>
+              <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.3)', marginBottom: '32px', lineHeight: '1.6' }}>
+                {t.freeDesc}
+              </p>
+              <Link
+                to="/onboarding"
+                style={{
+                  display: 'inline-block', fontSize: '12px', fontWeight: '600',
+                  letterSpacing: '0.04em',
+                  color: 'rgba(255,255,255,0.6)',
+                  border: '1px solid rgba(255,255,255,0.15)',
+                  padding: '9px 20px', borderRadius: '6px',
+                  textDecoration: 'none', transition: 'all 0.2s',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.35)' }}
+                onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.6)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)' }}
+              >
+                {t.cta}
+              </Link>
+            </div>
+
+            {/* Pro */}
+            <div style={{ background: '#0f0f0f', padding: '40px 36px', position: 'relative' }}>
+              <p style={{ fontSize: '11px', fontWeight: '600', letterSpacing: '0.12em', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', marginBottom: '16px' }}>
+                {t.pro}
+              </p>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px', marginBottom: '8px' }}>
+                <p style={{ fontSize: '42px', fontWeight: '700', letterSpacing: '-0.02em', color: '#fff', lineHeight: 1 }}>
+                  {t.proPrice}
+                </p>
+                <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.35)' }}>{t.perMonth}</span>
+              </div>
+              <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.35)', marginBottom: '32px', lineHeight: '1.6' }}>
+                {t.proDesc}
+              </p>
+              <Link
+                to="/pricing"
+                style={{
+                  display: 'inline-block', fontSize: '12px', fontWeight: '600',
+                  letterSpacing: '0.04em',
+                  color: '#080808', background: '#fff',
+                  padding: '9px 20px', borderRadius: '6px',
+                  textDecoration: 'none', transition: 'opacity 0.2s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
+                onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+              >
+                {t.viewPricing}
+              </Link>
+            </div>
+          </div>
+        </Fade>
+      </section>
+
+      <Divider />
+
+      {/* ── FINAL CTA ── */}
+      <section style={{ padding: '120px 48px' }}>
+        <Fade>
+          <h2 style={{
+            fontSize: 'clamp(36px, 6vw, 80px)',
+            fontWeight: '700', lineHeight: '1.05',
+            letterSpacing: '-0.03em',
+            color: '#fff',
+            marginBottom: '28px',
+            whiteSpace: 'pre-line',
+          }}>
+            {t.ctaFinal}
           </h2>
-          <p className="text-white/40 text-sm max-w-2xl mx-auto leading-relaxed">
-            For too long, real-time market intelligence was locked behind paywalls, Bloomberg terminals, and finance degrees. Travauxus gives everyone the same information — explained in plain English, personalised to what you own, and delivered in seconds.
+          <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.3)', marginBottom: '40px' }}>
+            {t.ctaFinalSub}
           </p>
-        </div>
-      </section>
-
-      {/* ── CTA ── */}
-      <section id="section-cta" className="max-w-6xl mx-auto px-6 py-20 text-center" style={{ position: 'relative', zIndex: 2 }}>
-        <p className="text-xs font-semibold uppercase tracking-widest text-white/25 mb-4">Get started today</p>
-        <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight mb-4">
-          The market doesn&apos;t wait.
-        </h2>
-        <p className="text-white/35 text-sm mb-3 max-w-md mx-auto leading-relaxed">
-          Free to start. Upgrade to Pro for $12/month and unlock unlimited feed, full charts, and priority alerts.
-        </p>
-        <p className="text-white/20 text-xs mb-10">No credit card required to sign up. Cancel anytime.</p>
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
           <Link
             to="/onboarding"
-            className="bg-white hover:bg-gray-100 text-[#0a0a0a] font-bold px-8 py-4 rounded-xl text-sm tracking-wide transition-colors"
+            style={{
+              display: 'inline-block',
+              background: '#fff', color: '#080808',
+              fontSize: '13px', fontWeight: '700', letterSpacing: '0.02em',
+              padding: '14px 32px', borderRadius: '8px',
+              textDecoration: 'none', transition: 'opacity 0.2s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
+            onMouseLeave={e => e.currentTarget.style.opacity = '1'}
           >
-            Start free
+            {t.cta}
           </Link>
-          <Link
-            to="/pricing"
-            className="text-white/50 hover:text-white text-sm transition-colors underline underline-offset-4"
-          >
-            View pricing
-          </Link>
-        </div>
+        </Fade>
       </section>
 
+      <Divider />
+
       {/* ── FOOTER ── */}
-      <footer className="border-t border-white/5 bg-[#0a0a0a]" style={{ position: 'relative', zIndex: 2 }}>
-        <div className="max-w-6xl mx-auto px-6 py-10">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
-            <div>
-              <Logo />
-              <p className="text-xs text-white/15 mt-2">Not financial advice. For educational use only.</p>
-            </div>
-            <div className="flex items-center gap-6">
-              <a href="#" className="text-white/25 hover:text-white/60 text-sm transition-colors">GitHub</a>
-              <a href="#" className="text-white/25 hover:text-white/60 text-sm transition-colors">Privacy</a>
-              <a href="#" className="text-white/25 hover:text-white/60 text-sm transition-colors">Support</a>
-            </div>
-          </div>
-          <div className="mt-8 pt-6 border-t border-white/5 text-center">
-            <p className="text-xs text-white/15">&copy; 2026 Travauxus. Built with Claude AI.</p>
-          </div>
+      <footer style={{ padding: '40px 48px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <Logo size="sm" />
+          <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.18)', marginTop: '4px' }}>
+            {t.footerDisclaimer}
+          </p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+          <a href="#" style={{ fontSize: '12px', color: 'rgba(255,255,255,0.25)', textDecoration: 'none', transition: 'color 0.2s' }}
+            onMouseEnter={e => e.currentTarget.style.color = 'rgba(255,255,255,0.7)'}
+            onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.25)'}>
+            {t.privacy}
+          </a>
+          <a href="#" style={{ fontSize: '12px', color: 'rgba(255,255,255,0.25)', textDecoration: 'none', transition: 'color 0.2s' }}
+            onMouseEnter={e => e.currentTarget.style.color = 'rgba(255,255,255,0.7)'}
+            onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.25)'}>
+            {t.support}
+          </a>
+          <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.15)' }}>{t.copyright}</span>
         </div>
       </footer>
 
+      {/* ── KEYFRAMES ── */}
+      <style>{`
+        @keyframes scrollPulse {
+          0%, 100% { opacity: 0.2; transform: scaleY(1); }
+          50% { opacity: 0.6; transform: scaleY(1.1); }
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html { scroll-behavior: smooth; }
+        @media (max-width: 640px) {
+          section { padding-left: 24px !important; padding-right: 24px !important; }
+          header { padding: 0 !important; }
+          header > div:first-child { padding: 12px 16px !important; }
+          header > div:last-child { padding: 0 16px !important; }
+        }
+        @media (max-width: 768px) {
+          [data-feat-grid] { grid-template-columns: 40px 1fr !important; }
+          [data-feat-grid] > span:last-child { display: none; }
+        }
+      `}</style>
     </div>
   )
 }
