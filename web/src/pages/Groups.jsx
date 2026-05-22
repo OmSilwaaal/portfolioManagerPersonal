@@ -40,12 +40,20 @@ function GroupCard({ group }) {
       <div className="h-1.5 w-full" style={{ background: group.color }} />
       <div className="p-5">
         <div className="flex items-start gap-3 mb-3">
-          <div
-            className="w-11 h-11 rounded-xl flex items-center justify-center text-xl flex-shrink-0 font-bold"
-            style={{ background: group.color + '22', border: `1px solid ${group.color}55`, color: group.color }}
-          >
-            {group.emoji || initial}
-          </div>
+          {group.image_url ? (
+            <img
+              src={group.image_url}
+              alt={group.name}
+              className="w-11 h-11 rounded-xl object-cover flex-shrink-0"
+            />
+          ) : (
+            <div
+              className="w-11 h-11 rounded-xl flex items-center justify-center text-xl flex-shrink-0 font-bold"
+              style={{ background: group.color + '22', border: `1px solid ${group.color}55`, color: group.color }}
+            >
+              {group.emoji || initial}
+            </div>
+          )}
           <div className="min-w-0 flex-1">
             <h3 className="font-semibold text-white text-sm truncate">{group.name}</h3>
             <p className="text-xs text-white/40 truncate mt-0.5 leading-snug">

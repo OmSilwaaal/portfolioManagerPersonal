@@ -505,7 +505,6 @@ export default function GroupDetail() {
   const [editName, setEditName] = useState('')
   const [editDesc, setEditDesc] = useState('')
   const [editColor, setEditColor] = useState('')
-  const [editEmoji, setEditEmoji] = useState('')
   const [editImageUrl, setEditImageUrl] = useState('')
   const [imageDragOver, setImageDragOver] = useState(false)
   const [imageUploadError, setImageUploadError] = useState('')
@@ -620,7 +619,6 @@ export default function GroupDetail() {
     setEditName(group.name)
     setEditDesc(group.description ?? '')
     setEditColor(group.color ?? '#e2e8f0')
-    setEditEmoji(group.emoji ?? '')
     setEditImageUrl(group.image_url ?? '')
     setImageUploadError('')
     setSettingsOpen(true)
@@ -628,7 +626,7 @@ export default function GroupDetail() {
 
   const handleSaveSettings = async () => {
     try {
-      await updateGroup({ id, name: editName, description: editDesc, color: editColor, emoji: editEmoji, image_url: editImageUrl }).unwrap()
+      await updateGroup({ id, name: editName, description: editDesc, color: editColor, image_url: editImageUrl }).unwrap()
       setSettingsOpen(false)
     } catch (_) {}
   }
@@ -671,7 +669,7 @@ export default function GroupDetail() {
             className="w-9 h-9 rounded-xl flex items-center justify-center text-base font-bold flex-shrink-0"
             style={{ background: (group.color ?? '#e2e8f0') + '22', border: `1px solid ${group.color ?? '#e2e8f0'}55`, color: group.color ?? '#e2e8f0' }}
           >
-            {group.emoji || groupInitial}
+            {groupInitial}
           </div>
         )}
 
@@ -1065,33 +1063,6 @@ export default function GroupDetail() {
                     />
                   ))}
                 </div>
-              </div>
-              <div>
-                <label className="block text-xs uppercase tracking-widest text-white/30 mb-2">Icon</label>
-                <div className="flex gap-1.5 flex-wrap mb-2">
-                  {EMOJIS.map((em) => (
-                    <button
-                      key={em}
-                      type="button"
-                      onClick={() => setEditEmoji(em === editEmoji ? '' : em)}
-                      className="w-8 h-8 rounded-lg text-base flex items-center justify-center transition-all"
-                      style={{
-                        background: editEmoji === em ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.06)',
-                        border: editEmoji === em ? '1px solid rgba(255,255,255,0.30)' : '1px solid rgba(255,255,255,0.08)',
-                      }}
-                    >
-                      {em}
-                    </button>
-                  ))}
-                </div>
-                <input
-                  type="text"
-                  value={editEmoji}
-                  onChange={(e) => setEditEmoji(e.target.value.slice(-2))}
-                  placeholder="Or type any emoji…"
-                  className="w-full px-3 py-2 rounded-xl text-sm text-white focus:outline-none"
-                  style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
-                />
               </div>
             </div>
 

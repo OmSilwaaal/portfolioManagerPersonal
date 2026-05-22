@@ -29,7 +29,7 @@ router.get('/', requireAuth, async (req, res) => {
   try {
     const { data: memberships, error: mErr } = await supabase
       .from('group_members')
-      .select('role, group_id, groups(id, name, description, color, emoji, code, created_by, created_at)')
+      .select('role, group_id, groups(id, name, description, color, emoji, image_url, code, created_by, created_at)')
       .eq('user_id', req.user.id)
       .order('created_at', { ascending: false, foreignTable: 'groups' })
 
@@ -62,7 +62,7 @@ router.get('/', requireAuth, async (req, res) => {
 // POST / — create group
 router.post('/', requireAuth, async (req, res) => {
   try {
-    const { name, description = '', color = '#e2e8f0', emoji = '' } = req.body
+    const { name, description = '', color = '#e2e8f0', image_url = null } = req.body
     if (!name?.trim()) return res.status(400).json({ error: true, message: 'Group name is required.' })
 
     const { count: ownedCount } = await supabase
@@ -76,7 +76,7 @@ router.post('/', requireAuth, async (req, res) => {
 
     const { data: group, error: gErr } = await supabase
       .from('groups')
-      .insert({ name: name.trim(), description: description.trim(), color, emoji, code, created_by: req.user.id })
+      .insert({ name: name.trim(), description: description.trim(), color, emoji: '', image_url: image_url || null, code, created_by: req.user.id })
       .select()
       .single()
     if (gErr) throw gErr
