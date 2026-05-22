@@ -74,9 +74,12 @@ router.post('/', requireAuth, async (req, res) => {
     const code = await generateCode()
     const displayName = req.user.user_metadata?.full_name ?? req.user.email ?? req.user.id
 
+    const insertPayload = { name: name.trim(), description: description.trim(), color, emoji: '', code, created_by: req.user.id }
+    if (image_url) insertPayload.image_url = image_url
+
     const { data: group, error: gErr } = await supabase
       .from('groups')
-      .insert({ name: name.trim(), description: description.trim(), color, emoji: '', image_url: image_url || null, code, created_by: req.user.id })
+      .insert(insertPayload)
       .select()
       .single()
     if (gErr) throw gErr
