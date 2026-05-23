@@ -1,14 +1,84 @@
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,200..800&family=Space+Grotesk:wght@300;400;500;600;700&family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400;1,600&family=JetBrains+Mono:wght@400;500&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Travauxus Design Tokens ──────────────────────────────────────────────── */
+:root {
+  --ink-900: #0b0b0b;
+  --ink-800: #111111;
+  --paper: #f0ebe0;
+
+  --moss-100: #d4ddc8;
+  --moss-200: #b4c29c;
+  --moss-300: #9eae84;
+  --moss-500: #74875a;
+
+  --ochre-200: #e8d09c;
+  --ochre-300: #d6b87a;
+  --ochre-500: #b88d42;
+
+  --clay-200: #e8b09c;
+  --clay-300: #d38a6a;
+  --clay-500: #b85c3e;
+
+  --stone-300: #a8a8a8;
+  --stone-500: #6b6b6b;
+  --stone-700: #3a3a3a;
+
+  --urgency-act:   #d35c4a;
+  --urgency-watch: #d6b87a;
+  --urgency-low:   #9eae84;
+
+  --positive: #7ea968;
+  --negative: #d35c4a;
+
+  --party-dem: #3b82f6;
+  --party-rep: #ef4444;
+  --party-ind: #94a3b8;
+
+  --on-ink-border:  rgba(240,235,224,0.09);
+  --on-ink-2:       rgba(240,235,224,0.12);
+  --on-ink-3:       rgba(240,235,224,0.20);
+  --on-ink-text-2:  rgba(240,235,224,0.65);
+  --on-ink-text-3:  rgba(240,235,224,0.38);
+  --on-ink-text-4:  rgba(240,235,224,0.22);
+
+  --on-paper-border:  rgba(11,11,11,0.12);
+  --on-paper-text-2:  rgba(11,11,11,0.65);
+  --on-paper-text-3:  rgba(11,11,11,0.38);
+  --on-paper-text-4:  rgba(11,11,11,0.22);
+
+  --font-display:       'Bricolage Grotesque', system-ui, sans-serif;
+  --font-sans:          'Resist Sans', 'Space Grotesk', system-ui, sans-serif;
+  --font-mono:          'JetBrains Mono', monospace;
+  --font-accent-serif:  'Cormorant Garamond', Georgia, serif;
+}
+
+/* ─── Keyframe animations (shared across landing + app) ───────────────────── */
+@keyframes marquee    { from { transform: translateX(0); }         to { transform: translateX(-33.333%); } }
+@keyframes marqueeRev { from { transform: translateX(-33.333%); }  to { transform: translateX(0); } }
+@keyframes mockFloat  { 0%,100% { transform: translateY(0); }      50% { transform: translateY(-10px); } }
+@keyframes drip {
+  0%   { opacity: 0; transform: scaleY(0.3) translateY(-14px); }
+  55%  { opacity: 1; transform: scaleY(1)   translateY(0); }
+  100% { opacity: 0; transform: scaleY(0.3) translateY(14px); }
+}
+@keyframes tickerDrift {
+  0%,100% { transform: translate(0, 0); }
+  50%     { transform: translate(4px, -6px); }
+}
+
+::selection { background: var(--moss-300); color: var(--ink-900); }
+
 @layer base {
   html {
-    font-family: 'Inter', sans-serif;
+    font-family: var(--font-sans), 'Inter', sans-serif;
   }
 
   body {
-    @apply bg-[#0f0f0f] text-white;
+    @apply bg-[#0b0b0b] text-white;
   }
 
   .dark body {

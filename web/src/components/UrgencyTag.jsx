@@ -1,15 +1,21 @@
-const URGENCY_STYLES = {
-  'Act Now': 'text-red-400',
-  'Watch': 'text-yellow-400',
-  'Low': 'text-green-400',
+const MAP = {
+  'Act Now': { color: 'var(--urgency-act)',   border: 'rgba(211,92,74,0.4)',   bg: 'rgba(211,92,74,0.12)' },
+  'Watch':   { color: 'var(--urgency-watch)', border: 'rgba(214,184,122,0.4)', bg: 'rgba(214,184,122,0.10)' },
+  'Low':     { color: 'var(--urgency-low)',   border: 'rgba(158,174,132,0.4)', bg: 'rgba(158,174,132,0.08)' },
 }
 
-export default function UrgencyTag({ urgency }) {
-  const level = urgency || 'Low'
-  const colorClass = URGENCY_STYLES[level] ?? 'text-[#a1a1aa]'
+export default function UrgencyTag({ urgency = 'Low' }) {
+  const s = MAP[urgency] || MAP['Low']
   return (
-    <span className={`text-[10px] font-semibold ${colorClass}`}>
-      {level}
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 6,
+      fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 500,
+      letterSpacing: '0.24em', textTransform: 'uppercase',
+      padding: '5px 9px', borderRadius: 2,
+      color: s.color, border: `1px solid ${s.border}`, background: s.bg,
+    }}>
+      <span style={{ width: 5, height: 5, borderRadius: '50%', background: s.color }} />
+      {urgency}
     </span>
   )
 }

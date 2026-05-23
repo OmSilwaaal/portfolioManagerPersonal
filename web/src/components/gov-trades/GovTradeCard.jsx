@@ -15,98 +15,69 @@ function timeAgo(dateStr) {
 }
 
 export default function GovTradeCard({ trade }) {
-  const {
-    officialName,
-    title,
-    chamber,
-    party,
-    ticker,
-    assetName,
-    transactionType,
-    tradeDate,
-    disclosureDate,
-    disclosureLagDays,
-    amountRange,
-    committeeOverlap,
-    urgency,
-    aiSummary,
-  } = trade
+  const { officialName, title, chamber, party, ticker, assetName, transactionType, tradeDate, disclosureLagDays, amountRange, committeeOverlap, urgency, aiSummary } = trade
 
-  const partyDotClass =
-    party === 'Democrat'
-      ? 'bg-blue-500'
-      : party === 'Republican'
-      ? 'bg-red-500'
-      : 'bg-gray-500'
-
-  const isBuy = /purchase/i.test(transactionType)
+  const partyColor = party === 'Democrat' ? 'var(--party-dem)' : party === 'Republican' ? 'var(--party-rep)' : 'var(--party-ind)'
+  const isBuy = /purchase/i.test(transactionType || '')
 
   return (
-    <div className="bg-[#111] border border-[#1f1f1f] rounded-lg p-4 hover:border-[#2a2a2a] transition-colors">
-      {/* Header row */}
-      <div className="flex items-start justify-between gap-2 mb-1">
-        <div className="flex items-center gap-2">
-          <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 mt-0.5 ${partyDotClass}`} />
+    <article style={{ background: 'var(--ink-800)', border: '1px solid var(--on-ink-border)', borderRadius: 3, padding: '16px 20px' }}>
+      <header style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <span style={{ width: 10, height: 10, borderRadius: '50%', background: partyColor, marginTop: 6, flexShrink: 0 }} />
           <div>
-            <span className="text-white font-semibold text-sm">{title} {officialName}</span>
-            <div className="flex items-center gap-2 mt-0.5">
-              <span className="text-gray-400 text-xs">{chamber}</span>
-              {party && <span className="text-gray-500 text-xs">&middot; {party}</span>}
+            <div style={{ fontFamily: 'var(--font-sans)', fontSize: 14, fontWeight: 600, color: 'var(--paper)', letterSpacing: '-0.02em' }}>
+              {title} {officialName}
+            </div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--on-ink-text-3)', letterSpacing: '0.08em', marginTop: 2 }}>
+              {chamber} · {party}
             </div>
           </div>
         </div>
         <UrgencyTag urgency={urgency} />
-      </div>
+      </header>
 
-      {/* Committee overlap */}
       {committeeOverlap && (
-        <div className="mt-1 mb-2">
+        <div style={{ marginTop: 8 }}>
           <CommitteeOverlapBadge committeeOverlap={committeeOverlap} />
         </div>
       )}
 
-      <div className="border-t border-[#2a2a2a] my-3" />
-
-      {/* Trade details */}
-      <div className="flex items-center justify-between gap-3 mb-1">
-        <div className="flex items-center gap-2">
-          <span
-            className={`text-xs font-bold px-2 py-0.5 rounded ${
-              isBuy ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
-            }`}
-          >
-            {transactionType ? transactionType.toUpperCase() : 'TRADE'}
-          </span>
-          <span className="text-white font-bold">{ticker}</span>
+      <div style={{ marginTop: 14, borderTop: '1px solid var(--on-ink-border)', paddingTop: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{
+            fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+            padding: '4px 8px', borderRadius: 2,
+            background: isBuy ? 'rgba(126,169,104,0.12)' : 'rgba(211,92,74,0.12)',
+            color: isBuy ? 'var(--positive)' : 'var(--negative)',
+            letterSpacing: '0.12em',
+          }}>{(transactionType || 'TRADE').toUpperCase()}</span>
+          <span style={{ fontFamily: 'var(--font-sans)', fontSize: 15, fontWeight: 700, color: 'var(--paper)' }}>{ticker}</span>
           {assetName && assetName !== ticker && (
-            <span className="text-gray-400 text-xs truncate max-w-[120px]">{assetName}</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--on-ink-text-3)' }}>{assetName}</span>
           )}
         </div>
-        <span className="text-gray-300 text-sm font-medium">{amountRange}</span>
+        <span style={{ fontFamily: 'var(--font-sans)', fontSize: 13, fontWeight: 600, color: 'var(--paper)' }}>{amountRange}</span>
       </div>
 
-      <div className="flex items-center gap-2 text-xs text-gray-400 mt-1">
-        <span>Traded {timeAgo(tradeDate)}</span>
+      <div style={{ marginTop: 8, fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--on-ink-text-3)', letterSpacing: '0.06em' }}>
+        Traded {timeAgo(tradeDate)}
         {disclosureLagDays > 0 && (
-          <span className={disclosureLagDays > 30 ? 'text-amber-400' : ''}>
-            &middot; Disclosed {disclosureLagDays} day{disclosureLagDays !== 1 ? 's' : ''} after trade
-            {disclosureLagDays > 30 && ' ⚠'}
+          <span style={{ color: disclosureLagDays > 30 ? 'var(--ochre-300)' : undefined }}>
+            {' · '}Disclosed {disclosureLagDays} day{disclosureLagDays !== 1 ? 's' : ''} after trade{disclosureLagDays > 30 ? ' ⚠' : ''}
           </span>
         )}
       </div>
 
-      {/* AI summary */}
       {aiSummary && (
-        <>
-          <div className="border-t border-[#2a2a2a] my-3" />
-          <p className="text-gray-400 text-xs leading-relaxed">{aiSummary}</p>
-        </>
+        <div style={{ marginTop: 14, borderTop: '1px solid var(--on-ink-border)', paddingTop: 12 }}>
+          <p style={{ fontFamily: 'var(--font-sans)', fontSize: 12, lineHeight: 1.7, color: 'var(--on-ink-text-2)', margin: 0 }}>{aiSummary}</p>
+        </div>
       )}
 
-      {/* Footer */}
-      <div className="mt-3">
-        <span className="text-[10px] text-gray-600 uppercase tracking-wider">STOCK Act disclosure</span>
+      <div style={{ marginTop: 12 }}>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--on-ink-text-4)', letterSpacing: '0.18em', textTransform: 'uppercase' }}>STOCK Act disclosure</span>
       </div>
-    </div>
+    </article>
   )
 }

@@ -13,20 +13,14 @@ const TYPE_CONFIG = {
 }
 
 const URGENCY_CONFIG = {
-  'Act Now': {
-    label: 'Act Now', dot: 'bg-red-500', text: 'text-red-400', borderTop: 'border-t-2 border-t-red-500/50',
-  },
-  'Watch': {
-    label: 'Watch', dot: 'bg-yellow-400', text: 'text-yellow-400', borderTop: 'border-t-2 border-t-yellow-400/40',
-  },
-  'Low': {
-    label: null, dot: 'bg-[#333]', text: '', borderTop: 'border-t border-t-[#1f1f1f]',
-  },
+  'Act Now': { label: 'Act Now', dot: 'bg-[#d35c4a]', text: 'text-[#d35c4a]', borderTop: 'border-t-2 border-t-[#d35c4a]/50' },
+  'Watch':   { label: 'Watch',   dot: 'bg-[#d6b87a]', text: 'text-[#d6b87a]', borderTop: 'border-t-2 border-t-[#d6b87a]/40' },
+  'Low':     { label: null,      dot: 'bg-[#333]',    text: '',               borderTop: 'border-t border-t-[#1f1f1f]' },
 }
 
 const cardBase = {
-  background: '#111',
-  border: '1px solid #1f1f1f',
+  background: 'var(--ink-800)',
+  border: '1px solid var(--on-ink-border)',
 }
 
 function formatTimestamp(ts) {
