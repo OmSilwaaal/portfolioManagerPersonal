@@ -42,7 +42,7 @@ export default function GovTradeCard({ trade }) {
   const isBuy = /purchase/i.test(transactionType)
 
   return (
-    <div className="bg-[#141414] border border-[#2a2a2a] rounded-lg p-4 hover:border-[#3a3a3a] transition-colors">
+    <div className="bg-[#111] border border-[#1f1f1f] rounded-lg p-4 hover:border-[#2a2a2a] transition-colors">
       {/* Header row */}
       <div className="flex items-start justify-between gap-2 mb-1">
         <div className="flex items-center gap-2">

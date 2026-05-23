@@ -4,18 +4,7 @@ import { useGetStockQuery } from '../api/stocksApi'
 import NewsCard from '../components/NewsCard'
 import MacroCalendar from '../components/MacroCalendar'
 
-/* ─── Shared glass style (mirrors Landing.jsx) ───────────────────────────── */
-const glassStyle = {
-  background: 'linear-gradient(145deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 50%, rgba(255,255,255,0.06) 100%)',
-  backdropFilter: 'blur(24px) saturate(180%)',
-  WebkitBackdropFilter: 'blur(24px) saturate(180%)',
-  border: '1px solid rgba(255,255,255,0.10)',
-  boxShadow: [
-    '0 8px 32px rgba(0,0,0,0.4)',
-    'inset 0 1px 0 rgba(255,255,255,0.14)',
-    'inset 0 -1px 0 rgba(255,255,255,0.04)',
-  ].join(', '),
-}
+const cardStyle = 'bg-[#111] border border-[#1f1f1f] rounded-xl'
 
 const WATCHLIST_TICKERS = ['AAPL', 'MSFT', 'BTC']
 
@@ -45,7 +34,7 @@ function WatchlistItem({ ticker }) {
   const positive = changeValue >= 0
 
   return (
-    <div className="flex items-center justify-between py-3 border-b last:border-0" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+    <div className="flex items-center justify-between py-3 border-b border-[#1f1f1f] last:border-0">
       <span className="font-semibold text-white text-sm w-12">{ticker}</span>
       <span className="text-sm text-white/70 font-medium">
         ${(data.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -61,11 +50,11 @@ function FeedSkeleton() {
   return (
     <div className="space-y-3">
       {[1, 2, 3, 4, 5].map((i) => (
-        <div key={i} className="p-4 rounded-xl animate-pulse" style={glassStyle}>
-          <div className="h-4 bg-white/8 rounded w-3/4 mb-2" />
-          <div className="h-3 bg-white/8 rounded w-1/4 mb-3" />
-          <div className="h-3 bg-white/8 rounded w-full mb-1" />
-          <div className="h-3 bg-white/8 rounded w-5/6" />
+        <div key={i} className={`p-4 animate-pulse ${cardStyle}`}>
+          <div className="h-4 bg-[#1f1f1f] rounded w-3/4 mb-2" />
+          <div className="h-3 bg-[#1f1f1f] rounded w-1/4 mb-3" />
+          <div className="h-3 bg-[#1f1f1f] rounded w-full mb-1" />
+          <div className="h-3 bg-[#1f1f1f] rounded w-5/6" />
         </div>
       ))}
     </div>
@@ -77,18 +66,18 @@ export default function Dashboard() {
   const items = feedData?.items || []
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-[#0a0a0a]">
+    <div className="flex-1 flex flex-col min-h-0 bg-[#0f0f0f]">
 
       {/* Mobile header */}
-      <header className="flex items-center px-5 py-4 border-b md:hidden" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+      <header className="flex items-center px-5 py-4 border-b border-[#1f1f1f] md:hidden">
         <Logo />
       </header>
 
       {/* Desktop header */}
-      <header className="hidden md:flex items-center px-6 py-5 border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+      <header className="hidden md:flex items-center px-6 py-5 border-b border-[#1f1f1f]">
         <div>
           <h1 className="text-lg font-semibold text-white tracking-tight">Dashboard</h1>
-          <p className="text-xs text-white/30 mt-0.5">Market overview and latest news</p>
+          <p className="text-xs text-[#a1a1aa] mt-0.5">Market overview and latest news</p>
         </div>
       </header>
 
@@ -99,23 +88,23 @@ export default function Dashboard() {
 
             {/* Left: News Feed */}
             <section className="lg:w-2/3">
-              <h2 className="text-sm font-semibold text-white/50 uppercase tracking-widest mb-4">
+              <h2 className="text-xs font-semibold text-[#a1a1aa] uppercase tracking-widest mb-4">
                 Latest News
               </h2>
 
               {feedLoading && <FeedSkeleton />}
 
               {feedError && (
-                <div className="p-5 rounded-xl" style={glassStyle}>
-                  <p className="text-white/40 text-sm">
+                <div className={`p-5 ${cardStyle}`}>
+                  <p className="text-[#a1a1aa] text-sm">
                     Unable to load news feed. Make sure the backend is running on port 3001.
                   </p>
                 </div>
               )}
 
               {!feedLoading && !feedError && items.length === 0 && (
-                <div className="p-5 rounded-xl" style={glassStyle}>
-                  <p className="text-white/40 text-sm">No news items available.</p>
+                <div className={`p-5 ${cardStyle}`}>
+                  <p className="text-[#a1a1aa] text-sm">No news items available.</p>
                 </div>
               )}
 
@@ -132,10 +121,8 @@ export default function Dashboard() {
             <aside className="lg:w-1/3 space-y-4">
 
               {/* Watchlist */}
-              <div className="rounded-2xl p-5 relative overflow-hidden" style={glassStyle}>
-                {/* Specular top edge */}
-                <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent pointer-events-none" />
-                <h3 className="text-xs font-semibold text-white/40 uppercase tracking-widest mb-1">
+              <div className={`p-5 ${cardStyle}`}>
+                <h3 className="text-xs font-semibold text-[#a1a1aa] uppercase tracking-widest mb-3">
                   Watchlist
                 </h3>
                 <div>

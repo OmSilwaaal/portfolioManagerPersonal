@@ -7,11 +7,8 @@ import { useGetMyProfileQuery } from '../api/profilesApi'
 const GROUP_ORDER_KEY = 'miq_group_order'
 
 const glassStyle = {
-  background: 'linear-gradient(145deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 50%, rgba(255,255,255,0.06) 100%)',
-  backdropFilter: 'blur(24px) saturate(180%)',
-  WebkitBackdropFilter: 'blur(24px) saturate(180%)',
-  border: '1px solid rgba(255,255,255,0.10)',
-  boxShadow: '0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.14)',
+  background: '#111',
+  border: '1px solid #1f1f1f',
 }
 
 function saveOrder(groups) {

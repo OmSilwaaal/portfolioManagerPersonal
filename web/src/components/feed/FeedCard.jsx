@@ -14,27 +14,19 @@ const TYPE_CONFIG = {
 
 const URGENCY_CONFIG = {
   'Act Now': {
-    label: 'Act Now', dot: 'bg-red-500', text: 'text-red-400', border: 'border-t-red-500/50',
-    boxShadow: '0 0 70px rgba(239,68,68,0.25), 0 8px 32px rgba(0,0,0,0.5)',
-    ambient: 'radial-gradient(ellipse at 50% 0%, rgba(239,68,68,0.13) 0%, transparent 70%)',
+    label: 'Act Now', dot: 'bg-red-500', text: 'text-red-400', borderTop: 'border-t-2 border-t-red-500/50',
   },
   'Watch': {
-    label: 'Watch', dot: 'bg-amber-400', text: 'text-amber-400', border: 'border-t-amber-400/40',
-    boxShadow: '0 0 45px rgba(251,191,36,0.16), 0 8px 32px rgba(0,0,0,0.42)',
-    ambient: 'radial-gradient(ellipse at 50% 0%, rgba(251,191,36,0.09) 0%, transparent 70%)',
+    label: 'Watch', dot: 'bg-yellow-400', text: 'text-yellow-400', borderTop: 'border-t-2 border-t-yellow-400/40',
   },
   'Low': {
-    label: null, dot: 'bg-[#333]', text: '', border: 'border-t-transparent',
-    boxShadow: '0 2px 20px rgba(0,0,0,0.28)',
-    ambient: null,
+    label: null, dot: 'bg-[#333]', text: '', borderTop: 'border-t border-t-[#1f1f1f]',
   },
 }
 
-const glassBase = {
-  background: 'linear-gradient(145deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.02) 100%)',
-  backdropFilter: 'blur(20px) saturate(160%)',
-  WebkitBackdropFilter: 'blur(20px) saturate(160%)',
-  border: '1px solid rgba(255,255,255,0.09)',
+const cardBase = {
+  background: '#111',
+  border: '1px solid #1f1f1f',
 }
 
 function formatTimestamp(ts) {
@@ -163,16 +155,13 @@ function MetaRow({ config, ticker, sentiment, urgConf }) {
 function FeaturedCard({ data, config, urgConf, image, url, ticker, sentiment, timestamp, onShare }) {
   return (
     <article
-      className={`relative overflow-hidden rounded-2xl border-t-2 ${urgConf.border}`}
-      style={{ ...glassBase, boxShadow: urgConf.boxShadow }}
+      className={`relative overflow-hidden rounded-2xl ${urgConf.borderTop}`}
+      style={cardBase}
     >
-      {urgConf.ambient && (
-        <div aria-hidden style={{ position: 'absolute', inset: 0, background: urgConf.ambient, pointerEvents: 'none', zIndex: 0 }} />
-      )}
       {/* Red left accent bar */}
-      <div className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-2xl" style={{ background: 'linear-gradient(180deg, rgba(239,68,68,0.7) 0%, rgba(239,68,68,0.2) 100%)' }} />
+      <div className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-2xl bg-red-500/60" />
 
-      <div style={{ position: 'relative', zIndex: 1 }} className="pl-4">
+      <div className="pl-4">
         {image && (
           <div className="overflow-hidden" style={{ height: 160 }}>
             <img
@@ -213,13 +202,10 @@ function FeaturedCard({ data, config, urgConf, image, url, ticker, sentiment, ti
 function HeroCard({ data, config, urgConf, image, url, ticker, sentiment, timestamp, onShare }) {
   return (
     <article
-      className={`relative overflow-hidden rounded-2xl border-t-2 ${urgConf.border}`}
-      style={{ ...glassBase, boxShadow: urgConf.boxShadow }}
+      className={`relative overflow-hidden rounded-2xl ${urgConf.borderTop}`}
+      style={cardBase}
     >
-      {urgConf.ambient && (
-        <div aria-hidden style={{ position: 'absolute', inset: 0, background: urgConf.ambient, pointerEvents: 'none', zIndex: 0 }} />
-      )}
-      <div style={{ position: 'relative', zIndex: 1 }}>
+      <div>
         <div className="overflow-hidden" style={{ height: 130 }}>
           <img
             src={image}
@@ -228,8 +214,8 @@ function HeroCard({ data, config, urgConf, image, url, ticker, sentiment, timest
             style={{ filter: 'brightness(0.7)' }}
             onError={(e) => { e.target.parentElement.style.display = 'none' }}
           />
-          {/* Gradient overlay */}
-          <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(10,10,10,0.9) 0%, transparent 50%)' }} />
+          {/* Dark overlay for text readability */}
+          <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.4)' }} />
           {/* Badge overlaid on image */}
           <div className="absolute bottom-3 left-4 flex items-center gap-2">
             <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${config.color} ${config.bg}`}>{config.label}</span>
@@ -262,13 +248,10 @@ function HeroCard({ data, config, urgConf, image, url, ticker, sentiment, timest
 function ThumbCard({ data, config, urgConf, image, url, ticker, sentiment, timestamp, onShare }) {
   return (
     <article
-      className={`relative overflow-hidden rounded-2xl border-t-2 ${urgConf.border}`}
-      style={{ ...glassBase, boxShadow: urgConf.boxShadow }}
+      className={`relative overflow-hidden rounded-2xl ${urgConf.borderTop}`}
+      style={cardBase}
     >
-      {urgConf.ambient && (
-        <div aria-hidden style={{ position: 'absolute', inset: 0, background: urgConf.ambient, pointerEvents: 'none', zIndex: 0 }} />
-      )}
-      <div style={{ position: 'relative', zIndex: 1 }}>
+      <div>
         <div className="px-4 pt-4 pb-2">
           <MetaRow config={config} ticker={ticker} sentiment={sentiment} urgConf={urgConf} />
         </div>
@@ -304,18 +287,15 @@ function ThumbCard({ data, config, urgConf, image, url, ticker, sentiment, times
 function CompactCard({ data, config, urgConf, url, ticker, sentiment, timestamp, onShare, type }) {
   return (
     <article
-      className={`relative overflow-hidden rounded-xl border-t-2 ${urgConf.border}`}
-      style={{ ...glassBase, boxShadow: urgConf.boxShadow }}
+      className={`relative overflow-hidden rounded-xl ${urgConf.borderTop}`}
+      style={cardBase}
     >
-      {urgConf.ambient && (
-        <div aria-hidden style={{ position: 'absolute', inset: 0, background: urgConf.ambient, pointerEvents: 'none', zIndex: 0 }} />
-      )}
-      <div style={{ position: 'relative', zIndex: 1 }} className="px-4 py-3.5 flex items-center gap-3">
+      <div className="px-4 py-3.5 flex items-center gap-3">
         {/* Ticker logo or color accent */}
         {ticker ? (
           <TickerIcon type={type} ticker={ticker} sector={data.sector} size={30} />
         ) : (
-          <div className="w-1 h-10 rounded-full flex-shrink-0" style={{ background: `linear-gradient(180deg, ${config.accent} 0%, transparent 100%)`, opacity: 0.8 }} />
+          <div className="w-1 h-10 rounded-full flex-shrink-0 bg-[#1f1f1f]" />
         )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 mb-1">
@@ -344,13 +324,10 @@ function CompactCard({ data, config, urgConf, url, ticker, sentiment, timestamp,
 function StandardCard({ data, config, urgConf, url, ticker, sentiment, timestamp, onShare, type }) {
   return (
     <article
-      className={`relative overflow-hidden rounded-2xl border-t-2 ${urgConf.border}`}
-      style={{ ...glassBase, boxShadow: urgConf.boxShadow }}
+      className={`relative overflow-hidden rounded-2xl ${urgConf.borderTop}`}
+      style={cardBase}
     >
-      {urgConf.ambient && (
-        <div aria-hidden style={{ position: 'absolute', inset: 0, background: urgConf.ambient, pointerEvents: 'none', zIndex: 0 }} />
-      )}
-      <div style={{ position: 'relative', zIndex: 1 }}>
+      <div>
         <div className="px-4 pt-4 pb-2 flex items-start gap-3">
           {ticker && <TickerIcon type={type} ticker={ticker} sector={data.sector} size={32} className="mt-0.5 flex-shrink-0" />}
           <div className="flex-1 min-w-0">

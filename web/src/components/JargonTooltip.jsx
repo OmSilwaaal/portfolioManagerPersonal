@@ -33,10 +33,8 @@ export const GLOSSARY = {
 }
 
 const popupStyle = {
-  background: 'linear-gradient(145deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 50%, rgba(255,255,255,0.06) 100%)',
-  backdropFilter: 'blur(24px) saturate(180%)',
-  border: '1px solid rgba(255,255,255,0.10)',
-  boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+  background: '#1a1a1a',
+  border: '1px solid #2a2a2a',
 }
 
 export default function JargonTooltip({ children, term }) {

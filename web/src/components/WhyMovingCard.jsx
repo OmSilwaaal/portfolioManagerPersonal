@@ -1,11 +1,9 @@
 import { Link } from 'react-router-dom'
 import { useGetExplanationQuery } from '../api/explainerApi'
 
-const glassStyle = {
-  background: 'linear-gradient(145deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 50%, rgba(255,255,255,0.06) 100%)',
-  backdropFilter: 'blur(24px) saturate(180%)',
-  border: '1px solid rgba(255,255,255,0.10)',
-  boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+const cardStyle = {
+  background: '#111',
+  border: '1px solid #1f1f1f',
 }
 
 export default function WhyMovingCard({ ticker, price, changePercent, explanation: propExplanation }) {
@@ -35,8 +33,8 @@ export default function WhyMovingCard({ ticker, price, changePercent, explanatio
     <Link to="/stocks" style={{ display: 'block', textDecoration: 'none' }}>
       <div
         style={{
-          ...glassStyle,
-          borderRadius: '16px',
+          ...cardStyle,
+          borderRadius: '12px',
           padding: '14px 16px',
           cursor: 'pointer',
           transition: 'border-color 0.2s',
