@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 // ─── Design atoms ─────────────────────────────────────────────────────────────
@@ -66,27 +66,71 @@ function useElementProgress(ref) {
   return p
 }
 
-function useCounter(target, visible, dur = 2200) {
-  const [v, setV] = useState(0)
+
+// ─── Live prices from Yahoo Finance (falls back to simulated) ─────────────────
+const TICKER_POOL = [
+  { sym: 'AAPL',  yahoo: 'AAPL',    x: 6,  y: 18, delay: 0   },
+  { sym: 'NVDA',  yahoo: 'NVDA',    x: 78, y: 26, delay: 1.4 },
+  { sym: 'BTC',   yahoo: 'BTC-USD', x: 12, y: 78, delay: 2.6 },
+  { sym: 'GOLD',  yahoo: 'GC=F',    x: 84, y: 71, delay: 0.8 },
+  { sym: 'TSLA',  yahoo: 'TSLA',    x: 88, y: 8,  delay: 2.0 },
+  { sym: 'MSFT',  yahoo: 'MSFT',    x: 34, y: 15, delay: 1.2 },
+  { sym: 'SPY',   yahoo: 'SPY',     x: 55, y: 62, delay: 2.1 },
+  { sym: 'META',  yahoo: 'META',    x: 20, y: 35, delay: 3.0 },
+  { sym: 'AMZN',  yahoo: 'AMZN',    x: 65, y: 88, delay: 0.5 },
+  { sym: 'QQQ',   yahoo: 'QQQ',     x: 44, y: 55, delay: 1.7 },
+  { sym: 'ETH',   yahoo: 'ETH-USD', x: 90, y: 88, delay: 2.8 },
+  { sym: 'GOOGL', yahoo: 'GOOGL',   x: 38, y: 82, delay: 1.1 },
+  { sym: 'JPM',   yahoo: 'JPM',     x: 72, y: 40, delay: 2.3 },
+  { sym: 'FOMC',  yahoo: null,      x: 70, y: 50, delay: 1.8, staticD: 'NOV 22',  staticTone: 'mut' },
+  { sym: 'CPI',   yahoo: null,      x: 4,  y: 45, delay: 3.2, staticD: '3.4',     staticTone: 'mut' },
+]
+
+function useLivePrices() {
+  const [prices, setPrices] = useState({})
   useEffect(() => {
-    if (!visible) return
-    let s = null, raf
-    const tick = (ts) => {
-      if (!s) s = ts
-      const p = Math.min((ts - s) / dur, 1)
-      setV(Math.round((1 - Math.pow(1 - p, 4)) * target))
-      if (p < 1) raf = requestAnimationFrame(tick)
+    const yahoSyms = TICKER_POOL.filter(t => t.yahoo).map(t => t.yahoo)
+
+    const simulate = () => {
+      const mock = {}
+      TICKER_POOL.forEach((t, i) => {
+        if (t.yahoo) mock[t.sym] = parseFloat((Math.sin(Date.now() * 0.00001 + i * 2.3) * 4.5).toFixed(2))
+      })
+      setPrices(mock)
     }
-    raf = requestAnimationFrame(tick)
-    return () => raf && cancelAnimationFrame(raf)
-  }, [visible, target, dur])
-  return v
+
+    const fetchPrices = async () => {
+      try {
+        const res = await fetch(
+          `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${yahoSyms.join(',')}`,
+          { signal: AbortSignal.timeout(4000) }
+        )
+        const json = await res.json()
+        const result = {}
+        json?.quoteResponse?.result?.forEach(q => {
+          const ticker = TICKER_POOL.find(t => t.yahoo === q.symbol)
+          if (ticker && q.regularMarketChangePercent != null) {
+            result[ticker.sym] = parseFloat(q.regularMarketChangePercent.toFixed(2))
+          }
+        })
+        if (Object.keys(result).length > 0) setPrices(result)
+        else simulate()
+      } catch {
+        simulate()
+      }
+    }
+
+    fetchPrices()
+    const iv = setInterval(fetchPrices, 60000)
+    return () => clearInterval(iv)
+  }, [])
+  return prices
 }
 
-// ─── Primitive components (from design kit primitives.jsx) ────────────────────
+// ─── Primitive components ─────────────────────────────────────────────────────
 function Tag({ children, tone = 'muted', style: s }) {
   const color = {
-    muted: 'var(--on-ink-text-3)', bright: 'var(--paper)', paper: 'var(--paper)',
+    muted: 'var(--on-ink-text-3)', bright: CREAM, paper: CREAM,
     moss: 'var(--moss-200)', ochre: 'var(--ochre-300)', clay: 'var(--clay-300)',
     act: 'var(--urgency-act)', dark: 'var(--on-paper-text-3)',
   }[tone] || tone
@@ -251,7 +295,6 @@ function Preloader({ onDone }) {
       <div style={{ position: 'absolute', top: 24, right: 32 }}><Tag>An archive of the present</Tag></div>
       <div style={{ position: 'absolute', bottom: 24, left: 32 }}><Tag>Est. 2026 · New York</Tag></div>
       <div style={{ position: 'absolute', bottom: 24, right: 32 }}><Tag>{String(n).padStart(3, '0')}%</Tag></div>
-
       <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 14 }}>
         <div style={{ overflow: 'hidden', lineHeight: 0.86 }}>
           <div style={{
@@ -268,7 +311,6 @@ function Preloader({ onDone }) {
           <span style={{ width: 32, height: 1, background: MUTED }} />
         </div>
       </div>
-
       <div style={{ position: 'absolute', bottom: 80, left: 32, right: 32 }}>
         <div style={{ height: 1, background: 'rgba(240,235,224,0.08)' }}>
           <div style={{ height: 1, background: CREAM, width: `${n}%`, transition: 'width .1s linear' }} />
@@ -278,30 +320,27 @@ function Preloader({ onDone }) {
   )
 }
 
-// ─── 1. HERO ──────────────────────────────────────────────────────────────────
-const FLOAT_TICKERS = [
-  { sym: 'AAPL', d: '+2.40%', tone: 'pos', x: 6,  y: 18, delay: 0   },
-  { sym: 'NVDA', d: '−3.18%', tone: 'neg', x: 78, y: 26, delay: 1.4 },
-  { sym: 'BTC',  d: '+0.92%', tone: 'pos', x: 12, y: 78, delay: 2.6 },
-  { sym: 'GOLD', d: '+1.20%', tone: 'pos', x: 84, y: 71, delay: 0.8 },
-  { sym: 'TSLA', d: '−1.05%', tone: 'neg', x: 88, y: 8,  delay: 2.0 },
-  { sym: 'CPI',  d: '3.4',    tone: 'mut', x: 4,  y: 45, delay: 3.2 },
-  { sym: 'FOMC', d: 'NOV 22', tone: 'mut', x: 70, y: 50, delay: 1.8 },
-]
-
-function FloatingTicker({ t, mouse }) {
+// ─── 1. HERO — tickers with live prices + mouse fade ─────────────────────────
+function FloatingTicker({ t, mouse, visible, price }) {
   const depth = 18 + (t.x % 3) * 6
-  const color = t.tone === 'pos' ? 'var(--positive)' : t.tone === 'neg' ? 'var(--negative)' : MUTED
+  const pct = price ?? null
+  const d = pct != null
+    ? `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`
+    : (t.staticD || '')
+  const tone = pct != null ? (pct >= 0 ? 'pos' : 'neg') : (t.staticTone || 'mut')
+  const color = tone === 'pos' ? 'var(--positive)' : tone === 'neg' ? 'var(--negative)' : MUTED
+
   return (
     <div style={{
       position: 'absolute', top: `${t.y}%`, left: `${t.x}%`,
       transform: `translate3d(${mouse.nx * depth * -1}px, ${mouse.ny * depth * -1}px, 0)`,
-      transition: 'transform .6s cubic-bezier(0.16,1,0.3,1)',
+      transition: 'transform .6s cubic-bezier(0.16,1,0.3,1), opacity .7s ease',
+      opacity: visible ? 1 : 0,
       pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4,
       animation: `tickerDrift 9s ease-in-out ${t.delay}s infinite`,
     }}>
       <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.24em', textTransform: 'uppercase', color: MUTED }}>{t.sym}</span>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color, letterSpacing: '0.04em' }}>{t.d}</span>
+      {d && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color, letterSpacing: '0.04em' }}>{d}</span>}
     </div>
   )
 }
@@ -310,7 +349,33 @@ function Hero({ onEnter }) {
   const [rdy, setRdy] = useState(false)
   const mouse = useMouse()
   const scrollY = useScrollY()
+  const prices = useLivePrices()
+
+  // Start with first 7 tickers visible
+  const [visibleSet, setVisibleSet] = useState(() => new Set([0, 1, 2, 3, 4, 5, 6]))
+  const moveCountRef = useRef(0)
+
   useEffect(() => { const t = setTimeout(() => setRdy(true), 220); return () => clearTimeout(t) }, [])
+
+  // Swap one ticker on every ~70 mouse movements
+  useEffect(() => {
+    const onMove = () => {
+      moveCountRef.current++
+      if (moveCountRef.current % 70 !== 0) return
+      setVisibleSet(prev => {
+        const visible = [...prev]
+        const hidden = TICKER_POOL.map((_, i) => i).filter(i => !prev.has(i))
+        if (hidden.length === 0) return prev
+        const next = new Set(prev)
+        next.delete(visible[Math.floor(Math.random() * visible.length)])
+        next.add(hidden[Math.floor(Math.random() * hidden.length)])
+        return next
+      })
+    }
+    window.addEventListener('mousemove', onMove, { passive: true })
+    return () => window.removeEventListener('mousemove', onMove)
+  }, [])
+
   const heroProgress = Math.min(scrollY / (window.innerHeight || 1), 1)
 
   return (
@@ -330,9 +395,11 @@ function Hero({ onEnter }) {
         </div>
       </div>
 
-      {/* Floating tickers */}
+      {/* Floating tickers — all in pool, fade in/out on mouse move */}
       <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-        {FLOAT_TICKERS.map((t, i) => <FloatingTicker key={i} t={t} mouse={mouse} />)}
+        {TICKER_POOL.map((t, i) => (
+          <FloatingTicker key={i} t={t} mouse={mouse} visible={visibleSet.has(i)} price={prices[t.sym]} />
+        ))}
       </div>
 
       {/* Corner labels */}
@@ -421,7 +488,7 @@ function DualMarquee() {
   )
 }
 
-// ─── 3. STATEMENT — word-by-word reveal ───────────────────────────────────────
+// ─── 3. STATEMENT — word-by-word reveal ──────────────────────────────────────
 function Statement() {
   const ref = useRef(null)
   const p = useElementProgress(ref)
@@ -435,7 +502,6 @@ function Statement() {
       <div style={{ position: 'absolute', top: 80, right: 48 }}>
         <Tag tone="dark" style={{ letterSpacing: '0.32em' }}>{String(Math.min(100, Math.round(p * 100))).padStart(3, '0')}</Tag>
       </div>
-
       <div style={{ maxWidth: 1200, margin: '0 auto', paddingTop: 40 }}>
         <div style={{
           fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 100, 'wght' 500", fontWeight: 500,
@@ -482,7 +548,6 @@ function PinnedArchive() {
   return (
     <section ref={ref} id="archive" style={{ background: INK, height: '300vh', position: 'relative' }}>
       <div style={{ position: 'sticky', top: 0, height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        {/* Header */}
         <div style={{ padding: '64px 48px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
             <Tag style={{ letterSpacing: '0.32em' }}>§ 02 — The archive</Tag>
@@ -498,7 +563,6 @@ function PinnedArchive() {
           </div>
         </div>
 
-        {/* Horizontal track */}
         <div style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center' }}>
           <div style={{
             display: 'flex', gap: 32, padding: '0 48px',
@@ -539,7 +603,6 @@ function PinnedArchive() {
           </div>
         </div>
 
-        {/* Progress rail */}
         <div style={{ padding: '0 48px 48px' }}>
           <div style={{ height: 1, background: 'rgba(240,235,224,0.10)', position: 'relative' }}>
             <div style={{ height: 1, background: CREAM, width: `${stage * 100}%`, transition: 'width .1s linear' }} />
@@ -555,87 +618,140 @@ function PinnedArchive() {
   )
 }
 
-// ─── 5. NUMBERS — counting stats ─────────────────────────────────────────────
-function Numbers() {
+// ─── 5. LANGUAGE WALL — multilingual text stream ─────────────────────────────
+const LANG_ROWS = [
+  { text: 'Le marché est en mouvement — Les signaux arrivent trop vite — Aucune donnée ne vous échappe — Intelligence du marché — Analyse en temps réel — ', dir: 1,  dur: 42, sz: 13,  wt: 400, font: 'sans', op: 0.48 },
+  { text: '市場が動いている — シグナルが速すぎる — リアルタイム分析 — 市場情報 — 人工知能 — 投資家向けの分析 — ', dir: -1, dur: 34, sz: 13,  wt: 400, font: 'sans', op: 0.44 },
+  { text: 'MARCHÉ LIBRE — ', dir: 1, dur: 60, sz: 185, wt: 700, font: 'display', stretch: 125, op: 0.10 },
+  { text: 'AAPL +2.40% — NVDA −3.18% — BTC $42,180 — GOLD +1.20% — TSLA −1.05% — QQQ +0.42% — META +1.73% — SPY +0.18% — AMZN +0.98% — MSFT +0.61% — ', dir: -1, dur: 24, sz: 11,  wt: 500, font: 'mono', op: 0.36 },
+  { text: 'Der Markt bewegt sich zu schnell — Keine Daten entgehen dir — Echtzeit-Analyse — Künstliche Intelligenz — Marktintelligenz — ', dir: 1,  dur: 40, sz: 13,  wt: 400, font: 'sans', op: 0.48 },
+  { text: '市场正在运动 — 信号来得太快了 — 实时分析 — 人工智能 — 市场情报 — 投资者数据分析 — ', dir: -1, dur: 36, sz: 13,  wt: 400, font: 'sans', op: 0.44 },
+  { text: 'El mercado se mueve — Las señales llegan demasiado rápido — Ningún dato se te escapa — La inteligencia del mercado — ', dir: 1,  dur: 44, sz: 13,  wt: 400, font: 'sans', op: 0.48 },
+  { text: 'INTELLIGENCE — ', dir: -1, dur: 72, sz: 225, wt: 700, font: 'display', stretch: 125, op: 0.085 },
+  { text: '시장이 움직이고 있습니다 — 신호가 너무 빠르게 옵니다 — 실시간 분석 — 인공 지능 — 시장 정보 — ', dir: 1,  dur: 48, sz: 13,  wt: 400, font: 'sans', op: 0.44 },
+  { text: 'Il mercato si muove velocemente — I segnali arrivano troppo presto — Nessun dato ti sfugge — Intelligenza artificiale — ', dir: -1, dur: 38, sz: 13,  wt: 400, font: 'sans', op: 0.48 },
+  { text: 'О рынке в реальном времени — Искусственный интеллект — Никакие данные не ускользнут — Финансовая аналитика — ', dir: 1,  dur: 43, sz: 13,  wt: 400, font: 'sans', op: 0.44 },
+  { text: '市場 — MARCHÉ — MARKT — 시장 — MERCADO — MARKET — РЫНОК — ', dir: -1, dur: 30, sz: 36,  wt: 600, font: 'display', stretch: 105, op: 0.20 },
+  { text: 'Every signal — Every trade — Every move — Every market — Plain English — No jargon — Act with confidence — Real-time intelligence — ', dir: 1,  dur: 36, sz: 13,  wt: 400, font: 'sans', op: 0.48 },
+  { text: 'SIGNAL — ', dir: 1, dur: 88, sz: 275, wt: 700, font: 'display', stretch: 125, op: 0.065 },
+  { text: 'Marché libre — Données en direct — Cours en temps réel — Portfolio intelligence — Signaux du marché — Investisseurs avisés — ', dir: -1, dur: 45, sz: 13,  wt: 400, font: 'sans', op: 0.48 },
+]
+
+function LanguageWall() {
   const ref = useRef(null)
   const [vis, setVis] = useState(false)
   useEffect(() => {
-    const o = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setVis(true); o.disconnect() } }, { threshold: 0.2 })
+    const o = new IntersectionObserver(
+      ([e]) => { if (e.isIntersecting) setVis(true) },
+      { threshold: 0.02 }
+    )
     if (ref.current) o.observe(ref.current)
     return () => o.disconnect()
   }, [])
-  const n92 = useCounter(92, vis)
-  const n3  = useCounter(3, vis, 1800)
-  const n60 = useCounter(60, vis)
 
   return (
-    <section ref={ref} style={{ background: CREAM, padding: '160px 48px', position: 'relative' }}>
-      <div style={{ position: 'absolute', top: 80, left: 48 }}><Tag tone="dark" style={{ letterSpacing: '0.32em' }}>§ 03 — In numbers</Tag></div>
+    <section ref={ref} style={{ background: CREAM, overflow: 'hidden', position: 'relative', padding: '72px 0' }}>
+      <div style={{ position: 'absolute', top: 32, left: 48, zIndex: 10 }}>
+        <Tag tone="dark" style={{ letterSpacing: '0.32em' }}>§ 03 — The signal</Tag>
+      </div>
 
-      <div style={{ maxWidth: 1280, margin: '0 auto', paddingTop: 60, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 80 }}>
-        <div>
-          <div style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(110px, 17vw, 240px)', color: INK, lineHeight: 0.82, letterSpacing: '-0.06em' }}>
-            {n92}<span style={{ fontSize: '0.28em', color: 'rgba(11,11,11,0.4)', fontVariationSettings: "'wdth' 100, 'wght' 500", fontWeight: 500, marginLeft: 4 }}>%</span>
-          </div>
-          <p style={{ fontFamily: 'var(--font-sans)', fontSize: 14, color: 'rgba(11,11,11,0.42)', maxWidth: 280, lineHeight: 1.8, marginTop: 24 }}>
-            of users say they understand more in less time
-          </p>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 48 }}>
-          <Rule vis={vis} color="rgba(11,11,11,0.16)" />
-          <div style={{ opacity: vis ? 1 : 0, transition: 'opacity .9s ease .3s' }}>
-            <div style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 115, 'wght' 600", fontStretch: '115%', fontWeight: 600, fontSize: 'clamp(28px,3.8vw,56px)', letterSpacing: '-0.04em', color: INK, marginBottom: 6, lineHeight: 0.95 }}>{n3} MIN</div>
-            <div style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: 'rgba(11,11,11,0.40)' }}>Average time to understand any major market event</div>
-          </div>
-          <div style={{ opacity: vis ? 1 : 0, transition: 'opacity .9s ease .45s' }}>
-            <div style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 115, 'wght' 600", fontStretch: '115%', fontWeight: 600, fontSize: 'clamp(28px,3.8vw,56px)', letterSpacing: '-0.04em', color: INK, marginBottom: 6, lineHeight: 0.95 }}>{n60}%</div>
-            <div style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: 'rgba(11,11,11,0.40)' }}>Of retail investors miss critical signals without tools</div>
-          </div>
-          <div style={{ opacity: vis ? 1 : 0, transition: 'opacity .9s ease .6s' }}>
-            <div style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 115, 'wght' 600", fontStretch: '115%', fontWeight: 600, fontSize: 'clamp(28px,3.8vw,56px)', letterSpacing: '-0.04em', color: INK, marginBottom: 6, lineHeight: 0.95 }}>$0</div>
-            <div style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: 'rgba(11,11,11,0.40)' }}>To get started. No card required.</div>
-          </div>
-        </div>
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        {LANG_ROWS.map((row, i) => {
+          const fontFamily = row.font === 'display'
+            ? 'var(--font-display)'
+            : row.font === 'mono'
+            ? 'var(--font-mono)'
+            : 'var(--font-sans)'
+          const varSettings = row.font === 'display' && row.stretch
+            ? { fontVariationSettings: `'wdth' ${row.stretch}, 'wght' ${row.wt}`, fontStretch: `${row.stretch}%` }
+            : {}
+          const anim = row.dir === 1 ? 'marquee' : 'marqueeRev'
+          const lh = row.sz >= 100 ? 0.84 : 1.0
+          const ls = row.font === 'mono' ? '0.06em' : row.sz >= 100 ? '-0.045em' : '-0.01em'
+
+          return (
+            <div key={i} style={{ overflow: 'hidden', lineHeight: lh }}>
+              <div style={{
+                display: 'flex',
+                animation: vis ? `${anim} ${row.dur}s linear infinite` : 'none',
+                width: 'max-content',
+                opacity: row.op,
+              }}>
+                {[...Array(3)].map((_, k) => (
+                  <span key={k} style={{
+                    fontFamily,
+                    fontSize: row.sz,
+                    fontWeight: row.wt,
+                    color: INK,
+                    whiteSpace: 'nowrap',
+                    letterSpacing: ls,
+                    paddingRight: row.sz >= 100 ? '0.4em' : '2.5em',
+                    ...varSettings,
+                  }}>
+                    {row.text}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )
+        })}
       </div>
     </section>
   )
 }
 
-// ─── 6. MANIFESTO — scroll-skewed pinned type ─────────────────────────────────
+// ─── 6. MANIFESTO — fixed scroll-reveal, reduced height ──────────────────────
 function Manifesto() {
   const ref = useRef(null)
   const p = useElementProgress(ref)
-  const skewBase = (p - 0.5) * 16
+
+  // Normalize p to [0,1] within the sticky visible window.
+  // Section is 170vh → total = 270vh.
+  // r.top=0 → p≈0.37; r.top=-70vh → p≈0.63.
+  // Use a slightly wider window with buffer so animations start and end cleanly.
+  const lp = Math.max(0, Math.min(1, (p - 0.28) / 0.44))
+  const skewBase = (lp - 0.5) * 14
+
+  // Each line: enter at lp_start, fully up at lp_end
+  const evTY  = Math.max(0, (1 - Math.min(1, Math.max(0, lp - 0.10) / 0.25)) * 120)
+  const ynTY  = Math.max(0, (1 - Math.min(1, Math.max(0, lp - 0.18) / 0.27)) * 120)
+  const ntTY  = Math.max(0, (1 - Math.min(1, Math.max(0, lp - 0.32) / 0.42)) * 120)
 
   return (
-    <section ref={ref} id="manifesto" style={{ background: INK, height: '200vh', position: 'relative' }}>
+    <section ref={ref} id="manifesto" style={{ background: INK, height: '170vh', position: 'relative' }}>
       <div style={{ position: 'sticky', top: 0, height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 48px' }}>
         <div style={{ position: 'absolute', top: 64, left: 48 }}><Tag style={{ letterSpacing: '0.32em' }}>§ 04 — What we built</Tag></div>
-        <div style={{ position: 'absolute', top: 64, right: 48, fontFamily: 'var(--font-mono)', fontSize: 11, color: MUTED, letterSpacing: '0.18em' }}>{String(Math.round(p * 100)).padStart(3, '0')} / 100</div>
+        <div style={{ position: 'absolute', top: 64, right: 48, fontFamily: 'var(--font-mono)', fontSize: 11, color: MUTED, letterSpacing: '0.18em' }}>{String(Math.round(lp * 100)).padStart(3, '0')} / 100</div>
 
         <div style={{ maxWidth: 1700, margin: '0 auto', width: '100%' }}>
-          {['EVERYTHING', 'YOU NEED.'].map((ln, i) => (
-            <div key={i} style={{ overflow: 'hidden', lineHeight: 0.86 }}>
-              <div style={{
-                fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700,
-                fontSize: 'clamp(72px, 16vw, 260px)', color: CREAM, letterSpacing: '-0.05em',
-                transform: `translateY(${Math.max(0, (1 - Math.min(1, p * 2)) * 120)}%) skewY(${skewBase * (i === 0 ? 0.4 : -0.4)}deg)`,
-                transition: 'transform .1s linear',
-              }}>{ln}</div>
-            </div>
-          ))}
+          <div style={{ overflow: 'hidden', lineHeight: 0.86 }}>
+            <div style={{
+              fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700,
+              fontSize: 'clamp(72px, 16vw, 260px)', color: CREAM, letterSpacing: '-0.05em',
+              transform: `translateY(${evTY}%) skewY(${skewBase * 0.4}deg)`,
+              transition: 'transform .08s linear',
+            }}>EVERYTHING</div>
+          </div>
+          <div style={{ overflow: 'hidden', lineHeight: 0.86 }}>
+            <div style={{
+              fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700,
+              fontSize: 'clamp(72px, 16vw, 260px)', color: CREAM, letterSpacing: '-0.05em',
+              transform: `translateY(${ynTY}%) skewY(${skewBase * -0.4}deg)`,
+              transition: 'transform .08s linear',
+            }}>YOU NEED.</div>
+          </div>
           <div style={{ overflow: 'hidden', lineHeight: 0.86, marginLeft: '10vw', marginTop: 6 }}>
             <div style={{
               fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700,
               fontSize: 'clamp(72px, 16vw, 260px)', color: 'transparent', WebkitTextStroke: `1.2px ${CREAM}`, letterSpacing: '-0.05em',
-              transform: `translateY(${Math.max(0, (1 - Math.min(1, (p - 0.15) * 3)) * 120)}%)`,
-              transition: 'transform .1s linear',
+              transform: `translateY(${ntTY}%)`,
+              transition: 'transform .08s linear',
             }}>{"NOTHING YOU DON'T."}</div>
           </div>
         </div>
 
         {/* Bottom feature strip */}
-        <div style={{ position: 'absolute', bottom: 48, left: 48, right: 48, display: 'flex', gap: 32, justifyContent: 'space-between', opacity: Math.min(1, p * 2), transition: 'opacity .3s' }}>
+        <div style={{ position: 'absolute', bottom: 48, left: 48, right: 48, display: 'flex', gap: 32, justifyContent: 'space-between', opacity: Math.min(1, lp * 3), transition: 'opacity .3s' }}>
           {[
             { n: '01', l: 'AI urgency on every article' },
             { n: '02', l: 'Portfolio impact analysis' },
@@ -653,24 +769,204 @@ function Manifesto() {
   )
 }
 
-// ─── 7. CONVERGENCE — scatter → grid ─────────────────────────────────────────
-const FRAGMENTS = [
-  { type: 'tag',   v: 'ACT NOW',  x: 12, y: 18, r: -8 },
-  { type: 'price', v: '+2.40%',   x: 78, y: 14, r:  4 },
-  { type: 'name',  v: 'NVIDIA',   x: 24, y: 78, r:  6 },
-  { type: 'date',  v: 'NOV·22',   x: 70, y: 70, r: -3 },
-  { type: 'big',   v: '0.3s',     x: 50, y: 50, r:  0 },
-  { type: 'tag',   v: 'WATCH',    x: 86, y: 42, r: -7 },
-  { type: 'price', v: '$192.40',  x: 8,  y: 50, r:  2 },
-  { type: 'name',  v: 'APPLE',    x: 60, y: 30, r: -2 },
+// ─── 7. CONVERGENCE — physics-based drop & drag ───────────────────────────────
+const PHYS_ITEMS = [
+  { type: 'tag',   v: 'ACT NOW',  sx: 0.12, sy: -0.30 },
+  { type: 'price', v: '+2.40%',   sx: 0.78, sy: -0.50 },
+  { type: 'name',  v: 'NVIDIA',   sx: 0.30, sy: -0.20 },
+  { type: 'date',  v: 'NOV·22',   sx: 0.65, sy: -0.55 },
+  { type: 'big',   v: '0.3s',     sx: 0.48, sy: -0.40 },
+  { type: 'tag',   v: 'WATCH',    sx: 0.82, sy: -0.28 },
+  { type: 'price', v: '$192.40',  sx: 0.08, sy: -0.45 },
+  { type: 'name',  v: 'APPLE',    sx: 0.58, sy: -0.18 },
 ]
 
-function Convergence() {
+function PhysicsConvergence() {
   const ref = useRef(null)
   const p = useElementProgress(ref)
-  const conv = Math.max(0, Math.min(1, (p - 0.2) / 0.55))
+  const containerRef = useRef(null)
+  const itemRefs = useRef(Array(PHYS_ITEMS.length).fill(null))
+  const bodies = useRef(null)
+  const drag = useRef({ active: false, idx: -1, prevX: 0, prevY: 0, vx: 0, vy: 0 })
+  const rafRef = useRef(null)
+  const startedRef = useRef(false)
 
-  const grid = (i) => ({ x: 18 + (i % 4) * 21, y: 38 + Math.floor(i / 4) * 26 })
+  const initBodies = useCallback(() => {
+    const W = window.innerWidth
+    const H = window.innerHeight
+    bodies.current = PHYS_ITEMS.map((item) => ({
+      x: item.sx * W + (Math.random() - 0.5) * 60,
+      y: item.sy * H,
+      vx: (Math.random() - 0.5) * 4,
+      vy: Math.random() * 2 + 1,
+      rot: (Math.random() - 0.5) * 24,
+      vrot: (Math.random() - 0.5) * 2.5,
+    }))
+  }, [])
+
+  const runPhysics = useCallback(() => {
+    if (startedRef.current) return
+    startedRef.current = true
+    if (!bodies.current) initBodies()
+
+    const GRAVITY = 0.30
+    const FRICTION = 0.987
+    const BOUNCE = 0.40
+    const getFloor = () => window.innerHeight * 0.86
+    const WALL_PAD = 60
+
+    const tick = () => {
+      const d = drag.current
+      bodies.current.forEach((b, i) => {
+        if (d.active && d.idx === i) return
+
+        b.vy += GRAVITY
+        b.vx *= FRICTION
+        b.vrot *= 0.96
+        b.x += b.vx
+        b.y += b.vy
+        b.rot += b.vrot
+
+        const floor = getFloor()
+        if (b.y > floor) {
+          b.y = floor
+          b.vy *= -BOUNCE
+          b.vx *= 0.82
+          b.vrot *= 0.45
+          if (Math.abs(b.vy) < 1.2) b.vy = 0
+        }
+        const rwall = window.innerWidth - WALL_PAD
+        if (b.x < WALL_PAD) { b.x = WALL_PAD; b.vx = Math.abs(b.vx) * 0.55 }
+        if (b.x > rwall)    { b.x = rwall;    b.vx = -Math.abs(b.vx) * 0.55 }
+
+        const el = itemRefs.current[i]
+        if (el) {
+          el.style.left = `${b.x}px`
+          el.style.top  = `${b.y}px`
+          el.style.transform = `translate(-50%, -50%) rotate(${b.rot}deg)`
+        }
+      })
+      rafRef.current = requestAnimationFrame(tick)
+    }
+
+    rafRef.current = requestAnimationFrame(tick)
+  }, [initBodies])
+
+  // Start when section enters view
+  useEffect(() => {
+    if (p > 0.08 && !startedRef.current) runPhysics()
+  }, [p, runPhysics])
+
+  // Stop on unmount
+  useEffect(() => () => {
+    startedRef.current = false
+    if (rafRef.current) cancelAnimationFrame(rafRef.current)
+  }, [])
+
+  // Drag handling
+  useEffect(() => {
+    const getXY = (e) => {
+      const t = e.touches?.[0] ?? e
+      return [t.clientX, t.clientY]
+    }
+    const nearest = (mx, my) => {
+      let idx = -1, best = 90
+      bodies.current?.forEach((b, i) => {
+        const d = Math.hypot(b.x - mx, b.y - my)
+        if (d < best) { best = d; idx = i }
+      })
+      return idx
+    }
+    const onDown = (e) => {
+      const [mx, my] = getXY(e)
+      const idx = nearest(mx, my)
+      if (idx >= 0) {
+        drag.current = { active: true, idx, prevX: mx, prevY: my, vx: 0, vy: 0 }
+        const el = itemRefs.current[idx]
+        if (el) el.style.cursor = 'grabbing'
+        e.preventDefault()
+      }
+    }
+    const onMove = (e) => {
+      if (!drag.current.active) return
+      const [mx, my] = getXY(e)
+      const { idx, prevX, prevY } = drag.current
+      const vx = (mx - prevX) * 0.75
+      const vy = (my - prevY) * 0.75
+      drag.current = { ...drag.current, prevX: mx, prevY: my, vx, vy }
+      const b = bodies.current?.[idx]
+      if (b) { b.x = mx; b.y = my; b.rot += vx * 0.12 }
+      e.preventDefault()
+    }
+    const onUp = () => {
+      if (!drag.current.active) return
+      const { idx, vx, vy } = drag.current
+      const b = bodies.current?.[idx]
+      if (b) { b.vx = vx * 2.2; b.vy = vy * 2.2 }
+      const el = itemRefs.current[idx]
+      if (el) el.style.cursor = 'grab'
+      drag.current.active = false
+    }
+
+    const c = containerRef.current
+    c?.addEventListener('mousedown', onDown)
+    c?.addEventListener('touchstart', onDown, { passive: false })
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('touchmove', onMove, { passive: false })
+    window.addEventListener('mouseup', onUp)
+    window.addEventListener('touchend', onUp)
+    return () => {
+      c?.removeEventListener('mousedown', onDown)
+      c?.removeEventListener('touchstart', onDown)
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('touchmove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      window.removeEventListener('touchend', onUp)
+    }
+  }, [])
+
+  const renderItem = (f, i) => {
+    const base = {
+      position: 'absolute',
+      left: `${f.sx * 100}%`, top: '-10%',
+      transform: 'translate(-50%, -50%)',
+      cursor: 'grab', userSelect: 'none', WebkitUserSelect: 'none',
+    }
+    if (f.type === 'tag') return (
+      <span key={i} ref={el => { itemRefs.current[i] = el }} style={{
+        ...base, fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.24em',
+        textTransform: 'uppercase', padding: '5px 10px',
+        border: '1px solid rgba(11,11,11,0.22)', color: INK, background: CREAM, whiteSpace: 'nowrap',
+      }}>{f.v}</span>
+    )
+    if (f.type === 'price') return (
+      <span key={i} ref={el => { itemRefs.current[i] = el }} style={{
+        ...base, fontFamily: 'var(--font-mono)', fontSize: 22,
+        color: f.v.startsWith('+') ? 'var(--moss-500)' : 'var(--clay-500)', whiteSpace: 'nowrap',
+      }}>{f.v}</span>
+    )
+    if (f.type === 'name') return (
+      <span key={i} ref={el => { itemRefs.current[i] = el }} style={{
+        ...base, fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700",
+        fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(44px, 6vw, 86px)',
+        color: INK, letterSpacing: '-0.05em', whiteSpace: 'nowrap',
+      }}>{f.v}</span>
+    )
+    if (f.type === 'date') return (
+      <span key={i} ref={el => { itemRefs.current[i] = el }} style={{
+        ...base, fontFamily: 'var(--font-mono)', fontSize: 14,
+        color: 'rgba(11,11,11,0.42)', letterSpacing: '0.14em', whiteSpace: 'nowrap',
+      }}>{f.v}</span>
+    )
+    if (f.type === 'big') return (
+      <span key={i} ref={el => { itemRefs.current[i] = el }} style={{
+        ...base, fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700",
+        fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(80px, 13vw, 190px)',
+        color: 'rgba(11,11,11,0.07)', letterSpacing: '-0.05em', lineHeight: 0.82, whiteSpace: 'nowrap',
+      }}>{f.v}</span>
+    )
+    return null
+  }
 
   return (
     <section ref={ref} style={{ background: CREAM, height: '180vh', position: 'relative' }}>
@@ -678,32 +974,24 @@ function Convergence() {
         <div style={{ position: 'absolute', top: 64, left: 48 }}>
           <Tag tone="dark" style={{ letterSpacing: '0.32em' }}>§ 05 — From chaos, signal</Tag>
         </div>
-        <div style={{ position: 'absolute', top: 64, right: 48, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'rgba(11,11,11,0.40)', letterSpacing: '0.18em' }}>
-          chaos {String(Math.round((1 - conv) * 100)).padStart(3, '0')}  →  signal {String(Math.round(conv * 100)).padStart(3, '0')}
+        <div style={{ position: 'absolute', top: 64, right: 48, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'rgba(11,11,11,0.38)', letterSpacing: '0.18em' }}>
+          Click · Drag · Play
         </div>
 
-        {FRAGMENTS.map((f, i) => {
-          const target = grid(i)
-          const x = f.x + (target.x - f.x) * conv
-          const y = f.y + (target.y - f.y) * conv
-          const rot = f.r * (1 - conv)
-          const style = { position: 'absolute', left: `${x}%`, top: `${y}%`, transform: `translate(-50%, -50%) rotate(${rot}deg)`, transition: 'left .12s linear, top .12s linear, transform .12s linear' }
-          if (f.type === 'tag')   return <span key={i} style={{ ...style, fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.24em', textTransform: 'uppercase', padding: '5px 9px', border: '1px solid rgba(11,11,11,0.18)', color: INK }}>{f.v}</span>
-          if (f.type === 'price') return <span key={i} style={{ ...style, fontFamily: 'var(--font-mono)', fontSize: 18, color: f.v.startsWith('+') ? 'var(--moss-500)' : 'var(--clay-500)' }}>{f.v}</span>
-          if (f.type === 'name')  return <span key={i} style={{ ...style, fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(48px, 7vw, 96px)', color: INK, letterSpacing: '-0.05em' }}>{f.v}</span>
-          if (f.type === 'date')  return <span key={i} style={{ ...style, fontFamily: 'var(--font-mono)', fontSize: 14, color: 'rgba(11,11,11,0.42)', letterSpacing: '0.12em' }}>{f.v}</span>
-          if (f.type === 'big')   return <span key={i} style={{ ...style, fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(110px, 22vw, 320px)', color: 'rgba(11,11,11,0.08)', letterSpacing: '-0.05em', lineHeight: 0.82 }}>{f.v}</span>
-          return null
-        })}
+        {/* Physics canvas */}
+        <div ref={containerRef} style={{ position: 'absolute', inset: 0, cursor: 'crosshair' }}>
+          {PHYS_ITEMS.map((f, i) => renderItem(f, i))}
+        </div>
 
-        <div style={{ position: 'absolute', bottom: 48, left: 48, right: 48 }}>
+        {/* Bottom bar */}
+        <div style={{ position: 'absolute', bottom: 48, left: 48, right: 48, pointerEvents: 'none' }}>
           <Rule vis color="rgba(11,11,11,0.16)" />
           <div style={{ marginTop: 18, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 48, alignItems: 'flex-end' }}>
-            <div style={{ fontFamily: 'var(--font-sans)', fontWeight: 500, fontSize: 'clamp(20px, 2.4vw, 32px)', color: INK, letterSpacing: '-0.015em', lineHeight: 1.3 }}>
-              Hundreds of fragments per minute, mapped to your holdings, in <span style={{ fontWeight: 700, borderBottom: '2px solid rgba(11,11,11,0.4)' }}>three seconds</span>.
+            <div style={{ fontFamily: 'var(--font-sans)', fontWeight: 500, fontSize: 'clamp(18px, 2.2vw, 30px)', color: INK, letterSpacing: '-0.015em', lineHeight: 1.3 }}>
+              Drag the fragments. Pull signal from the noise — in <span style={{ fontWeight: 700, borderBottom: '2px solid rgba(11,11,11,0.4)' }}>three seconds</span>.
             </div>
             <div style={{ textAlign: 'right' }}>
-              <Tag tone="dark">Drag-time average</Tag>
+              <Tag tone="dark">Avg. processing time</Tag>
               <div style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(48px, 6vw, 96px)', color: INK, letterSpacing: '-0.05em', lineHeight: 0.85, marginTop: 6 }}>0.3s</div>
             </div>
           </div>
@@ -790,7 +1078,7 @@ function Footer() {
   )
 }
 
-// ─── Scroll index (right rail) ────────────────────────────────────────────────
+// ─── Scroll index ─────────────────────────────────────────────────────────────
 const SECTIONS = ['§ 01', '§ 02', '§ 03', '§ 04', '§ 05', '§ 06']
 
 function ScrollIndex() {
@@ -844,7 +1132,6 @@ export default function Landing() {
 
   return (
     <div style={{ background: INK, overflowX: 'hidden' }}>
-      {/* Grain overlay */}
       <style>{`
         .trx-body-grain::before {
           content: '';
@@ -862,9 +1149,9 @@ export default function Landing() {
       <DualMarquee />
       <Statement />
       <PinnedArchive />
-      <Numbers />
+      <LanguageWall />
       <Manifesto />
-      <Convergence />
+      <PhysicsConvergence />
       <CtaSection onEnter={onEnter} />
       <Footer />
     </div>
