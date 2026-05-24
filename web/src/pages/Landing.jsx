@@ -28,13 +28,14 @@ function useMouse() {
     nx: 0, ny: 0,
   }))
   useEffect(() => {
+    let raf = null, pending = null
     const onMove = (e) => {
-      const nx = (e.clientX / window.innerWidth) - 0.5
-      const ny = (e.clientY / window.innerHeight) - 0.5
-      setPos({ x: e.clientX, y: e.clientY, nx, ny })
+      pending = { x: e.clientX, y: e.clientY, nx: (e.clientX / window.innerWidth) - 0.5, ny: (e.clientY / window.innerHeight) - 0.5 }
+      if (raf) return
+      raf = requestAnimationFrame(() => { setPos(pending); raf = null })
     }
-    window.addEventListener('mousemove', onMove)
-    return () => window.removeEventListener('mousemove', onMove)
+    window.addEventListener('mousemove', onMove, { passive: true })
+    return () => { window.removeEventListener('mousemove', onMove); if (raf) cancelAnimationFrame(raf) }
   }, [])
   return pos
 }
@@ -285,7 +286,7 @@ function FloatingTicker({ t, idx, mouseX, mouseY, visible, price }) {
   const tone = pct != null ? (pct >= 0 ? 'pos' : 'neg') : (t.staticTone || 'mut')
   const color = tone === 'pos' ? 'var(--positive)' : tone === 'neg' ? 'var(--negative)' : MUTED
   return (
-    <div style={{ position: 'absolute', top: `${t.y}%`, left: `${t.x}%`, transform: `translate3d(${pullX}px, ${pullY}px, 0)`, transition: `transform ${1.2 + (idx % 3) * 0.25}s cubic-bezier(0.16,1,0.3,1), opacity .7s ease`, opacity: visible ? 1 : 0, pointerEvents: 'none' }}>
+    <div style={{ position: 'absolute', top: `${t.y}%`, left: `${t.x}%`, transform: `translate3d(${pullX}px, ${pullY}px, 0)`, transition: `transform ${1.2 + (idx % 3) * 0.25}s cubic-bezier(0.16,1,0.3,1), opacity .7s ease`, opacity: visible ? 1 : 0, pointerEvents: 'none', willChange: 'transform, opacity' }}>
       <div style={{ animation: `tickerDrift 9s ease-in-out ${t.delay}s infinite`, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.24em', textTransform: 'uppercase', color: MUTED }}>{t.sym}</span>
         {d && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color, letterSpacing: '0.04em' }}>{d}</span>}
@@ -337,12 +338,12 @@ function Hero({ onEnter }) {
   const heroProgress = Math.min(scrollY / (window.innerHeight || 1), 1)
 
   return (
-    <section style={{ position: 'relative', minHeight: '100vh', background: INK, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: '0 48px 60px', overflow: 'hidden', opacity: 1 - heroProgress * 0.4 }}>
-      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 60, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 48px', zIndex: 10 }}>
+    <section style={{ position: 'relative', minHeight: '100vh', background: INK, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: '0 clamp(20px,4vw,48px) 60px', overflow: 'hidden', opacity: 1 - heroProgress * 0.4 }}>
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 60, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 clamp(20px,4vw,48px)', zIndex: 10 }}>
         <Logo size="sm" />
         <div style={{ display: 'flex', alignItems: 'center', gap: 26 }}>
-          <a href="#archive" style={{ fontFamily: 'var(--font-sans)', fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: MUTED, textDecoration: 'none' }}>Archive</a>
-          <a href="#manifesto" style={{ fontFamily: 'var(--font-sans)', fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: MUTED, textDecoration: 'none' }}>Manifesto</a>
+          <a href="#archive" className="trx-nav-links" style={{ fontFamily: 'var(--font-sans)', fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: MUTED, textDecoration: 'none' }}>Archive</a>
+          <a href="#manifesto" className="trx-nav-links" style={{ fontFamily: 'var(--font-sans)', fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: MUTED, textDecoration: 'none' }}>Manifesto</a>
           <Button variant="primary" tone="paper" onClick={onEnter}>Get started</Button>
         </div>
       </div>
@@ -405,7 +406,7 @@ function DualMarquee() {
   return (
     <div style={{ background: CREAM, padding: '14px 0 13px', position: 'relative', zIndex: 2 }}>
       <div style={{ overflow: 'hidden', padding: '4px 0' }}>
-        <div style={{ display: 'flex', animation: 'marquee 32s linear infinite', width: 'max-content' }}>
+        <div style={{ display: 'flex', animation: 'marquee 32s linear infinite', width: 'max-content', willChange: 'transform' }}>
           {[...Array(3)].flatMap((_, k) =>
             ['Real-time intelligence', 'AI-powered', 'Portfolio impact', 'Market signals', 'Plain English', 'Act with confidence', 'No jargon', 'Urgency scoring']
               .map((w, i) => (
@@ -417,7 +418,7 @@ function DualMarquee() {
         </div>
       </div>
       <div style={{ overflow: 'hidden', padding: '4px 0', marginTop: 6 }}>
-        <div style={{ display: 'flex', animation: 'marqueeRev 38s linear infinite', width: 'max-content' }}>
+        <div style={{ display: 'flex', animation: 'marqueeRev 38s linear infinite', width: 'max-content', willChange: 'transform' }}>
           {[...Array(3)].flatMap((_, k) =>
             ['AAPL  +2.40%', 'NVDA  −3.18%', 'MSFT  +0.45%', 'BTC  $42,180', 'GOLD  +1.20%', 'TSLA  −1.05%', 'CPI  3.4%', 'FOMC NOV 22', 'SPY  +0.18%', 'QQQ  +0.42%']
               .map((w, i) => (
@@ -459,8 +460,8 @@ function LanguageWall() {
     return () => o.disconnect()
   }, [])
   return (
-    <section ref={ref} style={{ background: CREAM, overflow: 'hidden', position: 'relative', padding: '0' }}>
-      <div style={{ position: 'absolute', top: 14, left: 48, zIndex: 10 }}>
+    <section ref={ref} style={{ background: CREAM, overflow: 'hidden', position: 'relative', padding: '0', contain: 'layout paint' }}>
+      <div style={{ position: 'absolute', top: 14, left: 'clamp(20px,4vw,48px)', zIndex: 10 }}>
         <Tag tone="dark" style={{ letterSpacing: '0.32em' }}>§ 02 — The signal</Tag>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -472,7 +473,7 @@ function LanguageWall() {
           const ls = row.font === 'mono' ? '0.06em' : row.sz >= 100 ? '-0.045em' : '-0.01em'
           return (
             <div key={i} style={{ overflow: 'hidden', lineHeight: lh }}>
-              <div style={{ display: 'flex', animation: vis ? `${anim} ${row.dur}s linear infinite` : 'none', width: 'max-content', opacity: row.op }}>
+              <div style={{ display: 'flex', animation: vis ? `${anim} ${row.dur}s linear infinite` : 'none', width: 'max-content', opacity: row.op, willChange: 'transform' }}>
                 {[...Array(3)].map((_, k) => (
                   <span key={k} style={{ fontFamily, fontSize: row.sz, fontWeight: row.wt, color: INK, whiteSpace: 'nowrap', letterSpacing: ls, paddingRight: row.sz >= 100 ? '0.4em' : '2.5em', ...varSettings }}>{row.text}</span>
                 ))}
@@ -512,14 +513,15 @@ function PinnedArchive() {
   useEffect(() => {
     const strip = stripRef.current
     if (!strip) return
+    const getX = (e) => e.touches ? e.touches[0].clientX : e.clientX
     const onDown = (e) => {
-      dragState.current = { active: true, startX: e.clientX, startScroll: dragStage ?? stage, currentStage: dragStage ?? stage }
-      strip.style.cursor = 'grabbing'
-      e.preventDefault()
+      dragState.current = { active: true, startX: getX(e), startScroll: dragStage ?? stage, currentStage: dragStage ?? stage }
+      if (!e.touches) strip.style.cursor = 'grabbing'
     }
     const onMove = (e) => {
       if (!dragState.current.active) return
-      const dx = e.clientX - dragState.current.startX
+      if (e.cancelable && e.touches) e.preventDefault()
+      const dx = getX(e) - dragState.current.startX
       const delta = -dx / (maxScroll || 1)
       const newStage = Math.max(0, Math.min(1, dragState.current.startScroll + delta * 1.4))
       dragState.current.currentStage = newStage
@@ -530,12 +532,18 @@ function PinnedArchive() {
       strip.style.cursor = 'grab'
     }
     strip.addEventListener('mousedown', onDown)
+    strip.addEventListener('touchstart', onDown, { passive: true })
     window.addEventListener('mousemove', onMove)
+    window.addEventListener('touchmove', onMove, { passive: false })
     window.addEventListener('mouseup', onUp)
+    window.addEventListener('touchend', onUp)
     return () => {
       strip.removeEventListener('mousedown', onDown)
+      strip.removeEventListener('touchstart', onDown)
       window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('touchmove', onMove)
       window.removeEventListener('mouseup', onUp)
+      window.removeEventListener('touchend', onUp)
     }
   }, [stage, maxScroll, dragStage])
 
@@ -544,7 +552,7 @@ function PinnedArchive() {
   return (
     <section ref={ref} id="archive" style={{ background: INK, height: '150vh', position: 'relative' }}>
       <div style={{ position: 'sticky', top: 0, height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '64px 48px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ padding: '64px clamp(20px,4vw,48px) 0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
             <Tag style={{ letterSpacing: '0.32em' }}>§ 03 — The archive</Tag>
             <div style={{ marginTop: 12, fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(40px, 6vw, 90px)', color: CREAM, letterSpacing: '-0.045em', lineHeight: 0.9 }}>
@@ -561,7 +569,7 @@ function PinnedArchive() {
 
         <div style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center' }}>
           <div ref={stripRef} style={{
-            display: 'flex', gap: 32, padding: '0 48px',
+            display: 'flex', gap: 32, padding: '0 clamp(20px,4vw,48px)',
             transform: `translateX(${-activeStage * maxScroll}px)`,
             transition: dragState.current?.active ? 'none' : 'transform .1s linear',
             willChange: 'transform', cursor: 'grab',
@@ -592,7 +600,7 @@ function PinnedArchive() {
           </div>
         </div>
 
-        <div style={{ padding: '0 48px 48px' }}>
+        <div style={{ padding: '0 clamp(20px,4vw,48px) 48px' }}>
           <div style={{ height: 1, background: 'rgba(240,235,224,0.10)', position: 'relative' }}>
             <div style={{ height: 1, background: CREAM, width: `${activeStage * 100}%`, transition: 'width .1s linear' }} />
             <div style={{ position: 'absolute', top: -3, left: `${activeStage * 100}%`, width: 1, height: 7, background: CREAM, transform: 'translateX(-50%)' }} />
@@ -625,9 +633,9 @@ function Manifesto() {
 
   return (
     <section ref={ref} id="manifesto" style={{ background: INK, height: '180vh', position: 'relative' }}>
-      <div style={{ position: 'sticky', top: 0, height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 48px' }}>
-        <div style={{ position: 'absolute', top: 48, left: 48 }}><Tag style={{ letterSpacing: '0.32em' }}>§ 04 — What we built</Tag></div>
-        <div style={{ position: 'absolute', top: 48, right: 48, fontFamily: 'var(--font-mono)', fontSize: 11, color: MUTED, letterSpacing: '0.18em' }}>{String(Math.round(lp * 100)).padStart(3, '0')} / 100</div>
+      <div style={{ position: 'sticky', top: 0, height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 clamp(20px,4vw,48px)' }}>
+        <div style={{ position: 'absolute', top: 48, left: 'clamp(20px,4vw,48px)' }}><Tag style={{ letterSpacing: '0.32em' }}>§ 04 — What we built</Tag></div>
+        <div style={{ position: 'absolute', top: 48, right: 'clamp(20px,4vw,48px)', fontFamily: 'var(--font-mono)', fontSize: 11, color: MUTED, letterSpacing: '0.18em' }}>{String(Math.round(lp * 100)).padStart(3, '0')} / 100</div>
 
         <div style={{ maxWidth: 1700, margin: '0 auto', width: '100%' }}>
           <div style={{ overflow: 'hidden', lineHeight: 0.86 }}>
@@ -641,7 +649,7 @@ function Manifesto() {
           </div>
         </div>
 
-        <div style={{ position: 'absolute', bottom: 40, left: 48, right: 48, display: 'flex', gap: 32, justifyContent: 'space-between', opacity: Math.min(1, lp * 3), transition: 'opacity .3s' }}>
+        <div style={{ position: 'absolute', bottom: 40, left: 'clamp(20px,4vw,48px)', right: 'clamp(20px,4vw,48px)', display: 'flex', gap: 32, flexWrap: 'wrap', justifyContent: 'space-between', opacity: Math.min(1, lp * 3), transition: 'opacity .3s' }}>
           {[
             { n: '01', l: 'AI urgency on every article' },
             { n: '02', l: 'Portfolio impact analysis' },
@@ -709,6 +717,7 @@ const PHYS_ITEMS = [
 ]
 
 function PhysicsConvergence() {
+  const isTouchDevice = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
   const sectionRef = useRef(null)
   const p = useElementProgress(sectionRef)
   const containerRef = useRef(null)
@@ -729,9 +738,9 @@ function PhysicsConvergence() {
     return () => window.removeEventListener('mousemove', mv)
   }, [])
 
-  // Init Matter.js once triggered
+  // Init Matter.js once triggered (skip on touch devices)
   useEffect(() => {
-    if (!triggered) return
+    if (!triggered || isTouchDevice) return
 
     let rafId = null
 
@@ -743,7 +752,7 @@ function PhysicsConvergence() {
       const W = container.offsetWidth || window.innerWidth
       const H = container.offsetHeight || window.innerHeight
 
-      const engine = Engine.create({ positionIterations: 10, velocityIterations: 10 })
+      const engine = Engine.create({ positionIterations: 6, velocityIterations: 6 })
       engine.gravity.y = 0.45
 
       // Create a body per item using element dimensions
@@ -755,9 +764,9 @@ function PhysicsConvergence() {
         const spawnX = W * 0.08 + (i / PHYS_ITEMS.length) * W * 0.84 + (Math.random() - 0.5) * 80
         const spawnY = -80 - Math.random() * H * 0.9
         return Bodies.rectangle(spawnX, spawnY, bw, bh, {
-          restitution: 0.20,
-          friction: 0.38,
-          frictionAir: 0.022,
+          restitution: 0.18,
+          friction: 0.42,
+          frictionAir: 0.038,
           angle: (Math.random() - 0.5) * 0.45,
         })
       })
@@ -864,12 +873,37 @@ function PhysicsConvergence() {
     return null
   }
 
+  if (isTouchDevice) {
+    return (
+      <section style={{ background: CREAM, padding: '80px 24px 60px', position: 'relative', overflow: 'hidden' }}>
+        <div style={{ marginBottom: 40 }}>
+          <Tag tone="dark" style={{ letterSpacing: '0.32em' }}>§ 05 — From chaos, signal</Tag>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+          {PHYS_ITEMS.filter(f => f.type === 'tag' || f.type === 'price' || f.type === 'label').map((f, i) => (
+            <span key={i} style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: f.type === 'price' ? 20 : f.type === 'tag' ? 10 : 12,
+              fontWeight: f.type === 'price' ? 600 : 500,
+              padding: f.type === 'tag' ? '5px 10px' : '0',
+              border: f.type === 'tag' ? '1px solid rgba(11,11,11,0.22)' : 'none',
+              color: f.col || (f.type === 'tag' ? INK : 'rgba(11,11,11,0.44)'),
+              letterSpacing: f.type === 'tag' ? '0.18em' : '0.08em',
+              textTransform: f.type === 'tag' ? 'uppercase' : 'none',
+              whiteSpace: 'nowrap',
+            }}>{f.v}</span>
+          ))}
+        </div>
+      </section>
+    )
+  }
+
   return (
     <section ref={sectionRef} style={{ background: CREAM, height: '100vh', position: 'relative', overflow: 'hidden' }}>
-      <div style={{ position: 'absolute', top: 48, left: 48, zIndex: 10 }}>
+      <div style={{ position: 'absolute', top: 48, left: 'clamp(20px,4vw,48px)', zIndex: 10 }}>
         <Tag tone="dark" style={{ letterSpacing: '0.32em' }}>§ 05 — From chaos, signal</Tag>
       </div>
-      <div style={{ position: 'absolute', top: 48, right: 48, zIndex: 10, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'rgba(11,11,11,0.36)', letterSpacing: '0.18em' }}>
+      <div style={{ position: 'absolute', top: 48, right: 'clamp(20px,4vw,48px)', zIndex: 10, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'rgba(11,11,11,0.36)', letterSpacing: '0.18em' }}>
         Drag · Play
       </div>
 
@@ -885,8 +919,8 @@ function CtaSection({ onEnter }) {
   const p = useElementProgress(ref)
   const mouse = useMouse()
   return (
-    <section ref={ref} style={{ background: INK, minHeight: '100vh', padding: '60px 48px 60px', display: 'flex', flexDirection: 'column', justifyContent: 'center', position: 'relative' }}>
-      <div style={{ position: 'absolute', top: 48, left: 48 }}><Tag style={{ letterSpacing: '0.32em' }}>§ 06 — Begin</Tag></div>
+    <section ref={ref} style={{ background: INK, minHeight: '100vh', padding: '60px clamp(20px,4vw,48px)', display: 'flex', flexDirection: 'column', justifyContent: 'center', position: 'relative' }}>
+      <div style={{ position: 'absolute', top: 48, left: 'clamp(20px,4vw,48px)' }}><Tag style={{ letterSpacing: '0.32em' }}>§ 06 — Begin</Tag></div>
       <div style={{ maxWidth: 1500, margin: '0 auto', width: '100%' }}>
         <Rule vis={p > 0.1} />
         <div style={{ marginTop: 48, transform: `translate3d(${mouse.nx * 12}px, ${mouse.ny * 8}px, 0)`, transition: 'transform .8s cubic-bezier(0.16,1,0.3,1)' }}>
@@ -911,7 +945,7 @@ function Footer() {
       <div style={{ display: 'flex', alignItems: 'flex-end', minHeight: 520 }}>
         {/* Left: large scrolling motive, pinned to bottom-left */}
         <div style={{ flex: 1, overflow: 'hidden', paddingBottom: 48, minWidth: 0 }}>
-          <div style={{ display: 'flex', animation: 'marquee 18s linear infinite', width: 'max-content' }}>
+          <div style={{ display: 'flex', animation: 'marquee 18s linear infinite', width: 'max-content', willChange: 'transform' }}>
             {[...Array(4)].map((_, i) => (
               <span key={i} style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(100px, 17vw, 260px)', letterSpacing: '-0.05em', color: 'transparent', WebkitTextStroke: `1px ${CREAM}`, paddingRight: 60, whiteSpace: 'nowrap', opacity: 0.65 }}>TRAVAUXUS —</span>
             ))}
@@ -919,7 +953,7 @@ function Footer() {
         </div>
 
         {/* Right: all content stacked vertically */}
-        <div style={{ borderLeft: `1px solid ${BORDER}`, padding: '60px 48px', display: 'flex', flexDirection: 'column', gap: 36, minWidth: 300, alignSelf: 'stretch', justifyContent: 'flex-end' }}>
+        <div style={{ borderLeft: `1px solid ${BORDER}`, padding: '60px clamp(20px,4vw,48px)', display: 'flex', flexDirection: 'column', gap: 36, minWidth: 'min(300px,100%)', alignSelf: 'stretch', justifyContent: 'flex-end' }}>
           <Logo size="sm" />
           <p style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: 'rgba(240,235,224,0.22)', maxWidth: 220, lineHeight: 1.8, margin: 0 }}>Market intelligence for everyone.</p>
           {[
@@ -996,6 +1030,14 @@ export default function Landing() {
           background-size: 180px 180px; opacity: 0.033; mix-blend-mode: overlay;
         }
         @media (hover: hover) and (pointer: fine) { .trx-cursor-hidden, .trx-cursor-hidden * { cursor: none !important; } }
+        @media (max-width: 640px) { .trx-nav-links { display: none !important; } }
+        @media (prefers-reduced-motion: reduce) {
+          *, *::before, *::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+          }
+        }
       `}</style>
 
       {!loaded && <Preloader onDone={() => setLoaded(true)} />}
