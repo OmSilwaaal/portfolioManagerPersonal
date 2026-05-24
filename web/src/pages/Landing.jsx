@@ -299,23 +299,35 @@ function Hero({ onEnter }) {
   const mouse = useMouse()
   const scrollY = useScrollY()
   const prices = useLivePrices()
-  const [visibleSet, setVisibleSet] = useState(() => new Set([0, 1, 2, 3, 4, 5, 6]))
+  const [tickerState, setTickerState] = useState(() => ({
+    visible: new Set([0, 1, 2, 3, 4, 5, 6]),
+    positions: Object.fromEntries(TICKER_POOL.map((t, i) => [i, { x: t.x, y: t.y }])),
+  }))
   const moveCountRef = useRef(0)
+  const cursorPosRef = useRef({ x: typeof window !== 'undefined' ? window.innerWidth / 2 : 0, y: typeof window !== 'undefined' ? window.innerHeight / 2 : 0 })
 
   useEffect(() => { const t = setTimeout(() => setRdy(true), 220); return () => clearTimeout(t) }, [])
 
   useEffect(() => {
-    const onMove = () => {
+    const onMove = (e) => {
+      cursorPosRef.current = { x: e.clientX, y: e.clientY }
       moveCountRef.current++
       if (moveCountRef.current % 70 !== 0) return
-      setVisibleSet(prev => {
-        const visible = [...prev]
-        const hidden = TICKER_POOL.map((_, i) => i).filter(i => !prev.has(i))
+      const W = window.innerWidth, H = window.innerHeight
+      const cx = cursorPosRef.current.x, cy = cursorPosRef.current.y
+      setTickerState(prev => {
+        const visible = [...prev.visible]
+        const hidden = TICKER_POOL.map((_, i) => i).filter(i => !prev.visible.has(i))
         if (hidden.length === 0) return prev
-        const next = new Set(prev)
-        next.delete(visible[Math.floor(Math.random() * visible.length)])
-        next.add(hidden[Math.floor(Math.random() * hidden.length)])
-        return next
+        const removeIdx = visible[Math.floor(Math.random() * visible.length)]
+        const addIdx = hidden[Math.floor(Math.random() * hidden.length)]
+        const spread = 140
+        const nx = Math.max(4, Math.min(88, ((cx + (Math.random() - 0.5) * spread) / W) * 100))
+        const ny = Math.max(8, Math.min(82, ((cy + (Math.random() - 0.5) * spread) / H) * 100))
+        const next = new Set(prev.visible)
+        next.delete(removeIdx)
+        next.add(addIdx)
+        return { visible: next, positions: { ...prev.positions, [addIdx]: { x: nx, y: ny } } }
       })
     }
     window.addEventListener('mousemove', onMove, { passive: true })
@@ -335,7 +347,7 @@ function Hero({ onEnter }) {
         </div>
       </div>
 
-      {/* Centered statement — larger, mid-screen */}
+      {/* Centered statement — cofounder quote */}
       <div style={{
         position: 'absolute', top: '38%', left: '50%',
         transform: 'translate(-50%, -50%)',
@@ -347,16 +359,19 @@ function Hero({ onEnter }) {
           <div style={{ width: 28, height: 1, background: BORDER }} />
           <Tag>Vol. 01 · Est. 2026</Tag>
         </div>
-        <p style={{ fontFamily: 'var(--font-sans)', fontSize: 'clamp(17px, 1.8vw, 26px)', lineHeight: 1.65, color: 'var(--on-ink-text-2)', maxWidth: 520, margin: 0 }}>
-          We believe markets should be legible.<br />
-          That every investor — not just the ones<br />
-          in glass towers — deserves the same fluency.
-        </p>
+        <blockquote style={{ margin: 0 }}>
+          <p style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 110, 'wght' 500", fontStretch: '110%', fontWeight: 500, fontSize: 'clamp(18px, 2vw, 28px)', lineHeight: 1.25, color: CREAM, maxWidth: 560, margin: '0 auto', letterSpacing: '-0.02em' }}>
+            "We believe markets should be legible. That every investor — not just the ones in glass towers — deserves the same fluency."
+          </p>
+          <footer style={{ marginTop: 18, fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.28em', textTransform: 'uppercase', color: MUTED }}>
+            — Om Poper, Co-Founder
+          </footer>
+        </blockquote>
       </div>
 
       <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
         {TICKER_POOL.map((t, i) => (
-          <FloatingTicker key={i} t={t} idx={i} mouseX={mouse.x} mouseY={mouse.y} visible={visibleSet.has(i)} price={prices[t.sym]} />
+          <FloatingTicker key={i} t={{ ...t, ...tickerState.positions[i] }} idx={i} mouseX={mouse.x} mouseY={mouse.y} visible={tickerState.visible.has(i)} price={prices[t.sym]} />
         ))}
       </div>
 
@@ -444,7 +459,7 @@ function LanguageWall() {
     return () => o.disconnect()
   }, [])
   return (
-    <section ref={ref} style={{ background: CREAM, overflow: 'hidden', position: 'relative', padding: '10px 0' }}>
+    <section ref={ref} style={{ background: CREAM, overflow: 'hidden', position: 'relative', padding: '0' }}>
       <div style={{ position: 'absolute', top: 14, left: 48, zIndex: 10 }}>
         <Tag tone="dark" style={{ letterSpacing: '0.32em' }}>§ 02 — The signal</Tag>
       </div>
@@ -527,7 +542,7 @@ function PinnedArchive() {
   const activeStage = dragStage !== null ? dragStage : stage
 
   return (
-    <section ref={ref} id="archive" style={{ background: INK, height: '200vh', position: 'relative' }}>
+    <section ref={ref} id="archive" style={{ background: INK, height: '150vh', position: 'relative' }}>
       <div style={{ position: 'sticky', top: 0, height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '64px 48px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
@@ -601,7 +616,7 @@ function Manifesto() {
   // sticky starts at p = 100/350 = 0.286
   // sticky ends   at p = 250/350 = 0.714
   // lp maps [0.286, 0.714] → [0, 1]
-  const lp = Math.max(0, Math.min(1, (p - 0.286) / 0.428))
+  const lp = Math.max(0, Math.min(1, (p - 0.02) / 0.70))
   const skewBase = (lp - 0.5) * 10
 
   const evTY = Math.max(0, (1 - Math.min(1, lp / 0.30)) * 120)
@@ -609,7 +624,7 @@ function Manifesto() {
   const ntTY = Math.max(0, (1 - Math.min(1, Math.max(0, lp - 0.46) / 0.34)) * 120)
 
   return (
-    <section ref={ref} id="manifesto" style={{ background: INK, height: '250vh', position: 'relative' }}>
+    <section ref={ref} id="manifesto" style={{ background: INK, height: '180vh', position: 'relative' }}>
       <div style={{ position: 'sticky', top: 0, height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 48px' }}>
         <div style={{ position: 'absolute', top: 48, left: 48 }}><Tag style={{ letterSpacing: '0.32em' }}>§ 04 — What we built</Tag></div>
         <div style={{ position: 'absolute', top: 48, right: 48, fontFamily: 'var(--font-mono)', fontSize: 11, color: MUTED, letterSpacing: '0.18em' }}>{String(Math.round(lp * 100)).padStart(3, '0')} / 100</div>
@@ -644,20 +659,31 @@ function Manifesto() {
   )
 }
 
-// ─── Physics items — 21 items for a layered, dense feel ───────────────────────
 const PHYS_ITEMS = [
   { type: 'big',   v: 'NVIDIA',      col: 'rgba(11,11,11,0.07)', sz: 92,  wt: 700 },
   { type: 'big',   v: 'APPLE',       col: 'rgba(11,11,11,0.07)', sz: 76,  wt: 700 },
   { type: 'big',   v: 'SIGNAL',      col: 'rgba(11,11,11,0.05)', sz: 64,  wt: 700 },
+  { type: 'big',   v: 'TESLA',       col: 'rgba(11,11,11,0.06)', sz: 70,  wt: 700 },
+  { type: 'big',   v: 'META',        col: 'rgba(11,11,11,0.05)', sz: 58,  wt: 700 },
+  { type: 'big',   v: 'MARKET',      col: 'rgba(11,11,11,0.04)', sz: 52,  wt: 700 },
   { type: 'price', v: '+2.40%',      col: 'var(--moss-500)'                       },
   { type: 'price', v: '−3.18%',      col: 'var(--clay-500)'                       },
   { type: 'price', v: '$192.40',     col: 'rgba(11,11,11,0.55)'                   },
   { type: 'price', v: '+1.73%',      col: 'var(--moss-500)'                       },
   { type: 'price', v: '−1.05%',      col: 'var(--clay-500)'                       },
+  { type: 'price', v: '+0.61%',      col: 'var(--moss-500)'                       },
+  { type: 'price', v: '−0.44%',      col: 'var(--clay-500)'                       },
+  { type: 'price', v: '$408.20',     col: 'rgba(11,11,11,0.55)'                   },
+  { type: 'price', v: '+4.21%',      col: 'var(--moss-500)'                       },
+  { type: 'price', v: '−2.07%',      col: 'var(--clay-500)'                       },
   { type: 'tag',   v: 'ACT NOW'                                                   },
   { type: 'tag',   v: 'WATCH'                                                     },
   { type: 'tag',   v: 'FOMC'                                                      },
   { type: 'tag',   v: 'CPI 3.4%'                                                  },
+  { type: 'tag',   v: 'EARNINGS'                                                  },
+  { type: 'tag',   v: 'BEARISH'                                                   },
+  { type: 'tag',   v: 'BULLISH'                                                   },
+  { type: 'tag',   v: 'IPO'                                                       },
   { type: 'label', v: 'NOV·22'                                                    },
   { type: 'label', v: 'BTC $42,180'                                               },
   { type: 'label', v: 'QQQ +0.42%'                                                },
@@ -667,6 +693,19 @@ const PHYS_ITEMS = [
   { type: 'label', v: 'GOLD +1.20%'                                               },
   { type: 'label', v: 'JPM −0.44%'                                                },
   { type: 'label', v: 'AMZN +0.98%'                                               },
+  { type: 'label', v: 'AAPL $192.40'                                              },
+  { type: 'label', v: 'META +1.73%'                                               },
+  { type: 'label', v: 'ETH $2,840'                                                },
+  { type: 'label', v: 'GOOGL +0.82%'                                              },
+  { type: 'label', v: 'DXY 104.2'                                                 },
+  { type: 'label', v: 'OIL $78.40'                                                },
+  { type: 'label', v: '10Y 4.32%'                                                 },
+  { type: 'label', v: 'VIX 16.2'                                                  },
+  { type: 'label', v: 'SOL +4.21%'                                                },
+  { type: 'label', v: 'XOM +0.33%'                                                },
+  { type: 'label', v: 'UNH −1.12%'                                                },
+  { type: 'label', v: 'NFLX +2.88%'                                               },
+  { type: 'label', v: 'AMD +3.14%'                                                },
 ]
 
 function PhysicsConvergence() {
@@ -826,32 +865,16 @@ function PhysicsConvergence() {
   }
 
   return (
-    <section ref={sectionRef} style={{ background: CREAM, height: '150vh', position: 'relative' }}>
-      <div style={{ position: 'sticky', top: 0, height: '100vh', overflow: 'hidden' }}>
-        <div style={{ position: 'absolute', top: 48, left: 48, zIndex: 10 }}>
-          <Tag tone="dark" style={{ letterSpacing: '0.32em' }}>§ 05 — From chaos, signal</Tag>
-        </div>
-        <div style={{ position: 'absolute', top: 48, right: 48, zIndex: 10, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'rgba(11,11,11,0.36)', letterSpacing: '0.18em' }}>
-          Drag · Play
-        </div>
+    <section ref={sectionRef} style={{ background: CREAM, height: '100vh', position: 'relative', overflow: 'hidden' }}>
+      <div style={{ position: 'absolute', top: 48, left: 48, zIndex: 10 }}>
+        <Tag tone="dark" style={{ letterSpacing: '0.32em' }}>§ 05 — From chaos, signal</Tag>
+      </div>
+      <div style={{ position: 'absolute', top: 48, right: 48, zIndex: 10, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'rgba(11,11,11,0.36)', letterSpacing: '0.18em' }}>
+        Drag · Play
+      </div>
 
-        {/* Physics container — fills viewport, Matter.js syncs DOM positions here */}
-        <div ref={containerRef} style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
-          {PHYS_ITEMS.map((f, i) => renderItem(f, i))}
-        </div>
-
-        <div style={{ position: 'absolute', bottom: 40, left: 48, right: 48, pointerEvents: 'none', zIndex: 10 }}>
-          <Rule vis color="rgba(11,11,11,0.16)" />
-          <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 40, alignItems: 'flex-end' }}>
-            <div style={{ fontFamily: 'var(--font-sans)', fontWeight: 500, fontSize: 'clamp(18px, 2.2vw, 30px)', color: INK, letterSpacing: '-0.015em', lineHeight: 1.3 }}>
-              Drag the fragments. Pull signal from the noise — in <span style={{ fontWeight: 700, borderBottom: '2px solid rgba(11,11,11,0.4)' }}>three seconds</span>.
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              <Tag tone="dark">Avg. processing time</Tag>
-              <div style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(48px, 6vw, 96px)', color: INK, letterSpacing: '-0.05em', lineHeight: 0.85, marginTop: 6 }}>0.3s</div>
-            </div>
-          </div>
-        </div>
+      <div ref={containerRef} style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
+        {PHYS_ITEMS.map((f, i) => renderItem(f, i))}
       </div>
     </section>
   )
@@ -862,7 +885,7 @@ function CtaSection({ onEnter }) {
   const p = useElementProgress(ref)
   const mouse = useMouse()
   return (
-    <section ref={ref} style={{ background: INK, minHeight: '100vh', padding: '100px 48px 80px', display: 'flex', flexDirection: 'column', justifyContent: 'center', position: 'relative' }}>
+    <section ref={ref} style={{ background: INK, minHeight: '100vh', padding: '60px 48px 60px', display: 'flex', flexDirection: 'column', justifyContent: 'center', position: 'relative' }}>
       <div style={{ position: 'absolute', top: 48, left: 48 }}><Tag style={{ letterSpacing: '0.32em' }}>§ 06 — Begin</Tag></div>
       <div style={{ maxWidth: 1500, margin: '0 auto', width: '100%' }}>
         <Rule vis={p > 0.1} />
@@ -884,36 +907,35 @@ function CtaSection({ onEnter }) {
 
 function Footer() {
   return (
-    <footer style={{ background: '#070707', borderTop: `1px solid ${BORDER}`, padding: 48 }}>
-      <div style={{ maxWidth: 1500, margin: '0 auto' }}>
-        <div style={{ overflow: 'hidden', padding: '20px 0', borderBottom: `1px solid ${BORDER}` }}>
-          <div style={{ display: 'flex', animation: 'marquee 50s linear infinite', width: 'max-content' }}>
-            {[...Array(6)].map((_, i) => (
-              <span key={i} style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 140, letterSpacing: '-0.05em', color: 'transparent', WebkitTextStroke: `1.2px ${CREAM}`, paddingRight: 80, whiteSpace: 'nowrap' }}>TRAVAUXUS —</span>
+    <footer style={{ background: '#070707', borderTop: `1px solid ${BORDER}`, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', minHeight: 520 }}>
+        {/* Left: large scrolling motive, pinned to bottom-left */}
+        <div style={{ flex: 1, overflow: 'hidden', paddingBottom: 48, minWidth: 0 }}>
+          <div style={{ display: 'flex', animation: 'marquee 18s linear infinite', width: 'max-content' }}>
+            {[...Array(4)].map((_, i) => (
+              <span key={i} style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(100px, 17vw, 260px)', letterSpacing: '-0.05em', color: 'transparent', WebkitTextStroke: `1px ${CREAM}`, paddingRight: 60, whiteSpace: 'nowrap', opacity: 0.65 }}>TRAVAUXUS —</span>
             ))}
           </div>
         </div>
-        <div style={{ marginTop: 32, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 40 }}>
-          <div>
-            <Logo size="sm" />
-            <p style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: 'rgba(240,235,224,0.22)', marginTop: 14, maxWidth: 220, lineHeight: 1.8 }}>Market intelligence for everyone.</p>
+
+        {/* Right: all content stacked vertically */}
+        <div style={{ borderLeft: `1px solid ${BORDER}`, padding: '60px 48px', display: 'flex', flexDirection: 'column', gap: 36, minWidth: 300, alignSelf: 'stretch', justifyContent: 'flex-end' }}>
+          <Logo size="sm" />
+          <p style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: 'rgba(240,235,224,0.22)', maxWidth: 220, lineHeight: 1.8, margin: 0 }}>Market intelligence for everyone.</p>
+          {[
+            { col: 'Product', links: ['Features', 'Pricing', 'Changelog'] },
+            { col: 'Archive', links: ['Today', 'This week', 'Vol. 01'] },
+            { col: 'Legal',   links: ['Disclaimer', 'Terms', 'Privacy'] },
+          ].map(({ col, links }) => (
+            <div key={col}>
+              <Tag style={{ display: 'block', marginBottom: 12 }}>{col}</Tag>
+              {links.map(l => <div key={l} style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: 'rgba(240,235,224,0.32)', marginBottom: 8 }}>{l}</div>)}
+            </div>
+          ))}
+          <div style={{ paddingTop: 20, borderTop: '1px solid rgba(240,235,224,0.06)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <Tag>© {new Date().getFullYear()} Travauxus</Tag>
+            <Tag>For informational purposes only. Not financial advice.</Tag>
           </div>
-          <div style={{ display: 'flex', gap: 48 }}>
-            {[
-              { col: 'Product', links: ['Features', 'Pricing', 'Changelog'] },
-              { col: 'Archive', links: ['Today', 'This week', 'Vol. 01'] },
-              { col: 'Legal',   links: ['Disclaimer', 'Terms', 'Privacy'] },
-            ].map(({ col, links }) => (
-              <div key={col}>
-                <Tag style={{ display: 'block', marginBottom: 16 }}>{col}</Tag>
-                {links.map(l => <div key={l} style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: 'rgba(240,235,224,0.32)', marginBottom: 8 }}>{l}</div>)}
-              </div>
-            ))}
-          </div>
-        </div>
-        <div style={{ marginTop: 32, paddingTop: 22, borderTop: '1px solid rgba(240,235,224,0.06)', display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-          <Tag>© {new Date().getFullYear()} Travauxus</Tag>
-          <Tag>For informational purposes only. Not financial advice.</Tag>
         </div>
       </div>
     </footer>
