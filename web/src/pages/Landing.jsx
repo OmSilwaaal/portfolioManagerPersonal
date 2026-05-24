@@ -24,7 +24,11 @@ function useScrollY() {
 }
 
 function useMouse() {
-  const [pos, setPos] = useState({ x: 0, y: 0, nx: 0, ny: 0 })
+  const [pos, setPos] = useState(() => ({
+    x: typeof window !== 'undefined' ? window.innerWidth / 2 : 0,
+    y: typeof window !== 'undefined' ? window.innerHeight / 2 : 0,
+    nx: 0, ny: 0,
+  }))
   useEffect(() => {
     const onMove = (e) => {
       const nx = (e.clientX / window.innerWidth) - 0.5
@@ -37,6 +41,9 @@ function useMouse() {
   return pos
 }
 
+// Maps 0→1 as element scrolls through viewport.
+// p=0: element bottom hits viewport bottom (just entering)
+// p=1: element top exits viewport top (fully scrolled past)
 function useElementProgress(ref) {
   const [p, setP] = useState(0)
   useEffect(() => {
@@ -66,7 +73,6 @@ function useElementProgress(ref) {
   return p
 }
 
-
 // ─── Live prices from Yahoo Finance (falls back to simulated) ─────────────────
 const TICKER_POOL = [
   { sym: 'AAPL',  yahoo: 'AAPL',    x: 6,  y: 18, delay: 0   },
@@ -90,7 +96,6 @@ function useLivePrices() {
   const [prices, setPrices] = useState({})
   useEffect(() => {
     const yahoSyms = TICKER_POOL.filter(t => t.yahoo).map(t => t.yahoo)
-
     const simulate = () => {
       const mock = {}
       TICKER_POOL.forEach((t, i) => {
@@ -98,7 +103,6 @@ function useLivePrices() {
       })
       setPrices(mock)
     }
-
     const fetchPrices = async () => {
       try {
         const res = await fetch(
@@ -109,17 +113,13 @@ function useLivePrices() {
         const result = {}
         json?.quoteResponse?.result?.forEach(q => {
           const ticker = TICKER_POOL.find(t => t.yahoo === q.symbol)
-          if (ticker && q.regularMarketChangePercent != null) {
+          if (ticker && q.regularMarketChangePercent != null)
             result[ticker.sym] = parseFloat(q.regularMarketChangePercent.toFixed(2))
-          }
         })
         if (Object.keys(result).length > 0) setPrices(result)
         else simulate()
-      } catch {
-        simulate()
-      }
+      } catch { simulate() }
     }
-
     fetchPrices()
     const iv = setInterval(fetchPrices, 60000)
     return () => clearInterval(iv)
@@ -228,8 +228,8 @@ function Cursor() {
   const sc = useRef(1), tsc = useRef(1)
   useEffect(() => {
     const mv = e => { pos.current = { x: e.clientX, y: e.clientY } }
-    const ov = e => { if (e.target.closest('a,button')) tsc.current = 2.6 }
-    const ou = e => { if (e.target.closest('a,button')) tsc.current = 1 }
+    const ov = e => { if (e.target.closest('a,button,[data-draggable]')) tsc.current = 2.6 }
+    const ou = e => { if (e.target.closest('a,button,[data-draggable]')) tsc.current = 1 }
     document.addEventListener('mousemove', mv)
     document.addEventListener('mouseover', ov)
     document.addEventListener('mouseout', ou)
@@ -320,9 +320,25 @@ function Preloader({ onDone }) {
   )
 }
 
-// ─── 1. HERO — tickers with live prices + mouse fade ─────────────────────────
-function FloatingTicker({ t, mouse, visible, price }) {
-  const depth = 18 + (t.x % 3) * 6
+// ─── 1. HERO — tickers with cursor-follow + noise ─────────────────────────────
+// Each ticker softly follows the cursor with varying strength per ticker.
+// The outer div handles cursor-follow (CSS transition lag).
+// The inner div runs the tickerDrift keyframe animation for organic noise.
+function FloatingTicker({ t, idx, mouseX, mouseY, visible, price }) {
+  const W = typeof window !== 'undefined' ? window.innerWidth  : 1280
+  const H = typeof window !== 'undefined' ? window.innerHeight : 800
+
+  // Cursor position as fractions (0-1)
+  const mx = mouseX / W
+  const my = mouseY / H
+  // Ticker base position as fractions
+  const tx = t.x / 100
+  const ty = t.y / 100
+
+  // Pull strength varies per ticker index so they don't all move identically
+  const pullX = (mx - tx) * (28 + (idx % 5) * 9)
+  const pullY = (my - ty) * (18 + (idx % 4) * 7)
+
   const pct = price ?? null
   const d = pct != null
     ? `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`
@@ -331,16 +347,19 @@ function FloatingTicker({ t, mouse, visible, price }) {
   const color = tone === 'pos' ? 'var(--positive)' : tone === 'neg' ? 'var(--negative)' : MUTED
 
   return (
+    // Outer: cursor-follow with lagged spring transition
     <div style={{
       position: 'absolute', top: `${t.y}%`, left: `${t.x}%`,
-      transform: `translate3d(${mouse.nx * depth * -1}px, ${mouse.ny * depth * -1}px, 0)`,
-      transition: 'transform .6s cubic-bezier(0.16,1,0.3,1), opacity .7s ease',
+      transform: `translate3d(${pullX}px, ${pullY}px, 0)`,
+      transition: `transform ${1.2 + (idx % 3) * 0.25}s cubic-bezier(0.16,1,0.3,1), opacity .7s ease`,
       opacity: visible ? 1 : 0,
-      pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4,
-      animation: `tickerDrift 9s ease-in-out ${t.delay}s infinite`,
+      pointerEvents: 'none',
     }}>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.24em', textTransform: 'uppercase', color: MUTED }}>{t.sym}</span>
-      {d && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color, letterSpacing: '0.04em' }}>{d}</span>}
+      {/* Inner: tickerDrift noise animation so it's not pure 1:1 */}
+      <div style={{ animation: `tickerDrift 9s ease-in-out ${t.delay}s infinite`, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.24em', textTransform: 'uppercase', color: MUTED }}>{t.sym}</span>
+        {d && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color, letterSpacing: '0.04em' }}>{d}</span>}
+      </div>
     </div>
   )
 }
@@ -351,13 +370,11 @@ function Hero({ onEnter }) {
   const scrollY = useScrollY()
   const prices = useLivePrices()
 
-  // Start with first 7 tickers visible
   const [visibleSet, setVisibleSet] = useState(() => new Set([0, 1, 2, 3, 4, 5, 6]))
   const moveCountRef = useRef(0)
 
   useEffect(() => { const t = setTimeout(() => setRdy(true), 220); return () => clearTimeout(t) }, [])
 
-  // Swap one ticker on every ~70 mouse movements
   useEffect(() => {
     const onMove = () => {
       moveCountRef.current++
@@ -395,18 +412,37 @@ function Hero({ onEnter }) {
         </div>
       </div>
 
-      {/* Floating tickers — all in pool, fade in/out on mouse move */}
-      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-        {TICKER_POOL.map((t, i) => (
-          <FloatingTicker key={i} t={t} mouse={mouse} visible={visibleSet.has(i)} price={prices[t.sym]} />
-        ))}
+      {/* Top-right: tags + manifesto quote */}
+      <div style={{
+        position: 'absolute', top: 78, right: 48,
+        display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 16,
+        opacity: rdy ? 1 : 0, transition: 'opacity .8s ease .9s',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <Tag>Market Intelligence</Tag>
+          <div style={{ width: 28, height: 1, background: BORDER }} />
+          <Tag>Vol. 01 · Est. 2026</Tag>
+        </div>
+        <p style={{
+          fontFamily: 'var(--font-sans)', fontSize: 12, lineHeight: 1.75,
+          color: 'var(--on-ink-text-3)', maxWidth: 260, margin: 0, textAlign: 'right',
+        }}>
+          We believe markets should be legible.<br />
+          That every investor — not just the ones<br />
+          in glass towers — deserves the same fluency.
+        </p>
       </div>
 
-      {/* Corner labels */}
-      <div style={{ position: 'absolute', top: 78, right: 48, display: 'flex', alignItems: 'center', gap: 14, opacity: rdy ? 1 : 0, transition: 'opacity .8s ease .9s' }}>
-        <Tag>Market Intelligence</Tag>
-        <div style={{ width: 28, height: 1, background: BORDER }} />
-        <Tag>Vol. 01 · Est. 2026</Tag>
+      {/* Floating tickers */}
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+        {TICKER_POOL.map((t, i) => (
+          <FloatingTicker
+            key={i} t={t} idx={i}
+            mouseX={mouse.x} mouseY={mouse.y}
+            visible={visibleSet.has(i)}
+            price={prices[t.sym]}
+          />
+        ))}
       </div>
 
       {/* Vertical archive label */}
@@ -418,7 +454,7 @@ function Hero({ onEnter }) {
         <Tag style={{ letterSpacing: '0.38em' }}>An archive of the present →</Tag>
       </div>
 
-      {/* Main display type with mouse parallax */}
+      {/* Main headline with mouse parallax */}
       <div style={{
         position: 'relative', zIndex: 2,
         transform: `translate3d(${mouse.nx * 14}px, ${mouse.ny * 8}px, 0)`,
@@ -488,39 +524,63 @@ function DualMarquee() {
   )
 }
 
-// ─── 3. STATEMENT — word-by-word reveal ──────────────────────────────────────
-function Statement() {
+// ─── 3. LANGUAGE WALL — replaces Statement, multilingual text streams ─────────
+const LANG_ROWS = [
+  { text: 'Le marché est en mouvement — Les signaux arrivent trop vite — Aucune donnée ne vous échappe — Intelligence du marché — Analyse en temps réel — ', dir: 1,  dur: 42, sz: 13,  wt: 400, font: 'sans', op: 0.48 },
+  { text: '市場が動いている — シグナルが速すぎる — リアルタイム分析 — 市場情報 — 人工知能 — 投資家向けの分析 — ', dir: -1, dur: 34, sz: 13,  wt: 400, font: 'sans', op: 0.44 },
+  { text: 'MARCHÉ LIBRE — ', dir: 1, dur: 60, sz: 185, wt: 700, font: 'display', stretch: 125, op: 0.10 },
+  { text: 'AAPL +2.40% — NVDA −3.18% — BTC $42,180 — GOLD +1.20% — TSLA −1.05% — QQQ +0.42% — META +1.73% — SPY +0.18% — AMZN +0.98% — MSFT +0.61% — ', dir: -1, dur: 24, sz: 11,  wt: 500, font: 'mono', op: 0.36 },
+  { text: 'Der Markt bewegt sich zu schnell — Keine Daten entgehen dir — Echtzeit-Analyse — Künstliche Intelligenz — Marktintelligenz — ', dir: 1,  dur: 40, sz: 13,  wt: 400, font: 'sans', op: 0.48 },
+  { text: '市场正在运动 — 信号来得太快了 — 实时分析 — 人工智能 — 市场情报 — 投资者数据分析 — ', dir: -1, dur: 36, sz: 13,  wt: 400, font: 'sans', op: 0.44 },
+  { text: 'El mercado se mueve — Las señales llegan demasiado rápido — Ningún dato se te escapa — La inteligencia del mercado — ', dir: 1,  dur: 44, sz: 13,  wt: 400, font: 'sans', op: 0.48 },
+  { text: 'INTELLIGENCE — ', dir: -1, dur: 72, sz: 225, wt: 700, font: 'display', stretch: 125, op: 0.085 },
+  { text: '시장이 움직이고 있습니다 — 신호가 너무 빠르게 옵니다 — 실시간 분석 — 인공 지능 — 시장 정보 — ', dir: 1,  dur: 48, sz: 13,  wt: 400, font: 'sans', op: 0.44 },
+  { text: 'Il mercato si muove velocemente — I segnali arrivano troppo presto — Nessun dato ti sfugge — Intelligenza artificiale — ', dir: -1, dur: 38, sz: 13,  wt: 400, font: 'sans', op: 0.48 },
+  { text: 'О рынке в реальном времени — Искусственный интеллект — Никакие данные не ускользнут — Финансовая аналитика — ', dir: 1,  dur: 43, sz: 13,  wt: 400, font: 'sans', op: 0.44 },
+  { text: '市場 — MARCHÉ — MARKT — 시장 — MERCADO — MARKET — РЫНОК — ', dir: -1, dur: 30, sz: 36,  wt: 600, font: 'display', stretch: 105, op: 0.20 },
+  { text: 'Every signal — Every trade — Every move — Every market — Plain English — No jargon — Act with confidence — Real-time intelligence — ', dir: 1,  dur: 36, sz: 13,  wt: 400, font: 'sans', op: 0.48 },
+  { text: 'SIGNAL — ', dir: 1, dur: 88, sz: 275, wt: 700, font: 'display', stretch: 125, op: 0.065 },
+  { text: 'Marché libre — Données en direct — Cours en temps réel — Portfolio intelligence — Signaux du marché — Investisseurs avisés — ', dir: -1, dur: 45, sz: 13,  wt: 400, font: 'sans', op: 0.48 },
+]
+
+function LanguageWall() {
   const ref = useRef(null)
-  const p = useElementProgress(ref)
-  const text = "We believe markets should be legible. That every investor — not just the ones in glass towers — deserves the same fluency. So we built the intelligence layer the market never had.".split(' ')
+  const [vis, setVis] = useState(false)
+  useEffect(() => {
+    const o = new IntersectionObserver(([e]) => { if (e.isIntersecting) setVis(true) }, { threshold: 0.02 })
+    if (ref.current) o.observe(ref.current)
+    return () => o.disconnect()
+  }, [])
 
   return (
-    <section ref={ref} style={{ background: CREAM, padding: '160px 48px', position: 'relative' }}>
-      <div style={{ position: 'absolute', top: 80, left: 48 }}>
-        <Tag tone="dark" style={{ letterSpacing: '0.32em' }}>§ 01 — Manifesto</Tag>
+    <section ref={ref} style={{ background: CREAM, overflow: 'hidden', position: 'relative', padding: '56px 0' }}>
+      <div style={{ position: 'absolute', top: 22, left: 48, zIndex: 10 }}>
+        <Tag tone="dark" style={{ letterSpacing: '0.32em' }}>§ 02 — The signal</Tag>
       </div>
-      <div style={{ position: 'absolute', top: 80, right: 48 }}>
-        <Tag tone="dark" style={{ letterSpacing: '0.32em' }}>{String(Math.min(100, Math.round(p * 100))).padStart(3, '0')}</Tag>
-      </div>
-      <div style={{ maxWidth: 1200, margin: '0 auto', paddingTop: 40 }}>
-        <div style={{
-          fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 100, 'wght' 500", fontWeight: 500,
-          fontSize: 'clamp(28px, 4.4vw, 64px)', letterSpacing: '-0.025em', lineHeight: 1.12, color: INK,
-        }}>
-          {text.map((w, i) => {
-            const start = i / text.length
-            const local = Math.max(0, Math.min(1, (p - 0.05 - start * 0.7) * 4))
-            return (
-              <span key={i} style={{
-                opacity: 0.12 + local * 0.88,
-                fontWeight: (w.endsWith('.') || w.endsWith(',')) ? 700 : 500,
-                transition: 'opacity .12s linear',
-                marginRight: '0.28em',
-                whiteSpace: w === '—' ? 'nowrap' : 'normal',
-              }}>{w}</span>
-            )
-          })}
-        </div>
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        {LANG_ROWS.map((row, i) => {
+          const fontFamily = row.font === 'display' ? 'var(--font-display)' : row.font === 'mono' ? 'var(--font-mono)' : 'var(--font-sans)'
+          const varSettings = row.font === 'display' && row.stretch
+            ? { fontVariationSettings: `'wdth' ${row.stretch}, 'wght' ${row.wt}`, fontStretch: `${row.stretch}%` }
+            : {}
+          const anim = row.dir === 1 ? 'marquee' : 'marqueeRev'
+          const lh = row.sz >= 100 ? 0.84 : 1.0
+          const ls = row.font === 'mono' ? '0.06em' : row.sz >= 100 ? '-0.045em' : '-0.01em'
+          return (
+            <div key={i} style={{ overflow: 'hidden', lineHeight: lh }}>
+              <div style={{ display: 'flex', animation: vis ? `${anim} ${row.dur}s linear infinite` : 'none', width: 'max-content', opacity: row.op }}>
+                {[...Array(3)].map((_, k) => (
+                  <span key={k} style={{
+                    fontFamily, fontSize: row.sz, fontWeight: row.wt, color: INK,
+                    whiteSpace: 'nowrap', letterSpacing: ls,
+                    paddingRight: row.sz >= 100 ? '0.4em' : '2.5em',
+                    ...varSettings,
+                  }}>{row.text}</span>
+                ))}
+              </div>
+            </div>
+          )
+        })}
       </div>
     </section>
   )
@@ -550,13 +610,13 @@ function PinnedArchive() {
       <div style={{ position: 'sticky', top: 0, height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '64px 48px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
-            <Tag style={{ letterSpacing: '0.32em' }}>§ 02 — The archive</Tag>
+            <Tag style={{ letterSpacing: '0.32em' }}>§ 03 — The archive</Tag>
             <div style={{ marginTop: 12, fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(40px, 6vw, 90px)', color: CREAM, letterSpacing: '-0.045em', lineHeight: 0.9 }}>
               EVERY SIGNAL,<br />INDEXED.
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <Tag>Drag → scroll</Tag>
+            <Tag>Scroll →</Tag>
             <div style={{ marginTop: 12, fontFamily: 'var(--font-mono)', fontSize: 11, color: MUTED, letterSpacing: '0.18em' }}>
               {String(Math.min(ARCHIVE.length, Math.floor(stage * ARCHIVE.length) + 1)).padStart(3, '0')} / {String(ARCHIVE.length).padStart(3, '0')}
             </div>
@@ -586,13 +646,9 @@ function PinnedArchive() {
                       <span style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 96, color: CREAM, letterSpacing: '-0.05em', lineHeight: 0.85 }}>{a.n}</span>
                       <Tag style={{ color: urgencyColor(a.urgency) }}>{a.urgency}</Tag>
                     </div>
-                    <div style={{ marginTop: 24, fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.24em', color: MUTED }}>
-                      {a.y} · {a.ticker}
-                    </div>
+                    <div style={{ marginTop: 24, fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.24em', color: MUTED }}>{a.y} · {a.ticker}</div>
                   </div>
-                  <div style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 100, 'wght' 500", fontWeight: 500, fontSize: 24, letterSpacing: '-0.02em', lineHeight: 1.22, color: CREAM }}>
-                    {a.headline}
-                  </div>
+                  <div style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 100, 'wght' 500", fontWeight: 500, fontSize: 24, letterSpacing: '-0.02em', lineHeight: 1.22, color: CREAM }}>{a.headline}</div>
                   <div style={{ borderTop: '1px solid rgba(240,235,224,0.08)', paddingTop: 14, display: 'flex', justifyContent: 'space-between' }}>
                     <Tag style={{ color: MUTED, fontSize: 9 }}>From the feed</Tag>
                     <Tag style={{ color: MUTED, fontSize: 9 }}>↘</Tag>
@@ -618,140 +674,57 @@ function PinnedArchive() {
   )
 }
 
-// ─── 5. LANGUAGE WALL — multilingual text stream ─────────────────────────────
-const LANG_ROWS = [
-  { text: 'Le marché est en mouvement — Les signaux arrivent trop vite — Aucune donnée ne vous échappe — Intelligence du marché — Analyse en temps réel — ', dir: 1,  dur: 42, sz: 13,  wt: 400, font: 'sans', op: 0.48 },
-  { text: '市場が動いている — シグナルが速すぎる — リアルタイム分析 — 市場情報 — 人工知能 — 投資家向けの分析 — ', dir: -1, dur: 34, sz: 13,  wt: 400, font: 'sans', op: 0.44 },
-  { text: 'MARCHÉ LIBRE — ', dir: 1, dur: 60, sz: 185, wt: 700, font: 'display', stretch: 125, op: 0.10 },
-  { text: 'AAPL +2.40% — NVDA −3.18% — BTC $42,180 — GOLD +1.20% — TSLA −1.05% — QQQ +0.42% — META +1.73% — SPY +0.18% — AMZN +0.98% — MSFT +0.61% — ', dir: -1, dur: 24, sz: 11,  wt: 500, font: 'mono', op: 0.36 },
-  { text: 'Der Markt bewegt sich zu schnell — Keine Daten entgehen dir — Echtzeit-Analyse — Künstliche Intelligenz — Marktintelligenz — ', dir: 1,  dur: 40, sz: 13,  wt: 400, font: 'sans', op: 0.48 },
-  { text: '市场正在运动 — 信号来得太快了 — 实时分析 — 人工智能 — 市场情报 — 投资者数据分析 — ', dir: -1, dur: 36, sz: 13,  wt: 400, font: 'sans', op: 0.44 },
-  { text: 'El mercado se mueve — Las señales llegan demasiado rápido — Ningún dato se te escapa — La inteligencia del mercado — ', dir: 1,  dur: 44, sz: 13,  wt: 400, font: 'sans', op: 0.48 },
-  { text: 'INTELLIGENCE — ', dir: -1, dur: 72, sz: 225, wt: 700, font: 'display', stretch: 125, op: 0.085 },
-  { text: '시장이 움직이고 있습니다 — 신호가 너무 빠르게 옵니다 — 실시간 분석 — 인공 지능 — 시장 정보 — ', dir: 1,  dur: 48, sz: 13,  wt: 400, font: 'sans', op: 0.44 },
-  { text: 'Il mercato si muove velocemente — I segnali arrivano troppo presto — Nessun dato ti sfugge — Intelligenza artificiale — ', dir: -1, dur: 38, sz: 13,  wt: 400, font: 'sans', op: 0.48 },
-  { text: 'О рынке в реальном времени — Искусственный интеллект — Никакие данные не ускользнут — Финансовая аналитика — ', dir: 1,  dur: 43, sz: 13,  wt: 400, font: 'sans', op: 0.44 },
-  { text: '市場 — MARCHÉ — MARKT — 시장 — MERCADO — MARKET — РЫНОК — ', dir: -1, dur: 30, sz: 36,  wt: 600, font: 'display', stretch: 105, op: 0.20 },
-  { text: 'Every signal — Every trade — Every move — Every market — Plain English — No jargon — Act with confidence — Real-time intelligence — ', dir: 1,  dur: 36, sz: 13,  wt: 400, font: 'sans', op: 0.48 },
-  { text: 'SIGNAL — ', dir: 1, dur: 88, sz: 275, wt: 700, font: 'display', stretch: 125, op: 0.065 },
-  { text: 'Marché libre — Données en direct — Cours en temps réel — Portfolio intelligence — Signaux du marché — Investisseurs avisés — ', dir: -1, dur: 45, sz: 13,  wt: 400, font: 'sans', op: 0.48 },
-]
-
-function LanguageWall() {
-  const ref = useRef(null)
-  const [vis, setVis] = useState(false)
-  useEffect(() => {
-    const o = new IntersectionObserver(
-      ([e]) => { if (e.isIntersecting) setVis(true) },
-      { threshold: 0.02 }
-    )
-    if (ref.current) o.observe(ref.current)
-    return () => o.disconnect()
-  }, [])
-
-  return (
-    <section ref={ref} style={{ background: CREAM, overflow: 'hidden', position: 'relative', padding: '72px 0' }}>
-      <div style={{ position: 'absolute', top: 32, left: 48, zIndex: 10 }}>
-        <Tag tone="dark" style={{ letterSpacing: '0.32em' }}>§ 03 — The signal</Tag>
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
-        {LANG_ROWS.map((row, i) => {
-          const fontFamily = row.font === 'display'
-            ? 'var(--font-display)'
-            : row.font === 'mono'
-            ? 'var(--font-mono)'
-            : 'var(--font-sans)'
-          const varSettings = row.font === 'display' && row.stretch
-            ? { fontVariationSettings: `'wdth' ${row.stretch}, 'wght' ${row.wt}`, fontStretch: `${row.stretch}%` }
-            : {}
-          const anim = row.dir === 1 ? 'marquee' : 'marqueeRev'
-          const lh = row.sz >= 100 ? 0.84 : 1.0
-          const ls = row.font === 'mono' ? '0.06em' : row.sz >= 100 ? '-0.045em' : '-0.01em'
-
-          return (
-            <div key={i} style={{ overflow: 'hidden', lineHeight: lh }}>
-              <div style={{
-                display: 'flex',
-                animation: vis ? `${anim} ${row.dur}s linear infinite` : 'none',
-                width: 'max-content',
-                opacity: row.op,
-              }}>
-                {[...Array(3)].map((_, k) => (
-                  <span key={k} style={{
-                    fontFamily,
-                    fontSize: row.sz,
-                    fontWeight: row.wt,
-                    color: INK,
-                    whiteSpace: 'nowrap',
-                    letterSpacing: ls,
-                    paddingRight: row.sz >= 100 ? '0.4em' : '2.5em',
-                    ...varSettings,
-                  }}>
-                    {row.text}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    </section>
-  )
-}
-
-// ─── 6. MANIFESTO — fixed scroll-reveal, reduced height ──────────────────────
+// ─── 5. MANIFESTO — fixed timing: animates while sticky panel is in view ──────
 function Manifesto() {
   const ref = useRef(null)
   const p = useElementProgress(ref)
 
-  // Normalize p to [0,1] within the sticky visible window.
-  // Section is 170vh → total = 270vh.
-  // r.top=0 → p≈0.37; r.top=-70vh → p≈0.63.
-  // Use a slightly wider window with buffer so animations start and end cleanly.
-  const lp = Math.max(0, Math.min(1, (p - 0.28) / 0.44))
-  const skewBase = (lp - 0.5) * 14
+  // Section is 150vh → total = 250vh
+  // Sticky window: r.top goes from 0 to -50vh
+  // p at r.top=0: 100/250 = 0.40
+  // p at r.top=-50vh: 150/250 = 0.60
+  // Map p in [0.38, 0.62] → lp [0, 1] with slight buffer
+  const lp = Math.max(0, Math.min(1, (p - 0.36) / 0.28))
+  const skewBase = (lp - 0.5) * 12
 
-  // Each line: enter at lp_start, fully up at lp_end
-  const evTY  = Math.max(0, (1 - Math.min(1, Math.max(0, lp - 0.10) / 0.25)) * 120)
-  const ynTY  = Math.max(0, (1 - Math.min(1, Math.max(0, lp - 0.18) / 0.27)) * 120)
-  const ntTY  = Math.max(0, (1 - Math.min(1, Math.max(0, lp - 0.32) / 0.42)) * 120)
+  const evTY = Math.max(0, (1 - Math.min(1, Math.max(0, lp - 0.05) / 0.28)) * 120)
+  const ynTY = Math.max(0, (1 - Math.min(1, Math.max(0, lp - 0.18) / 0.28)) * 120)
+  const ntTY = Math.max(0, (1 - Math.min(1, Math.max(0, lp - 0.35) / 0.40)) * 120)
 
   return (
-    <section ref={ref} id="manifesto" style={{ background: INK, height: '170vh', position: 'relative' }}>
+    <section ref={ref} id="manifesto" style={{ background: INK, height: '150vh', position: 'relative' }}>
       <div style={{ position: 'sticky', top: 0, height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 48px' }}>
-        <div style={{ position: 'absolute', top: 64, left: 48 }}><Tag style={{ letterSpacing: '0.32em' }}>§ 04 — What we built</Tag></div>
-        <div style={{ position: 'absolute', top: 64, right: 48, fontFamily: 'var(--font-mono)', fontSize: 11, color: MUTED, letterSpacing: '0.18em' }}>{String(Math.round(lp * 100)).padStart(3, '0')} / 100</div>
+        <div style={{ position: 'absolute', top: 48, left: 48 }}><Tag style={{ letterSpacing: '0.32em' }}>§ 04 — What we built</Tag></div>
+        <div style={{ position: 'absolute', top: 48, right: 48, fontFamily: 'var(--font-mono)', fontSize: 11, color: MUTED, letterSpacing: '0.18em' }}>{String(Math.round(lp * 100)).padStart(3, '0')} / 100</div>
 
         <div style={{ maxWidth: 1700, margin: '0 auto', width: '100%' }}>
           <div style={{ overflow: 'hidden', lineHeight: 0.86 }}>
             <div style={{
               fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700,
-              fontSize: 'clamp(72px, 16vw, 260px)', color: CREAM, letterSpacing: '-0.05em',
+              fontSize: 'clamp(60px, 14vw, 240px)', color: CREAM, letterSpacing: '-0.05em',
               transform: `translateY(${evTY}%) skewY(${skewBase * 0.4}deg)`,
-              transition: 'transform .08s linear',
+              transition: 'transform .06s linear',
             }}>EVERYTHING</div>
           </div>
           <div style={{ overflow: 'hidden', lineHeight: 0.86 }}>
             <div style={{
               fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700,
-              fontSize: 'clamp(72px, 16vw, 260px)', color: CREAM, letterSpacing: '-0.05em',
+              fontSize: 'clamp(60px, 14vw, 240px)', color: CREAM, letterSpacing: '-0.05em',
               transform: `translateY(${ynTY}%) skewY(${skewBase * -0.4}deg)`,
-              transition: 'transform .08s linear',
+              transition: 'transform .06s linear',
             }}>YOU NEED.</div>
           </div>
-          <div style={{ overflow: 'hidden', lineHeight: 0.86, marginLeft: '10vw', marginTop: 6 }}>
+          <div style={{ overflow: 'hidden', lineHeight: 0.86, marginLeft: '8vw', marginTop: 4 }}>
             <div style={{
               fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700,
-              fontSize: 'clamp(72px, 16vw, 260px)', color: 'transparent', WebkitTextStroke: `1.2px ${CREAM}`, letterSpacing: '-0.05em',
+              fontSize: 'clamp(60px, 14vw, 240px)', color: 'transparent', WebkitTextStroke: `1.2px ${CREAM}`, letterSpacing: '-0.05em',
               transform: `translateY(${ntTY}%)`,
-              transition: 'transform .08s linear',
+              transition: 'transform .06s linear',
             }}>{"NOTHING YOU DON'T."}</div>
           </div>
         </div>
 
-        {/* Bottom feature strip */}
-        <div style={{ position: 'absolute', bottom: 48, left: 48, right: 48, display: 'flex', gap: 32, justifyContent: 'space-between', opacity: Math.min(1, lp * 3), transition: 'opacity .3s' }}>
+        <div style={{ position: 'absolute', bottom: 40, left: 48, right: 48, display: 'flex', gap: 32, justifyContent: 'space-between', opacity: Math.min(1, lp * 4), transition: 'opacity .3s' }}>
           {[
             { n: '01', l: 'AI urgency on every article' },
             { n: '02', l: 'Portfolio impact analysis' },
@@ -769,11 +742,11 @@ function Manifesto() {
   )
 }
 
-// ─── 7. CONVERGENCE — physics-based drop & drag ───────────────────────────────
+// ─── 6. PHYSICS CONVERGENCE — gravity drop + drag ────────────────────────────
 const PHYS_ITEMS = [
   { type: 'tag',   v: 'ACT NOW',  sx: 0.12, sy: -0.30 },
   { type: 'price', v: '+2.40%',   sx: 0.78, sy: -0.50 },
-  { type: 'name',  v: 'NVIDIA',   sx: 0.30, sy: -0.20 },
+  { type: 'name',  v: 'NVIDIA',   sx: 0.30, sy: -0.22 },
   { type: 'date',  v: 'NOV·22',   sx: 0.65, sy: -0.55 },
   { type: 'big',   v: '0.3s',     sx: 0.48, sy: -0.40 },
   { type: 'tag',   v: 'WATCH',    sx: 0.82, sy: -0.28 },
@@ -797,10 +770,10 @@ function PhysicsConvergence() {
     bodies.current = PHYS_ITEMS.map((item) => ({
       x: item.sx * W + (Math.random() - 0.5) * 60,
       y: item.sy * H,
-      vx: (Math.random() - 0.5) * 4,
-      vy: Math.random() * 2 + 1,
-      rot: (Math.random() - 0.5) * 24,
-      vrot: (Math.random() - 0.5) * 2.5,
+      vx: (Math.random() - 0.5) * 3,
+      vy: Math.random() * 1.5 + 0.5,
+      rot: (Math.random() - 0.5) * 18,
+      vrot: (Math.random() - 0.5) * 1.8,
     }))
   }, [])
 
@@ -809,20 +782,36 @@ function PhysicsConvergence() {
     startedRef.current = true
     if (!bodies.current) initBodies()
 
-    const GRAVITY = 0.30
-    const FRICTION = 0.987
-    const BOUNCE = 0.40
-    const getFloor = () => window.innerHeight * 0.86
+    const GRAVITY = 0.28
+    const FRICTION = 0.990
+    const ROT_DAMP = 0.97
+    // Bounce threshold: only bounce if velocity is significant enough to see it
+    const BOUNCE_THRESHOLD = 2.8
+    const BOUNCE = 0.38
+    const getFloor = () => window.innerHeight * 0.84
     const WALL_PAD = 60
 
     const tick = () => {
       const d = drag.current
       bodies.current.forEach((b, i) => {
-        if (d.active && d.idx === i) return
+        const el = itemRefs.current[i]
+        if (!el) return
+
+        if (d.active && d.idx === i) {
+          // Dragging: move to cursor, show picked-up state
+          el.style.transform = `translate(-50%, -50%) rotate(${b.rot}deg) scale(1.12)`
+          el.style.filter = 'drop-shadow(0 12px 24px rgba(11,11,11,0.22))'
+          el.style.zIndex = '20'
+          return
+        }
+
+        // Reset drag styles
+        el.style.filter = ''
+        el.style.zIndex = ''
 
         b.vy += GRAVITY
         b.vx *= FRICTION
-        b.vrot *= 0.96
+        b.vrot *= ROT_DAMP
         b.x += b.vx
         b.y += b.vy
         b.rot += b.vrot
@@ -830,21 +819,26 @@ function PhysicsConvergence() {
         const floor = getFloor()
         if (b.y > floor) {
           b.y = floor
-          b.vy *= -BOUNCE
-          b.vx *= 0.82
-          b.vrot *= 0.45
-          if (Math.abs(b.vy) < 1.2) b.vy = 0
+          if (Math.abs(b.vy) > BOUNCE_THRESHOLD) {
+            b.vy *= -BOUNCE
+            b.vx *= 0.80
+            b.vrot *= 0.40
+          } else {
+            // Settle — no micro-bounce
+            b.vy = 0
+            b.vx *= 0.88
+            b.vrot *= 0.55
+            if (Math.abs(b.vx) < 0.12) b.vx = 0
+            if (Math.abs(b.vrot) < 0.05) b.vrot = 0
+          }
         }
         const rwall = window.innerWidth - WALL_PAD
-        if (b.x < WALL_PAD) { b.x = WALL_PAD; b.vx = Math.abs(b.vx) * 0.55 }
-        if (b.x > rwall)    { b.x = rwall;    b.vx = -Math.abs(b.vx) * 0.55 }
+        if (b.x < WALL_PAD) { b.x = WALL_PAD; b.vx = Math.abs(b.vx) * 0.50 }
+        if (b.x > rwall)    { b.x = rwall;    b.vx = -Math.abs(b.vx) * 0.50 }
 
-        const el = itemRefs.current[i]
-        if (el) {
-          el.style.left = `${b.x}px`
-          el.style.top  = `${b.y}px`
-          el.style.transform = `translate(-50%, -50%) rotate(${b.rot}deg)`
-        }
+        el.style.left      = `${b.x}px`
+        el.style.top       = `${b.y}px`
+        el.style.transform = `translate(-50%, -50%) rotate(${b.rot}deg)`
       })
       rafRef.current = requestAnimationFrame(tick)
     }
@@ -852,25 +846,19 @@ function PhysicsConvergence() {
     rafRef.current = requestAnimationFrame(tick)
   }, [initBodies])
 
-  // Start when section enters view
   useEffect(() => {
     if (p > 0.08 && !startedRef.current) runPhysics()
   }, [p, runPhysics])
 
-  // Stop on unmount
   useEffect(() => () => {
     startedRef.current = false
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
   }, [])
 
-  // Drag handling
   useEffect(() => {
-    const getXY = (e) => {
-      const t = e.touches?.[0] ?? e
-      return [t.clientX, t.clientY]
-    }
+    const getXY = (e) => { const t = e.touches?.[0] ?? e; return [t.clientX, t.clientY] }
     const nearest = (mx, my) => {
-      let idx = -1, best = 90
+      let idx = -1, best = 100
       bodies.current?.forEach((b, i) => {
         const d = Math.hypot(b.x - mx, b.y - my)
         if (d < best) { best = d; idx = i }
@@ -891,23 +879,22 @@ function PhysicsConvergence() {
       if (!drag.current.active) return
       const [mx, my] = getXY(e)
       const { idx, prevX, prevY } = drag.current
-      const vx = (mx - prevX) * 0.75
-      const vy = (my - prevY) * 0.75
+      const vx = (mx - prevX) * 0.70
+      const vy = (my - prevY) * 0.70
       drag.current = { ...drag.current, prevX: mx, prevY: my, vx, vy }
       const b = bodies.current?.[idx]
-      if (b) { b.x = mx; b.y = my; b.rot += vx * 0.12 }
+      if (b) { b.x = mx; b.y = my; b.rot += vx * 0.10 }
       e.preventDefault()
     }
     const onUp = () => {
       if (!drag.current.active) return
       const { idx, vx, vy } = drag.current
       const b = bodies.current?.[idx]
-      if (b) { b.vx = vx * 2.2; b.vy = vy * 2.2 }
+      if (b) { b.vx = vx * 2.4; b.vy = vy * 2.4 }
       const el = itemRefs.current[idx]
       if (el) el.style.cursor = 'grab'
       drag.current.active = false
     }
-
     const c = containerRef.current
     c?.addEventListener('mousedown', onDown)
     c?.addEventListener('touchstart', onDown, { passive: false })
@@ -926,67 +913,40 @@ function PhysicsConvergence() {
   }, [])
 
   const renderItem = (f, i) => {
-    const base = {
-      position: 'absolute',
-      left: `${f.sx * 100}%`, top: '-10%',
-      transform: 'translate(-50%, -50%)',
-      cursor: 'grab', userSelect: 'none', WebkitUserSelect: 'none',
-    }
+    const base = { position: 'absolute', left: `${f.sx * 100}%`, top: '-8%', transform: 'translate(-50%, -50%)', cursor: 'grab', userSelect: 'none', WebkitUserSelect: 'none' }
     if (f.type === 'tag') return (
-      <span key={i} ref={el => { itemRefs.current[i] = el }} style={{
-        ...base, fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.24em',
-        textTransform: 'uppercase', padding: '5px 10px',
-        border: '1px solid rgba(11,11,11,0.22)', color: INK, background: CREAM, whiteSpace: 'nowrap',
-      }}>{f.v}</span>
+      <span key={i} ref={el => { itemRefs.current[i] = el }} data-draggable style={{ ...base, fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.24em', textTransform: 'uppercase', padding: '6px 11px', border: '1px solid rgba(11,11,11,0.24)', color: INK, background: CREAM, whiteSpace: 'nowrap' }}>{f.v}</span>
     )
     if (f.type === 'price') return (
-      <span key={i} ref={el => { itemRefs.current[i] = el }} style={{
-        ...base, fontFamily: 'var(--font-mono)', fontSize: 22,
-        color: f.v.startsWith('+') ? 'var(--moss-500)' : 'var(--clay-500)', whiteSpace: 'nowrap',
-      }}>{f.v}</span>
+      <span key={i} ref={el => { itemRefs.current[i] = el }} data-draggable style={{ ...base, fontFamily: 'var(--font-mono)', fontSize: 24, color: f.v.startsWith('+') ? 'var(--moss-500)' : 'var(--clay-500)', whiteSpace: 'nowrap' }}>{f.v}</span>
     )
     if (f.type === 'name') return (
-      <span key={i} ref={el => { itemRefs.current[i] = el }} style={{
-        ...base, fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700",
-        fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(44px, 6vw, 86px)',
-        color: INK, letterSpacing: '-0.05em', whiteSpace: 'nowrap',
-      }}>{f.v}</span>
+      <span key={i} ref={el => { itemRefs.current[i] = el }} data-draggable style={{ ...base, fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(44px, 6vw, 88px)', color: INK, letterSpacing: '-0.05em', whiteSpace: 'nowrap' }}>{f.v}</span>
     )
     if (f.type === 'date') return (
-      <span key={i} ref={el => { itemRefs.current[i] = el }} style={{
-        ...base, fontFamily: 'var(--font-mono)', fontSize: 14,
-        color: 'rgba(11,11,11,0.42)', letterSpacing: '0.14em', whiteSpace: 'nowrap',
-      }}>{f.v}</span>
+      <span key={i} ref={el => { itemRefs.current[i] = el }} data-draggable style={{ ...base, fontFamily: 'var(--font-mono)', fontSize: 15, color: 'rgba(11,11,11,0.44)', letterSpacing: '0.14em', whiteSpace: 'nowrap' }}>{f.v}</span>
     )
     if (f.type === 'big') return (
-      <span key={i} ref={el => { itemRefs.current[i] = el }} style={{
-        ...base, fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700",
-        fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(80px, 13vw, 190px)',
-        color: 'rgba(11,11,11,0.07)', letterSpacing: '-0.05em', lineHeight: 0.82, whiteSpace: 'nowrap',
-      }}>{f.v}</span>
+      <span key={i} ref={el => { itemRefs.current[i] = el }} data-draggable style={{ ...base, fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(80px, 13vw, 190px)', color: 'rgba(11,11,11,0.07)', letterSpacing: '-0.05em', lineHeight: 0.82, whiteSpace: 'nowrap' }}>{f.v}</span>
     )
     return null
   }
 
   return (
-    <section ref={ref} style={{ background: CREAM, height: '180vh', position: 'relative' }}>
+    <section ref={ref} style={{ background: CREAM, height: '150vh', position: 'relative' }}>
       <div style={{ position: 'sticky', top: 0, height: '100vh', overflow: 'hidden' }}>
-        <div style={{ position: 'absolute', top: 64, left: 48 }}>
+        <div style={{ position: 'absolute', top: 48, left: 48 }}>
           <Tag tone="dark" style={{ letterSpacing: '0.32em' }}>§ 05 — From chaos, signal</Tag>
         </div>
-        <div style={{ position: 'absolute', top: 64, right: 48, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'rgba(11,11,11,0.38)', letterSpacing: '0.18em' }}>
+        <div style={{ position: 'absolute', top: 48, right: 48, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'rgba(11,11,11,0.36)', letterSpacing: '0.18em' }}>
           Click · Drag · Play
         </div>
-
-        {/* Physics canvas */}
         <div ref={containerRef} style={{ position: 'absolute', inset: 0, cursor: 'crosshair' }}>
           {PHYS_ITEMS.map((f, i) => renderItem(f, i))}
         </div>
-
-        {/* Bottom bar */}
-        <div style={{ position: 'absolute', bottom: 48, left: 48, right: 48, pointerEvents: 'none' }}>
+        <div style={{ position: 'absolute', bottom: 40, left: 48, right: 48, pointerEvents: 'none' }}>
           <Rule vis color="rgba(11,11,11,0.16)" />
-          <div style={{ marginTop: 18, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 48, alignItems: 'flex-end' }}>
+          <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 40, alignItems: 'flex-end' }}>
             <div style={{ fontFamily: 'var(--font-sans)', fontWeight: 500, fontSize: 'clamp(18px, 2.2vw, 30px)', color: INK, letterSpacing: '-0.015em', lineHeight: 1.3 }}>
               Drag the fragments. Pull signal from the noise — in <span style={{ fontWeight: 700, borderBottom: '2px solid rgba(11,11,11,0.4)' }}>three seconds</span>.
             </div>
@@ -1001,18 +961,18 @@ function PhysicsConvergence() {
   )
 }
 
-// ─── 8. CTA ───────────────────────────────────────────────────────────────────
+// ─── 7. CTA ───────────────────────────────────────────────────────────────────
 function CtaSection({ onEnter }) {
   const ref = useRef(null)
   const p = useElementProgress(ref)
   const mouse = useMouse()
 
   return (
-    <section ref={ref} style={{ background: INK, minHeight: '100vh', padding: '120px 48px 80px', display: 'flex', flexDirection: 'column', justifyContent: 'center', position: 'relative' }}>
-      <div style={{ position: 'absolute', top: 60, left: 48 }}><Tag style={{ letterSpacing: '0.32em' }}>§ 06 — Begin</Tag></div>
+    <section ref={ref} style={{ background: INK, minHeight: '100vh', padding: '100px 48px 80px', display: 'flex', flexDirection: 'column', justifyContent: 'center', position: 'relative' }}>
+      <div style={{ position: 'absolute', top: 48, left: 48 }}><Tag style={{ letterSpacing: '0.32em' }}>§ 06 — Begin</Tag></div>
       <div style={{ maxWidth: 1500, margin: '0 auto', width: '100%' }}>
         <Rule vis={p > 0.1} />
-        <div style={{ marginTop: 56, transform: `translate3d(${mouse.nx * 12}px, ${mouse.ny * 8}px, 0)`, transition: 'transform .8s cubic-bezier(0.16,1,0.3,1)' }}>
+        <div style={{ marginTop: 48, transform: `translate3d(${mouse.nx * 12}px, ${mouse.ny * 8}px, 0)`, transition: 'transform .8s cubic-bezier(0.16,1,0.3,1)' }}>
           {['START', 'READING', 'DIFFERENTLY.'].map((ln, i) => (
             <div key={i} style={{ overflow: 'hidden', lineHeight: 0.88, marginBottom: 4 }}>
               <div style={{
@@ -1028,7 +988,7 @@ function CtaSection({ onEnter }) {
             </div>
           ))}
         </div>
-        <div style={{ marginTop: 60, display: 'flex', gap: 24, alignItems: 'center', flexWrap: 'wrap', opacity: p > 0.2 ? 1 : 0, transition: 'opacity .9s ease .5s' }}>
+        <div style={{ marginTop: 52, display: 'flex', gap: 24, alignItems: 'center', flexWrap: 'wrap', opacity: p > 0.2 ? 1 : 0, transition: 'opacity .9s ease .5s' }}>
           <Button variant="primary" tone="paper" icon="arrow" onClick={onEnter}>Get started free</Button>
           <Button variant="ghost" tone="ink">View pricing</Button>
         </div>
@@ -1037,7 +997,7 @@ function CtaSection({ onEnter }) {
   )
 }
 
-// ─── 9. FOOTER ────────────────────────────────────────────────────────────────
+// ─── 8. FOOTER ────────────────────────────────────────────────────────────────
 function Footer() {
   return (
     <footer style={{ background: '#070707', borderTop: `1px solid ${BORDER}`, padding: 48 }}>
@@ -1045,11 +1005,10 @@ function Footer() {
         <div style={{ overflow: 'hidden', padding: '20px 0', borderBottom: `1px solid ${BORDER}` }}>
           <div style={{ display: 'flex', animation: 'marquee 50s linear infinite', width: 'max-content' }}>
             {[...Array(6)].map((_, i) => (
-              <span key={i} style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 140, letterSpacing: '-0.05em', color: 'transparent', WebkitTextStroke: `1.2px ${CREAM}`, paddingRight: 80, whiteSpace: 'nowrap', textTransform: 'uppercase' }}>TRAVAUXUS —</span>
+              <span key={i} style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 140, letterSpacing: '-0.05em', color: 'transparent', WebkitTextStroke: `1.2px ${CREAM}`, paddingRight: 80, whiteSpace: 'nowrap' }}>TRAVAUXUS —</span>
             ))}
           </div>
         </div>
-
         <div style={{ marginTop: 32, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 40 }}>
           <div>
             <Logo size="sm" />
@@ -1068,7 +1027,6 @@ function Footer() {
             ))}
           </div>
         </div>
-
         <div style={{ marginTop: 32, paddingTop: 22, borderTop: '1px solid rgba(240,235,224,0.06)', display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
           <Tag>© {new Date().getFullYear()} Travauxus</Tag>
           <Tag>For informational purposes only. Not financial advice.</Tag>
@@ -1097,7 +1055,6 @@ function ScrollIndex() {
     update()
     return () => { window.removeEventListener('scroll', update); if (raf) cancelAnimationFrame(raf) }
   }, [])
-
   return (
     <div style={{
       position: 'fixed', right: 22, top: '50%', transform: 'translateY(-50%)',
@@ -1145,11 +1102,11 @@ export default function Landing() {
       {!loaded && <Preloader onDone={() => setLoaded(true)} />}
       {loaded && showCursor && <Cursor />}
       <ScrollIndex />
+
       <Hero onEnter={onEnter} />
       <DualMarquee />
-      <Statement />
-      <PinnedArchive />
       <LanguageWall />
+      <PinnedArchive />
       <Manifesto />
       <PhysicsConvergence />
       <CtaSection onEnter={onEnter} />
