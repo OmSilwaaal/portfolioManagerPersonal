@@ -1,14 +1,20 @@
 import { useGetCalendarQuery } from '../api/feedApi'
 
+const INK8   = 'var(--ink-800)'
+const BORDER = 'var(--on-ink-border)'
+const CREAM  = 'var(--paper)'
+const MUTED  = 'var(--on-ink-text-3)'
+const DIM    = 'var(--on-ink-text-4)'
+
+const IMPORTANCE_COLOR = {
+  High:   'var(--urgency-act)',
+  Medium: 'var(--urgency-watch)',
+  Low:    'var(--urgency-low)',
+}
+
 function formatDate(dateStr) {
   const date = new Date(dateStr)
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
-
-const importanceColor = {
-  High: 'text-red-500',
-  Medium: 'text-yellow-400',
-  Low: 'text-green-400',
 }
 
 export default function MacroCalendar() {
@@ -16,13 +22,13 @@ export default function MacroCalendar() {
 
   if (isLoading) {
     return (
-      <div className="p-4 bg-surface dark:bg-surface bg-[#f9f9f9] border border-border-subtle dark:border-border-subtle border-[#e5e7eb] rounded-md">
-        <h3 className="text-sm font-medium text-white dark:text-white text-[#0f0f0f] mb-3">Macro Calendar</h3>
-        <div className="space-y-3">
+      <div style={{ background: INK8, border: `1px solid ${BORDER}`, borderRadius: 'var(--r-md)', padding: '20px 22px' }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 500, letterSpacing: '0.24em', textTransform: 'uppercase', color: MUTED, marginBottom: 14 }}>Macro Calendar</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {[1, 2, 3].map((i) => (
-            <div key={i} className="animate-pulse">
-              <div className="h-3 bg-[#1f1f1f] rounded w-1/3 mb-1" />
-              <div className="h-3 bg-[#1f1f1f] rounded w-2/3" />
+            <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ height: 10, background: 'var(--on-ink-2)', borderRadius: 1, width: '33%' }} />
+              <div style={{ height: 10, background: 'var(--on-ink-1)', borderRadius: 1, width: '66%' }} />
             </div>
           ))}
         </div>
@@ -32,9 +38,9 @@ export default function MacroCalendar() {
 
   if (isError) {
     return (
-      <div className="p-4 bg-surface dark:bg-surface bg-[#f9f9f9] border border-border-subtle dark:border-border-subtle border-[#e5e7eb] rounded-md">
-        <h3 className="text-sm font-medium mb-2">Macro Calendar</h3>
-        <p className="text-xs text-[#a1a1aa]">Unable to load calendar events.</p>
+      <div style={{ background: INK8, border: `1px solid ${BORDER}`, borderRadius: 'var(--r-md)', padding: '20px 22px' }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 500, letterSpacing: '0.24em', textTransform: 'uppercase', color: MUTED, marginBottom: 8 }}>Macro Calendar</div>
+        <p style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: MUTED }}>Unable to load calendar events.</p>
       </div>
     )
   }
@@ -42,28 +48,28 @@ export default function MacroCalendar() {
   const events = data?.events || []
 
   return (
-    <div className="p-4 bg-surface dark:bg-surface bg-[#f9f9f9] border border-border-subtle dark:border-border-subtle border-[#e5e7eb] rounded-md">
-      <h3 className="text-sm font-semibold text-white dark:text-white text-[#0f0f0f] mb-3">
+    <div style={{ background: INK8, border: `1px solid ${BORDER}`, borderRadius: 'var(--r-md)', padding: '20px 22px' }}>
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 500, letterSpacing: '0.24em', textTransform: 'uppercase', color: MUTED, marginBottom: 16 }}>
         Upcoming Events
-      </h3>
-      <div className="space-y-4">
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         {events.slice(0, 6).map((event) => (
-          <div key={event.id} className="flex gap-3">
-            <div className="flex-shrink-0 w-10 text-center">
-              <span className="text-xs font-medium text-[#3b82f6]">
+          <div key={event.id} style={{ display: 'flex', gap: 14 }}>
+            <div style={{ flexShrink: 0, width: 38, textAlign: 'center' }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, color: 'var(--party-dem)', letterSpacing: '0.04em' }}>
                 {formatDate(event.date)}
               </span>
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs font-medium text-white dark:text-white text-[#0f0f0f] truncate">
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12, fontWeight: 500, color: CREAM, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {event.event}
                 </span>
-                <span className={`text-xs flex-shrink-0 ${importanceColor[event.importance] || 'text-[#a1a1aa]'}`}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, flexShrink: 0, letterSpacing: '0.12em', color: IMPORTANCE_COLOR[event.importance] || MUTED }}>
                   {event.importance}
                 </span>
               </div>
-              <p className="text-xs text-[#a1a1aa] leading-relaxed">
+              <p style={{ fontFamily: 'var(--font-sans)', fontSize: 11, color: MUTED, lineHeight: 1.55, margin: 0 }}>
                 {event.aiBlurb}
               </p>
             </div>
