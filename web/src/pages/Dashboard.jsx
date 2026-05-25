@@ -1,10 +1,14 @@
-import Logo from '../components/Logo'
 import { useGetFeedQuery } from '../api/feedApi'
 import { useGetStockQuery } from '../api/stocksApi'
 import NewsCard from '../components/NewsCard'
 import MacroCalendar from '../components/MacroCalendar'
 
-const cardStyle = 'bg-[#111] border border-[#1f1f1f] rounded-xl'
+const INK  = 'var(--ink-900)'
+const INK8 = 'var(--ink-800)'
+const CREAM = 'var(--paper)'
+const BORDER = 'var(--on-ink-border)'
+const MUTED = 'var(--on-ink-text-3)'
+const DIM   = 'var(--on-ink-text-4)'
 
 const WATCHLIST_TICKERS = ['AAPL', 'MSFT', 'BTC']
 
@@ -13,19 +17,19 @@ function WatchlistItem({ ticker }) {
 
   if (isLoading) {
     return (
-      <div className="animate-pulse flex items-center justify-between py-3">
-        <div className="h-3.5 bg-white/8 rounded w-10" />
-        <div className="h-3.5 bg-white/8 rounded w-16" />
-        <div className="h-3.5 bg-white/8 rounded w-12" />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '11px 0', borderBottom: `1px solid ${BORDER}` }}>
+        <div style={{ width: 36, height: 11, background: 'var(--on-ink-2)', borderRadius: 1 }} />
+        <div style={{ width: 56, height: 11, background: 'var(--on-ink-2)', borderRadius: 1 }} />
+        <div style={{ width: 44, height: 11, background: 'var(--on-ink-2)', borderRadius: 1 }} />
       </div>
     )
   }
 
   if (isError || !data) {
     return (
-      <div className="flex items-center justify-between py-3 text-sm">
-        <span className="font-medium text-white/60">{ticker}</span>
-        <span className="text-white/25 text-xs">Unavailable</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '11px 0', borderBottom: `1px solid ${BORDER}` }}>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: MUTED }}>{ticker}</span>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: DIM }}>—</span>
       </div>
     )
   }
@@ -34,12 +38,12 @@ function WatchlistItem({ ticker }) {
   const positive = changeValue >= 0
 
   return (
-    <div className="flex items-center justify-between py-3 border-b border-[#1f1f1f] last:border-0">
-      <span className="font-semibold text-white text-sm w-12">{ticker}</span>
-      <span className="text-sm text-white/70 font-medium">
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '11px 0', borderBottom: `1px solid ${BORDER}` }}>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600, color: CREAM, letterSpacing: '0.04em', width: 44 }}>{ticker}</span>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--on-ink-text-2)' }}>
         ${(data.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
       </span>
-      <span className={`text-sm font-medium tabular-nums ${positive ? 'text-emerald-400' : 'text-red-400'}`}>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: positive ? 'var(--positive)' : 'var(--negative)', minWidth: 52, textAlign: 'right' }}>
         {positive ? '+' : ''}{changeValue.toFixed(2)}%
       </span>
     </div>
@@ -48,13 +52,13 @@ function WatchlistItem({ ticker }) {
 
 function FeedSkeleton() {
   return (
-    <div className="space-y-3">
-      {[1, 2, 3, 4, 5].map((i) => (
-        <div key={i} className={`p-4 animate-pulse ${cardStyle}`}>
-          <div className="h-4 bg-[#1f1f1f] rounded w-3/4 mb-2" />
-          <div className="h-3 bg-[#1f1f1f] rounded w-1/4 mb-3" />
-          <div className="h-3 bg-[#1f1f1f] rounded w-full mb-1" />
-          <div className="h-3 bg-[#1f1f1f] rounded w-5/6" />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {[1, 2, 3, 4].map((i) => (
+        <div key={i} style={{ background: INK8, border: `1px solid ${BORDER}`, borderRadius: 'var(--r-md)', padding: '18px 20px' }}>
+          <div style={{ height: 10, background: 'var(--on-ink-2)', borderRadius: 1, width: '60%', marginBottom: 10 }} />
+          <div style={{ height: 14, background: 'var(--on-ink-2)', borderRadius: 1, width: '85%', marginBottom: 6 }} />
+          <div style={{ height: 14, background: 'var(--on-ink-1)', borderRadius: 1, width: '70%', marginBottom: 14 }} />
+          <div style={{ height: 10, background: 'var(--on-ink-1)', borderRadius: 1, width: '30%' }} />
         </div>
       ))}
     </div>
@@ -66,77 +70,78 @@ export default function Dashboard() {
   const items = feedData?.items || []
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-[#0f0f0f]">
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, background: INK }}>
 
-      {/* Mobile header */}
-      <header className="flex items-center px-5 py-4 border-b border-[#1f1f1f] md:hidden">
-        <Logo />
-      </header>
-
-      {/* Desktop header */}
-      <header className="hidden md:flex items-center px-6 py-5 border-b border-[#1f1f1f]">
+      {/* Header */}
+      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 40px', borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
         <div>
-          <h1 className="text-lg font-semibold text-white tracking-tight">Dashboard</h1>
-          <p className="text-xs text-[#a1a1aa] mt-0.5">Market overview and latest news</p>
+          <h1 style={{ fontFamily: 'var(--font-sans)', fontSize: 18, fontWeight: 600, letterSpacing: '-0.022em', color: CREAM, margin: 0 }}>Dashboard</h1>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.24em', textTransform: 'uppercase', color: MUTED, marginTop: 4, display: 'block' }}>Market overview · latest news</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ position: 'relative', background: INK8, border: `1px solid ${BORDER}`, borderRadius: 'var(--r-sm)', padding: '7px 12px 7px 32px', width: 220 }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ position: 'absolute', left: 10, top: 9, color: MUTED }}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <input placeholder="Search tickers, news…" style={{ background: 'transparent', border: 0, outline: 'none', width: '100%', fontFamily: 'var(--font-sans)', fontSize: 12, color: CREAM }} />
+          </div>
         </div>
       </header>
 
-      {/* Main content */}
-      <main className="flex-1 overflow-y-auto p-5 md:p-6">
-        <div className="max-w-screen-xl mx-auto">
-          <div className="flex flex-col lg:flex-row gap-5">
+      {/* Body */}
+      <main style={{ flex: 1, overflowY: 'auto', padding: '32px 40px' }}>
+        <div style={{ maxWidth: 1200, margin: '0 auto', display: 'grid', gridTemplateColumns: '1fr 320px', gap: 32, alignItems: 'start' }}>
 
-            {/* Left: News Feed */}
-            <section className="lg:w-2/3">
-              <h2 className="text-xs font-semibold text-[#a1a1aa] uppercase tracking-widest mb-4">
-                Latest News
-              </h2>
+          {/* Left: News Feed */}
+          <section>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 500, letterSpacing: '0.24em', textTransform: 'uppercase', color: MUTED }}>Latest News</span>
+              {items.length > 0 && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: DIM, letterSpacing: '0.1em' }}>{Math.min(items.length, 10)} items</span>}
+            </div>
 
-              {feedLoading && <FeedSkeleton />}
+            {feedLoading && <FeedSkeleton />}
 
-              {feedError && (
-                <div className={`p-5 ${cardStyle}`}>
-                  <p className="text-[#a1a1aa] text-sm">
-                    Unable to load news feed. Make sure the backend is running on port 3001.
-                  </p>
-                </div>
-              )}
-
-              {!feedLoading && !feedError && items.length === 0 && (
-                <div className={`p-5 ${cardStyle}`}>
-                  <p className="text-[#a1a1aa] text-sm">No news items available.</p>
-                </div>
-              )}
-
-              {!feedLoading && !feedError && items.length > 0 && (
-                <div className="space-y-3">
-                  {items.slice(0, 10).map((item) => (
-                    <NewsCard key={item.id} item={item} />
-                  ))}
-                </div>
-              )}
-            </section>
-
-            {/* Right: Watchlist + Calendar */}
-            <aside className="lg:w-1/3 space-y-4">
-
-              {/* Watchlist */}
-              <div className={`p-5 ${cardStyle}`}>
-                <h3 className="text-xs font-semibold text-[#a1a1aa] uppercase tracking-widest mb-3">
-                  Watchlist
-                </h3>
-                <div>
-                  {WATCHLIST_TICKERS.map((ticker) => (
-                    <WatchlistItem key={ticker} ticker={ticker} />
-                  ))}
-                </div>
+            {feedError && (
+              <div style={{ background: INK8, border: `1px solid ${BORDER}`, borderRadius: 'var(--r-md)', padding: '22px 24px' }}>
+                <p style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: MUTED, margin: 0 }}>
+                  Unable to load news feed. Make sure the backend is running on port 3001.
+                </p>
               </div>
+            )}
 
-              {/* Macro Calendar */}
-              <MacroCalendar />
-            </aside>
+            {!feedLoading && !feedError && items.length === 0 && (
+              <div style={{ background: INK8, border: `1px solid ${BORDER}`, borderRadius: 'var(--r-md)', padding: '22px 24px' }}>
+                <p style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: MUTED, margin: 0 }}>No news items available.</p>
+              </div>
+            )}
 
-          </div>
+            {!feedLoading && !feedError && items.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {items.slice(0, 10).map((item) => (
+                  <NewsCard key={item.id} item={item} />
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* Right: Watchlist + Calendar */}
+          <aside style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+
+            {/* Watchlist */}
+            <div style={{ background: INK8, border: `1px solid ${BORDER}`, borderRadius: 'var(--r-md)', padding: '20px 22px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 500, letterSpacing: '0.24em', textTransform: 'uppercase', color: MUTED }}>Watchlist</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: DIM, letterSpacing: '0.1em' }}>Live</span>
+              </div>
+              <div>
+                {WATCHLIST_TICKERS.map((ticker) => (
+                  <WatchlistItem key={ticker} ticker={ticker} />
+                ))}
+              </div>
+            </div>
+
+            {/* Macro Calendar */}
+            <MacroCalendar />
+          </aside>
+
         </div>
       </main>
     </div>

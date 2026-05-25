@@ -1,4 +1,3 @@
-import { useEffect } from 'react'
 import { useSelector, useDispatch } from 'react-redux'
 import { setFeedFilter, setFeedSubFilter } from '../store/feedSlice'
 import { useAuth } from '../contexts/AuthContext'
@@ -12,6 +11,19 @@ import { useGetStockQuery } from '../api/stocksApi'
 import { usePersonalizedFeed } from '../hooks/usePersonalizedFeed'
 import ProGate from '../components/ProGate'
 
+const INK8   = 'var(--ink-800)'
+const BORDER = 'var(--on-ink-border)'
+const CREAM  = 'var(--paper)'
+const MUTED  = 'var(--on-ink-text-3)'
+const DIM    = 'var(--on-ink-text-4)'
+
+const BULLET_COLORS = {
+  'Watch:':       'var(--ochre-300)',
+  'Risk:':        'var(--clay-300)',
+  'Opportunity:': 'var(--positive)',
+  'Trend:':       '#5b7fbb',
+}
+
 function WatchlistMover({ ticker }) {
   const { data, isLoading } = useGetStockQuery(ticker)
   if (isLoading || !data) return null
@@ -23,20 +35,20 @@ function WatchlistMover({ ticker }) {
 
 function SkeletonCard() {
   return (
-    <div className="bg-[#111] border border-[#222] rounded-2xl overflow-hidden animate-pulse">
-      <div className="px-5 pt-4 pb-2 flex items-center gap-2">
-        <div className="h-5 w-16 bg-[#222] rounded-full" />
-        <div className="h-4 w-10 bg-[#222] rounded" />
+    <div style={{ background: INK8, border: `1px solid ${BORDER}`, borderRadius: 'var(--r-md)', overflow: 'hidden' }}>
+      <div style={{ padding: '16px 20px 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ height: 18, width: 56, background: 'var(--on-ink-2)', borderRadius: 'var(--r-sm)' }} />
+        <div style={{ height: 14, width: 36, background: 'var(--on-ink-2)', borderRadius: 'var(--r-sm)' }} />
       </div>
-      <div className="px-5 pb-4 space-y-2">
-        <div className="h-4 bg-[#222] rounded w-full" />
-        <div className="h-4 bg-[#222] rounded w-4/5" />
-        <div className="h-3 bg-[#1a1a1a] rounded w-full mt-3" />
-        <div className="h-3 bg-[#1a1a1a] rounded w-2/3" />
+      <div style={{ padding: '0 20px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ height: 13, background: 'var(--on-ink-2)', borderRadius: 1, width: '100%' }} />
+        <div style={{ height: 13, background: 'var(--on-ink-2)', borderRadius: 1, width: '80%' }} />
+        <div style={{ height: 11, background: 'var(--on-ink-1)', borderRadius: 1, width: '100%', marginTop: 6 }} />
+        <div style={{ height: 11, background: 'var(--on-ink-1)', borderRadius: 1, width: '65%' }} />
       </div>
-      <div className="px-5 py-3 border-t border-[#1e1e1e] flex justify-between">
-        <div className="h-3 w-16 bg-[#222] rounded" />
-        <div className="h-3 w-24 bg-[#222] rounded" />
+      <div style={{ padding: '10px 20px', borderTop: `1px solid ${BORDER}`, display: 'flex', justifyContent: 'space-between' }}>
+        <div style={{ height: 10, width: 56, background: 'var(--on-ink-2)', borderRadius: 1 }} />
+        <div style={{ height: 10, width: 80, background: 'var(--on-ink-2)', borderRadius: 1 }} />
       </div>
     </div>
   )
@@ -44,56 +56,49 @@ function SkeletonCard() {
 
 function BriefSkeleton() {
   return (
-    <div className="bg-[#111] border border-[#222] rounded-2xl p-5 animate-pulse">
-      <div className="flex items-center gap-2 mb-3">
-        <div className="w-2 h-2 rounded-full bg-[#333]" />
-        <div className="h-3 w-24 bg-[#222] rounded" />
+    <div style={{ background: INK8, border: `1px solid ${BORDER}`, borderRadius: 'var(--r-md)', padding: '20px 22px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--on-ink-3)' }} />
+        <div style={{ height: 10, width: 80, background: 'var(--on-ink-2)', borderRadius: 1 }} />
       </div>
-      <div className="space-y-2 mb-4">
-        <div className="h-3 bg-[#1e1e1e] rounded w-full" />
-        <div className="h-3 bg-[#1e1e1e] rounded w-5/6" />
-        <div className="h-3 bg-[#1e1e1e] rounded w-4/6" />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+        <div style={{ height: 11, background: 'var(--on-ink-1)', borderRadius: 1, width: '100%' }} />
+        <div style={{ height: 11, background: 'var(--on-ink-1)', borderRadius: 1, width: '83%' }} />
+        <div style={{ height: 11, background: 'var(--on-ink-1)', borderRadius: 1, width: '67%' }} />
       </div>
-      <div className="space-y-2">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {[...Array(4)].map((_, i) => (
-          <div key={i} className="h-3 bg-[#1e1e1e] rounded w-full" />
+          <div key={i} style={{ height: 11, background: 'var(--on-ink-1)', borderRadius: 1, width: '100%' }} />
         ))}
       </div>
     </div>
   )
 }
 
-const BULLET_COLORS = {
-  'Watch:': 'text-amber-400',
-  'Risk:': 'text-red-400',
-  'Opportunity:': 'text-emerald-400',
-  'Trend:': 'text-blue-400',
-}
-
 function BriefCard({ brief, bullets }) {
   const bulletColor = (bullet) => {
     const key = Object.keys(BULLET_COLORS).find((k) => bullet.startsWith(k))
-    return key ? BULLET_COLORS[key] : 'text-white/60'
+    return key ? BULLET_COLORS[key] : MUTED
   }
 
   return (
-    <div className="bg-[#111] border border-[#1e1e1e] rounded-2xl overflow-hidden">
-      <div className="flex items-center gap-2 px-5 pt-4 pb-1">
-        <span className="w-1.5 h-1.5 rounded-full bg-white/30" />
-        <span className="text-[11px] font-semibold text-white/40 uppercase tracking-widest">Weekly Brief</span>
+    <div style={{ background: INK8, border: `1px solid ${BORDER}`, borderRadius: 'var(--r-md)', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '16px 22px 6px' }}>
+        <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--on-ink-text-3)', flexShrink: 0, display: 'inline-block' }} />
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 500, letterSpacing: '0.24em', textTransform: 'uppercase', color: MUTED }}>Weekly Brief</span>
       </div>
-      <div className="px-5 pb-4">
-        <p className="text-white/80 text-sm leading-relaxed mb-4">{brief}</p>
+      <div style={{ padding: '0 22px 18px' }}>
+        <p style={{ fontFamily: 'var(--font-sans)', fontSize: 13, lineHeight: 1.6, color: 'var(--on-ink-text-2)', marginBottom: 14 }}>{brief}</p>
         {bullets && bullets.length > 0 && (
-          <ul className="space-y-2">
+          <ul style={{ display: 'flex', flexDirection: 'column', gap: 8, margin: 0, padding: 0, listStyle: 'none' }}>
             {bullets.map((b, i) => {
               const colonIdx = b.indexOf(':')
               const prefix = colonIdx > -1 ? b.slice(0, colonIdx + 1) : null
               const rest = colonIdx > -1 ? b.slice(colonIdx + 1) : b
               return (
-                <li key={i} className="flex items-start gap-2 text-sm">
-                  <span className={`font-semibold flex-shrink-0 ${bulletColor(b)}`}>{prefix}</span>
-                  <span className="text-white/55">{rest.trim()}</span>
+                <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                  {prefix && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, flexShrink: 0, color: bulletColor(b) }}>{prefix}</span>}
+                  <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: MUTED }}>{rest.trim()}</span>
                 </li>
               )
             })}
@@ -143,9 +148,6 @@ export default function Feed() {
   const feedItems = usePersonalizedFeed(rawFeedItems, rawGovTrades, rawCommodities)
   const isLoading = feedLoading || govLoading || commoditiesLoading
 
-  // subFilter is cleared automatically by setFeedFilter in the slice
-
-  // Compute sub-filter chips based on active filter
   const subFilterChips = (() => {
     if (activeFilter === 'stocks') {
       return watchlist.map((t) => t.toUpperCase())
@@ -204,20 +206,20 @@ export default function Feed() {
   const noCategories = watchedCategories.length === 0
 
   return (
-    <main className="flex-1 p-5 md:p-8 max-w-5xl mx-auto w-full">
+    <main style={{ flex: 1, padding: '32px 40px', maxWidth: 960, margin: '0 auto', width: '100%' }}>
 
       {/* Personalized header */}
-      <div className="mb-7">
-        <p className="text-[#6b7280] text-xs font-medium uppercase tracking-widest mb-1">
+      <div style={{ marginBottom: 28 }}>
+        <p style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 500, letterSpacing: '0.24em', textTransform: 'uppercase', color: MUTED, marginBottom: 6 }}>
           Week of {weekLabel()}
         </p>
-        <h1 className="text-2xl font-bold text-white leading-snug">
+        <h1 style={{ fontFamily: 'var(--font-sans)', fontSize: 22, fontWeight: 600, letterSpacing: '-0.022em', color: CREAM, margin: 0, lineHeight: 1.25 }}>
           {firstName ? `Hello ${firstName},` : 'Hello,'} here&apos;s your brief
         </h1>
       </div>
 
       {/* Weekly AI Brief */}
-      <div className="mb-6">
+      <div style={{ marginBottom: 22 }}>
         {briefLoading ? (
           <BriefSkeleton />
         ) : briefData?.brief ? (
@@ -225,9 +227,9 @@ export default function Feed() {
         ) : null}
       </div>
 
-      {/* Watchlist movers — "Why Is It Moving?" */}
+      {/* Watchlist movers */}
       {watchlist.length > 0 && (
-        <div className="mb-6 space-y-3">
+        <div style={{ marginBottom: 22, display: 'flex', flexDirection: 'column', gap: 10 }}>
           {watchlist.slice(0, 6).map((ticker) => (
             <WatchlistMover key={ticker} ticker={ticker.toUpperCase()} />
           ))}
@@ -235,24 +237,32 @@ export default function Feed() {
       )}
 
       {/* Filter bar */}
-      <div className="mb-2">
+      <div style={{ marginBottom: 6 }}>
         <FilterBar activeFilter={activeFilter} onChange={(f) => dispatch(setFeedFilter(f))} />
       </div>
 
       {/* Sub-filter chips */}
       {activeFilter !== 'all' && subFilterChips.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mb-4 mt-2">
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14, marginTop: 8 }}>
           {subFilterChips.map((chip) => {
             const isActive = subFilter === chip
             return (
               <button
                 key={chip}
                 onClick={() => dispatch(setFeedSubFilter(isActive ? null : chip))}
-                className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all ${
-                  isActive
-                    ? 'bg-white/10 border-white/20 text-white'
-                    : 'bg-transparent border-white/10 text-white/40 hover:text-white/60 hover:border-white/15'
-                }`}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: 'var(--r-pill)',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 10,
+                  fontWeight: 600,
+                  letterSpacing: '0.08em',
+                  border: `1px solid ${isActive ? 'var(--on-ink-text-2)' : BORDER}`,
+                  background: isActive ? 'var(--on-ink-2)' : 'transparent',
+                  color: isActive ? CREAM : MUTED,
+                  cursor: 'pointer',
+                  transition: 'all 150ms',
+                }}
               >
                 {chip}
               </button>
@@ -262,39 +272,40 @@ export default function Feed() {
       )}
 
       {/* Section label */}
-      <div className="mb-3">
-        <span className="text-xs font-semibold text-white/30 uppercase tracking-widest">Today</span>
+      <div style={{ marginBottom: 12 }}>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 500, letterSpacing: '0.24em', textTransform: 'uppercase', color: DIM }}>Today</span>
       </div>
 
       {noCategories && !isLoading && (
-        <div className="text-center py-16">
-          <p className="text-[#6b7280] text-sm">Update your preferences to see your feed</p>
-          <a href="/settings" className="mt-3 inline-block text-[#3b82f6] text-sm hover:underline">
+        <div style={{ textAlign: 'center', padding: '60px 0' }}>
+          <p style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: MUTED }}>Update your preferences to see your feed</p>
+          <a href="/settings" style={{ marginTop: 12, display: 'inline-block', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--moss-200)', letterSpacing: '0.08em' }}>
             Go to Settings
           </a>
         </div>
       )}
 
       {isLoading && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
           {[...Array(5)].map((_, i) => (
-            <div key={i} className="break-inside-avoid">
-              <SkeletonCard />
-            </div>
+            <SkeletonCard key={i} />
           ))}
         </div>
       )}
 
       {!isLoading && !noCategories && filtered.length === 0 && (
-        <div className="text-center py-16">
-          <p className="text-[#6b7280] text-sm">No items match the selected filter.</p>
+        <div style={{ textAlign: 'center', padding: '60px 0' }}>
+          <p style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: MUTED }}>No items match the selected filter.</p>
         </div>
       )}
 
       {!isLoading && filtered.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
           {filtered.slice(0, isPro ? filtered.length : FREE_ITEM_LIMIT).map((item, idx) => (
-            <div key={item.id || `feed-${idx}`} className={`break-inside-avoid ${(item.urgency === 'Act Now') ? 'sm:col-span-2' : ''}`}>
+            <div
+              key={item.id || `feed-${idx}`}
+              style={item.urgency === 'Act Now' ? { gridColumn: '1 / -1' } : {}}
+            >
               <FeedCard
                 type={item._feedType || item.type || 'stock'}
                 data={item.data || item}
@@ -304,20 +315,21 @@ export default function Feed() {
             </div>
           ))}
           {!isPro && filtered.length > FREE_ITEM_LIMIT && (
-            <ProGate label="Unlock full feed">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {filtered.slice(FREE_ITEM_LIMIT, FREE_ITEM_LIMIT + 3).map((item, idx) => (
-                  <div key={`locked-${idx}`} className="break-inside-avoid">
+            <div style={{ gridColumn: '1 / -1' }}>
+              <ProGate label="Unlock full feed">
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+                  {filtered.slice(FREE_ITEM_LIMIT, FREE_ITEM_LIMIT + 3).map((item, idx) => (
                     <FeedCard
+                      key={`locked-${idx}`}
                       type={item._feedType || item.type || 'stock'}
                       data={item.data || item}
                       urgency={item.urgency}
                       index={FREE_ITEM_LIMIT + idx}
                     />
-                  </div>
-                ))}
-              </div>
-            </ProGate>
+                  ))}
+                </div>
+              </ProGate>
+            </div>
           )}
         </div>
       )}

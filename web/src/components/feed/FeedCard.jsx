@@ -5,17 +5,17 @@ import StockLogo from '../StockLogo'
 import CommodityIcon from '../CommodityIcon'
 
 const TYPE_CONFIG = {
-  stock:      { label: 'Stock',     color: 'text-blue-400',    bg: 'bg-blue-500/10 border-blue-500/20',    accent: 'rgba(59,130,246,0.15)' },
-  crypto:     { label: 'Crypto',    color: 'text-purple-400',  bg: 'bg-purple-500/10 border-purple-500/20', accent: 'rgba(168,85,247,0.15)' },
-  commodity:  { label: 'Commodity', color: 'text-amber-400',   bg: 'bg-amber-500/10 border-amber-500/20',  accent: 'rgba(245,158,11,0.15)' },
-  'gov-trade':{ label: 'Gov Trade', color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20', accent: 'rgba(52,211,153,0.15)' },
-  macro:      { label: 'Macro',     color: 'text-rose-400',    bg: 'bg-rose-500/10 border-rose-500/20',    accent: 'rgba(244,63,94,0.15)' },
+  stock:      { label: 'Stock',     colorVar: 'var(--party-dem)',  bgStyle: { background: 'rgba(91,127,187,0.10)',  border: '1px solid rgba(91,127,187,0.22)'  } },
+  crypto:     { label: 'Crypto',    colorVar: 'var(--ochre-300)',  bgStyle: { background: 'rgba(214,184,122,0.10)', border: '1px solid rgba(214,184,122,0.22)' } },
+  commodity:  { label: 'Commodity', colorVar: 'var(--ochre-400)',  bgStyle: { background: 'rgba(201,168,106,0.10)', border: '1px solid rgba(201,168,106,0.22)' } },
+  'gov-trade':{ label: 'Gov Trade', colorVar: 'var(--positive)',   bgStyle: { background: 'rgba(126,169,104,0.10)', border: '1px solid rgba(126,169,104,0.22)' } },
+  macro:      { label: 'Macro',     colorVar: 'var(--clay-300)',   bgStyle: { background: 'rgba(194,120,90,0.10)',  border: '1px solid rgba(194,120,90,0.22)'  } },
 }
 
 const URGENCY_CONFIG = {
-  'Act Now': { label: 'Act Now', dot: 'bg-[#d35c4a]', text: 'text-[#d35c4a]', borderTop: 'border-t-2 border-t-[#d35c4a]/50' },
-  'Watch':   { label: 'Watch',   dot: 'bg-[#d6b87a]', text: 'text-[#d6b87a]', borderTop: 'border-t-2 border-t-[#d6b87a]/40' },
-  'Low':     { label: null,      dot: 'bg-[#333]',    text: '',               borderTop: 'border-t border-t-[#1f1f1f]' },
+  'Act Now': { label: 'Act Now', dotColor: 'var(--urgency-act)',   textColor: 'var(--urgency-act)',   borderTop: { borderTop: '2px solid rgba(211,92,74,0.5)' } },
+  'Watch':   { label: 'Watch',   dotColor: 'var(--urgency-watch)', textColor: 'var(--urgency-watch)', borderTop: { borderTop: '2px solid rgba(214,184,122,0.4)' } },
+  'Low':     { label: null,      dotColor: '#333',                 textColor: '',                     borderTop: { borderTop: '1px solid var(--on-ink-border)' } },
 }
 
 const cardBase = {
@@ -127,17 +127,17 @@ function TickerIcon({ type, ticker, sector, size = 32 }) {
 
 function MetaRow({ config, ticker, sentiment, urgConf }) {
   return (
-    <div className="flex items-center justify-between">
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${config.color} ${config.bg}`}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, letterSpacing: '0.06em', padding: '2px 8px', borderRadius: 'var(--r-pill)', color: config.colorVar, ...config.bgStyle }}>
           {config.label}
         </span>
-        {ticker && <span className="text-white/50 font-bold text-[11px] tracking-widest">{ticker}</span>}
+        {ticker && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--on-ink-text-2)' }}>{ticker}</span>}
         {sentiment && <SentimentBadge sentiment={sentiment} />}
       </div>
       {urgConf.label && (
-        <span className={`flex items-center gap-1 text-[11px] font-semibold flex-shrink-0 ${urgConf.text}`}>
-          <span className={`w-1.5 h-1.5 rounded-full ${urgConf.dot} animate-pulse`} />
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, flexShrink: 0, color: urgConf.textColor }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: urgConf.dotColor, flexShrink: 0, display: 'inline-block' }} />
           {urgConf.label}
         </span>
       )}
@@ -149,41 +149,34 @@ function MetaRow({ config, ticker, sentiment, urgConf }) {
 function FeaturedCard({ data, config, urgConf, image, url, ticker, sentiment, timestamp, onShare }) {
   return (
     <article
-      className={`relative overflow-hidden rounded-2xl ${urgConf.borderTop}`}
-      style={cardBase}
+      style={{ ...cardBase, borderRadius: 'var(--r-md)', position: 'relative', overflow: 'hidden', ...urgConf.borderTop }}
     >
       {/* Red left accent bar */}
-      <div className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-2xl bg-red-500/60" />
+      <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: 'rgba(211,92,74,0.6)', borderRadius: 'var(--r-md) 0 0 var(--r-md)' }} />
 
-      <div className="pl-4">
+      <div style={{ paddingLeft: 4 }}>
         {image && (
-          <div className="overflow-hidden" style={{ height: 160 }}>
-            <img
-              src={image}
-              alt=""
-              className="w-full h-full object-cover"
-              style={{ filter: 'brightness(0.75) contrast(1.05)' }}
-              onError={(e) => { e.target.parentElement.style.display = 'none' }}
-            />
+          <div style={{ overflow: 'hidden', height: 160 }}>
+            <img src={image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'brightness(0.75) contrast(1.05)' }} onError={(e) => { e.target.parentElement.style.display = 'none' }} />
           </div>
         )}
-        <div className="px-4 pt-4 pb-2">
+        <div style={{ padding: '16px 16px 8px' }}>
           <MetaRow config={config} ticker={ticker} sentiment={sentiment} urgConf={urgConf} />
         </div>
-        <div className="px-4 pb-3">
+        <div style={{ padding: '0 16px 14px' }}>
           {url ? (
-            <a href={url} target="_blank" rel="noopener noreferrer" className="block group">
-              <h2 className="text-white font-bold text-[17px] leading-snug group-hover:text-white/80 transition-colors line-clamp-3">{data.headline}</h2>
+            <a href={url} target="_blank" rel="noopener noreferrer" style={{ display: 'block' }}>
+              <h2 style={{ fontFamily: 'var(--font-sans)', fontSize: 17, fontWeight: 700, lineHeight: 1.3, color: 'var(--paper)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{data.headline}</h2>
             </a>
           ) : (
-            <h2 className="text-white font-bold text-[17px] leading-snug line-clamp-3">{data.headline}</h2>
+            <h2 style={{ fontFamily: 'var(--font-sans)', fontSize: 17, fontWeight: 700, lineHeight: 1.3, color: 'var(--paper)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{data.headline}</h2>
           )}
-          {data.summary && <p className="text-white/50 text-sm leading-relaxed mt-2 line-clamp-3">{data.summary}</p>}
+          {data.summary && <p style={{ fontFamily: 'var(--font-sans)', fontSize: 13, lineHeight: 1.55, color: 'var(--on-ink-text-2)', marginTop: 8, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{data.summary}</p>}
         </div>
-        <div className="flex items-center justify-between px-4 py-3 border-t border-white/5">
-          <div className="flex items-center gap-2">
-            {data.source && <span className="text-[11px] font-medium text-white/30">{data.source}</span>}
-            <span className="text-[11px] text-white/20">{formatTimestamp(timestamp)}</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderTop: '1px solid var(--on-ink-border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {data.source && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--on-ink-text-3)' }}>{data.source}</span>}
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--on-ink-text-4)' }}>{formatTimestamp(timestamp)}</span>
           </div>
           <ThreeDotMenu url={url} onShare={onShare} />
         </div>
@@ -196,40 +189,38 @@ function FeaturedCard({ data, config, urgConf, image, url, ticker, sentiment, ti
 function HeroCard({ data, config, urgConf, image, url, ticker, sentiment, timestamp, onShare }) {
   return (
     <article
-      className={`relative overflow-hidden rounded-2xl ${urgConf.borderTop}`}
-      style={cardBase}
+      style={{ ...cardBase, borderRadius: 'var(--r-md)', position: 'relative', overflow: 'hidden', ...urgConf.borderTop }}
     >
       <div>
-        <div className="overflow-hidden" style={{ height: 130 }}>
+        <div style={{ overflow: 'hidden', height: 130, position: 'relative' }}>
           <img
             src={image}
             alt=""
-            className="w-full h-full object-cover"
-            style={{ filter: 'brightness(0.7)' }}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'brightness(0.7)' }}
             onError={(e) => { e.target.parentElement.style.display = 'none' }}
           />
           {/* Dark overlay for text readability */}
           <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.4)' }} />
           {/* Badge overlaid on image */}
-          <div className="absolute bottom-3 left-4 flex items-center gap-2">
-            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${config.color} ${config.bg}`}>{config.label}</span>
-            {ticker && <span className="text-white/60 font-bold text-[11px] tracking-widest">{ticker}</span>}
+          <div style={{ position: 'absolute', bottom: 10, left: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, letterSpacing: '0.06em', padding: '2px 8px', borderRadius: 'var(--r-pill)', color: config.colorVar, ...config.bgStyle }}>{config.label}</span>
+            {ticker && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: 'rgba(240,235,224,0.6)' }}>{ticker}</span>}
           </div>
         </div>
-        <div className="px-4 pt-3 pb-2">
+        <div style={{ padding: '12px 16px 8px' }}>
           {url ? (
-            <a href={url} target="_blank" rel="noopener noreferrer" className="block group">
-              <h2 className="text-white font-bold text-[15px] leading-snug group-hover:text-white/80 transition-colors line-clamp-2">{data.headline}</h2>
+            <a href={url} target="_blank" rel="noopener noreferrer" style={{ display: 'block' }}>
+              <h2 style={{ fontFamily: 'var(--font-sans)', fontSize: 15, fontWeight: 700, lineHeight: 1.35, color: 'var(--paper)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{data.headline}</h2>
             </a>
           ) : (
-            <h2 className="text-white font-bold text-[15px] leading-snug line-clamp-2">{data.headline}</h2>
+            <h2 style={{ fontFamily: 'var(--font-sans)', fontSize: 15, fontWeight: 700, lineHeight: 1.35, color: 'var(--paper)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{data.headline}</h2>
           )}
-          {data.summary && <p className="text-white/45 text-sm leading-relaxed mt-1.5 line-clamp-2">{data.summary}</p>}
+          {data.summary && <p style={{ fontFamily: 'var(--font-sans)', fontSize: 12, lineHeight: 1.55, color: 'var(--on-ink-text-3)', marginTop: 6, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{data.summary}</p>}
         </div>
-        <div className="flex items-center justify-between px-4 py-3 border-t border-white/5">
-          <div className="flex items-center gap-2">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderTop: '1px solid var(--on-ink-border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {sentiment && <SentimentBadge sentiment={sentiment} />}
-            <span className="text-[11px] text-white/25">{formatTimestamp(timestamp)}</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--on-ink-text-4)' }}>{formatTimestamp(timestamp)}</span>
           </div>
           <ThreeDotMenu url={url} onShare={onShare} />
         </div>
@@ -242,34 +233,28 @@ function HeroCard({ data, config, urgConf, image, url, ticker, sentiment, timest
 function ThumbCard({ data, config, urgConf, image, url, ticker, sentiment, timestamp, onShare }) {
   return (
     <article
-      className={`relative overflow-hidden rounded-2xl ${urgConf.borderTop}`}
-      style={cardBase}
+      style={{ ...cardBase, borderRadius: 'var(--r-md)', position: 'relative', overflow: 'hidden', ...urgConf.borderTop }}
     >
       <div>
-        <div className="px-4 pt-4 pb-2">
+        <div style={{ padding: '16px 16px 8px' }}>
           <MetaRow config={config} ticker={ticker} sentiment={sentiment} urgConf={urgConf} />
         </div>
-        <div className="px-4 pb-3 flex gap-3">
-          <div className="flex-1 min-w-0">
+        <div style={{ padding: '0 16px 14px', display: 'flex', gap: 12 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
             {url ? (
-              <a href={url} target="_blank" rel="noopener noreferrer" className="block group">
-                <h2 className="text-white font-semibold text-[14px] leading-snug group-hover:text-white/80 transition-colors line-clamp-3">{data.headline}</h2>
+              <a href={url} target="_blank" rel="noopener noreferrer" style={{ display: 'block' }}>
+                <h2 style={{ fontFamily: 'var(--font-sans)', fontSize: 14, fontWeight: 600, lineHeight: 1.35, color: 'var(--paper)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{data.headline}</h2>
               </a>
             ) : (
-              <h2 className="text-white font-semibold text-[14px] leading-snug line-clamp-3">{data.headline}</h2>
+              <h2 style={{ fontFamily: 'var(--font-sans)', fontSize: 14, fontWeight: 600, lineHeight: 1.35, color: 'var(--paper)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{data.headline}</h2>
             )}
           </div>
-          <div className="w-16 h-16 rounded-xl overflow-hidden flex-shrink-0">
-            <img
-              src={image}
-              alt=""
-              className="w-full h-full object-cover"
-              onError={(e) => { e.target.parentElement.style.display = 'none' }}
-            />
+          <div style={{ width: 64, height: 64, borderRadius: 'var(--r-sm)', overflow: 'hidden', flexShrink: 0 }}>
+            <img src={image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.parentElement.style.display = 'none' }} />
           </div>
         </div>
-        <div className="flex items-center justify-between px-4 py-3 border-t border-white/5">
-          <span className="text-[11px] text-white/25">{formatTimestamp(timestamp)}</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderTop: '1px solid var(--on-ink-border)' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--on-ink-text-4)' }}>{formatTimestamp(timestamp)}</span>
           <ThreeDotMenu url={url} onShare={onShare} />
         </div>
       </div>
@@ -281,31 +266,29 @@ function ThumbCard({ data, config, urgConf, image, url, ticker, sentiment, times
 function CompactCard({ data, config, urgConf, url, ticker, sentiment, timestamp, onShare, type }) {
   return (
     <article
-      className={`relative overflow-hidden rounded-xl ${urgConf.borderTop}`}
-      style={cardBase}
+      style={{ ...cardBase, borderRadius: 'var(--r-md)', position: 'relative', overflow: 'hidden', ...urgConf.borderTop }}
     >
-      <div className="px-4 py-3.5 flex items-center gap-3">
-        {/* Ticker logo or color accent */}
+      <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
         {ticker ? (
           <TickerIcon type={type} ticker={ticker} sector={data.sector} size={30} />
         ) : (
-          <div className="w-1 h-10 rounded-full flex-shrink-0 bg-[#1f1f1f]" />
+          <div style={{ width: 3, height: 40, borderRadius: 2, flexShrink: 0, background: 'var(--on-ink-2)' }} />
         )}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 mb-1">
-            <span className={`text-[10px] font-bold uppercase tracking-wider ${config.color}`}>{config.label}</span>
-            {ticker && <span className="text-white/35 text-[10px] font-bold tracking-widest">{ticker}</span>}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, letterSpacing: '0.10em', color: config.colorVar }}>{config.label}</span>
+            {ticker && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--on-ink-text-3)' }}>{ticker}</span>}
           </div>
           {url ? (
-            <a href={url} target="_blank" rel="noopener noreferrer" className="block group">
-              <p className="text-white/80 font-medium text-[13px] leading-snug group-hover:text-white transition-colors line-clamp-2">{data.headline}</p>
+            <a href={url} target="_blank" rel="noopener noreferrer" style={{ display: 'block' }}>
+              <p style={{ fontFamily: 'var(--font-sans)', fontSize: 13, fontWeight: 500, lineHeight: 1.4, color: 'var(--on-ink-text-2)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{data.headline}</p>
             </a>
           ) : (
-            <p className="text-white/80 font-medium text-[13px] leading-snug line-clamp-2">{data.headline}</p>
+            <p style={{ fontFamily: 'var(--font-sans)', fontSize: 13, fontWeight: 500, lineHeight: 1.4, color: 'var(--on-ink-text-2)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{data.headline}</p>
           )}
-          <div className="flex items-center gap-2 mt-1">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
             {sentiment && <SentimentBadge sentiment={sentiment} />}
-            <span className="text-[10px] text-white/20">{formatTimestamp(timestamp)}</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--on-ink-text-4)' }}>{formatTimestamp(timestamp)}</span>
           </div>
         </div>
         <ThreeDotMenu url={url} onShare={onShare} />
@@ -317,31 +300,28 @@ function CompactCard({ data, config, urgConf, url, ticker, sentiment, timestamp,
 // STANDARD — no image, headline + summary
 function StandardCard({ data, config, urgConf, url, ticker, sentiment, timestamp, onShare, type }) {
   return (
-    <article
-      className={`relative overflow-hidden rounded-2xl ${urgConf.borderTop}`}
-      style={cardBase}
-    >
+    <article style={{ ...cardBase, borderRadius: 'var(--r-md)', position: 'relative', overflow: 'hidden', ...urgConf.borderTop }}>
       <div>
-        <div className="px-4 pt-4 pb-2 flex items-start gap-3">
-          {ticker && <TickerIcon type={type} ticker={ticker} sector={data.sector} size={32} className="mt-0.5 flex-shrink-0" />}
-          <div className="flex-1 min-w-0">
+        <div style={{ padding: '16px 16px 8px', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+          {ticker && <TickerIcon type={type} ticker={ticker} sector={data.sector} size={32} style={{ marginTop: 2, flexShrink: 0 }} />}
+          <div style={{ flex: 1, minWidth: 0 }}>
             <MetaRow config={config} ticker={ticker || ''} sentiment={sentiment} urgConf={urgConf} />
           </div>
         </div>
-        <div className="px-4 pb-3">
+        <div style={{ padding: '0 16px 14px' }}>
           {url ? (
-            <a href={url} target="_blank" rel="noopener noreferrer" className="block group">
-              <h2 className="text-white font-semibold text-[15px] leading-snug mb-1.5 group-hover:text-white/80 transition-colors line-clamp-2">{data.headline}</h2>
+            <a href={url} target="_blank" rel="noopener noreferrer" style={{ display: 'block' }}>
+              <h2 style={{ fontFamily: 'var(--font-sans)', fontSize: 15, fontWeight: 600, lineHeight: 1.35, color: 'var(--paper)', marginBottom: 6, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{data.headline}</h2>
             </a>
           ) : (
-            <h2 className="text-white font-semibold text-[15px] leading-snug mb-1.5 line-clamp-2">{data.headline}</h2>
+            <h2 style={{ fontFamily: 'var(--font-sans)', fontSize: 15, fontWeight: 600, lineHeight: 1.35, color: 'var(--paper)', marginBottom: 6, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{data.headline}</h2>
           )}
-          {data.summary && <p className="text-white/45 text-sm leading-relaxed line-clamp-3">{data.summary}</p>}
+          {data.summary && <p style={{ fontFamily: 'var(--font-sans)', fontSize: 12, lineHeight: 1.55, color: 'var(--on-ink-text-3)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{data.summary}</p>}
         </div>
-        <div className="flex items-center justify-between px-4 py-3 border-t border-white/5">
-          <div className="flex items-center gap-2">
-            {data.source && <span className="text-[11px] font-medium text-white/25">{data.source}</span>}
-            <span className="text-[11px] text-white/20">{formatTimestamp(timestamp)}</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderTop: '1px solid var(--on-ink-border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {data.source && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--on-ink-text-3)' }}>{data.source}</span>}
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--on-ink-text-4)' }}>{formatTimestamp(timestamp)}</span>
           </div>
           <ThreeDotMenu url={url} onShare={onShare} />
         </div>

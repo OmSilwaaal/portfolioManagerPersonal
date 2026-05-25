@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,200..800&family=Space+Grotesk:wght@300;400;500;600;700&family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400;1,600&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..125,200..800&family=Space+Grotesk:wght@300;400;500;600;700&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400;1,500;1,600&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,54 +6,97 @@
 
 /* ─── Travauxus Design Tokens ──────────────────────────────────────────────── */
 :root {
-  --ink-900: #0b0b0b;
-  --ink-800: #111111;
-  --paper: #f0ebe0;
+  /* Ink & Paper anchors */
+  --ink-900:  #0b0b0b;
+  --ink-950:  #070707;
+  --ink-800:  #141414;
+  --paper:    #f0ebe0;
+  --paper-warm: #ece5d5;
+  --paper-cool: #f6f3eb;
 
-  --moss-100: #d4ddc8;
-  --moss-200: #b4c29c;
-  --moss-300: #9eae84;
-  --moss-500: #74875a;
+  /* Moss (primary accent — positive / green) */
+  --moss-50:  #e8eee0;
+  --moss-100: #c8d3b6;
+  --moss-200: #9eae84;
+  --moss-300: #74875a;
+  --moss-400: #566838;
+  --moss-500: #3e4d26;
+  --moss-600: #2c3618;
 
-  --ochre-200: #e8d09c;
+  /* Clay (negative / terracotta) */
+  --clay-300: #c2785a;
+  --clay-400: #a4583c;
+  --clay-500: #803e26;
+
+  /* Ochre (watch / warm gold) */
   --ochre-300: #d6b87a;
-  --ochre-500: #b88d42;
+  --ochre-400: #c9a86a;
+  --ochre-500: #a88847;
 
-  --clay-200: #e8b09c;
-  --clay-300: #d38a6a;
-  --clay-500: #b85c3e;
+  /* Stone (warm greys) */
+  --stone-50:  #e6e1d4;
+  --stone-100: #c9c3b3;
+  --stone-200: #a39d8d;
+  --stone-300: #7a7567;
+  --stone-400: #555143;
+  --stone-500: #36332a;
+  --stone-600: #25231d;
+  --stone-700: #181712;
 
-  --stone-300: #a8a8a8;
-  --stone-500: #6b6b6b;
-  --stone-700: #3a3a3a;
-
+  /* Urgency */
   --urgency-act:   #d35c4a;
   --urgency-watch: #d6b87a;
   --urgency-low:   #9eae84;
 
+  /* Price deltas */
   --positive: #7ea968;
   --negative: #d35c4a;
 
-  --party-dem: #3b82f6;
-  --party-rep: #ef4444;
-  --party-ind: #94a3b8;
+  /* Party (gov trades) */
+  --party-dem: #5b7fbb;
+  --party-rep: #b54a44;
+  --party-ind: var(--stone-200);
 
-  --on-ink-border:  rgba(240,235,224,0.09);
-  --on-ink-2:       rgba(240,235,224,0.12);
-  --on-ink-3:       rgba(240,235,224,0.20);
-  --on-ink-text-2:  rgba(240,235,224,0.65);
-  --on-ink-text-3:  rgba(240,235,224,0.38);
-  --on-ink-text-4:  rgba(240,235,224,0.22);
+  /* On-ink state layers */
+  --on-ink-1:      rgba(240,235,224,0.04);
+  --on-ink-2:      rgba(240,235,224,0.08);
+  --on-ink-3:      rgba(240,235,224,0.12);
+  --on-ink-border: rgba(240,235,224,0.09);
+  --on-ink-text-1: #f0ebe0;
+  --on-ink-text-2: rgba(240,235,224,0.62);
+  --on-ink-text-3: rgba(240,235,224,0.36);
+  --on-ink-text-4: rgba(240,235,224,0.18);
 
-  --on-paper-border:  rgba(11,11,11,0.12);
-  --on-paper-text-2:  rgba(11,11,11,0.65);
-  --on-paper-text-3:  rgba(11,11,11,0.38);
-  --on-paper-text-4:  rgba(11,11,11,0.22);
+  /* On-paper state layers */
+  --on-paper-1:      rgba(11,11,11,0.04);
+  --on-paper-2:      rgba(11,11,11,0.08);
+  --on-paper-3:      rgba(11,11,11,0.14);
+  --on-paper-border: rgba(11,11,11,0.10);
+  --on-paper-text-1: #0b0b0b;
+  --on-paper-text-2: rgba(11,11,11,0.62);
+  --on-paper-text-3: rgba(11,11,11,0.40);
+  --on-paper-text-4: rgba(11,11,11,0.20);
 
-  --font-display:       'Bricolage Grotesque', system-ui, sans-serif;
-  --font-sans:          'Resist Sans', 'Space Grotesk', system-ui, sans-serif;
-  --font-mono:          'JetBrains Mono', monospace;
-  --font-accent-serif:  'Cormorant Garamond', Georgia, serif;
+  /* Typography */
+  --font-sans:         'Resist Sans', 'Space Grotesk', 'Inter', Helvetica, Arial, sans-serif;
+  --font-display:      'Bricolage Grotesque', 'Resist Sans', 'Space Grotesk', sans-serif;
+  --font-mono:         'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-accent-serif: 'Cormorant Garamond', 'EB Garamond', Georgia, serif;
+
+  /* Radii — brutalist: sharp by default */
+  --r-0:   0;
+  --r-sm:  2px;
+  --r-md:  3px;
+  --r-pill: 999px;
+
+  /* Motion */
+  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --d-fast:  150ms;
+  --d-base:  400ms;
+  --d-slow:  900ms;
+  --d-reveal: 1050ms;
+  --d-rule:   1500ms;
 }
 
 /* ─── Keyframe animations (shared across landing + app) ───────────────────── */
