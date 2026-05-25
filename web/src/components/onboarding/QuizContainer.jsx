@@ -163,6 +163,14 @@ function SignUpScreen({ onNameStored }) {
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] flex flex-col items-center justify-center px-6">
+      <a
+        href="/"
+        style={{ position: 'absolute', top: 24, left: 32, fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.10em', color: 'var(--on-ink-text-3)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6, transition: 'color 150ms' }}
+        onMouseEnter={e => e.currentTarget.style.color = 'var(--paper)'}
+        onMouseLeave={e => e.currentTarget.style.color = 'var(--on-ink-text-3)'}
+      >
+        ← Back
+      </a>
       <div className="mb-12">
         <Logo size="lg" />
       </div>
