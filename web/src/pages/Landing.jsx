@@ -356,29 +356,27 @@ function Hero({ onEnter }) {
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 60, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 clamp(20px,4vw,48px)', zIndex: 10 }}>
         <Logo size="sm" />
         <div style={{ display: 'flex', alignItems: 'center', gap: 26 }}>
-          <a href="#archive" className="trx-nav-links" style={{ fontFamily: 'var(--font-sans)', fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: MUTED, textDecoration: 'none' }}>Archive</a>
-          <a href="#manifesto" className="trx-nav-links" style={{ fontFamily: 'var(--font-sans)', fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: MUTED, textDecoration: 'none' }}>Manifesto</a>
           <Button variant="primary" tone="paper" onClick={onEnter}>Get started</Button>
         </div>
       </div>
 
-      {/* Centered statement — cofounder quote */}
+      {/* Founder quote — upper left */}
       <div style={{
-        position: 'absolute', top: '38%', left: '50%',
-        transform: 'translate(-50%, -50%)',
-        textAlign: 'center', pointerEvents: 'none', zIndex: 2,
+        position: 'absolute', top: '20%', left: 'clamp(20px,4vw,48px)',
+        textAlign: 'left', pointerEvents: 'none', zIndex: 2,
         opacity: rdy ? 1 : 0, transition: 'opacity .8s ease 1.0s',
+        maxWidth: 480,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18 }}>
           <Tag>Market Intelligence</Tag>
           <div style={{ width: 28, height: 1, background: BORDER }} />
           <Tag>Vol. 01 · Est. 2026</Tag>
         </div>
         <blockquote style={{ margin: 0 }}>
-          <p style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 110, 'wght' 500", fontStretch: '110%', fontWeight: 500, fontSize: 'clamp(18px, 2vw, 28px)', lineHeight: 1.25, color: CREAM, maxWidth: 560, margin: '0 auto', letterSpacing: '-0.02em' }}>
+          <p style={{ fontFamily: 'var(--font-accent-serif)', fontStyle: 'italic', fontWeight: 400, fontSize: 'clamp(20px, 2.2vw, 32px)', lineHeight: 1.35, color: CREAM, margin: 0, letterSpacing: '0.01em' }}>
             "We believe markets should be legible. That every investor — not just the ones in glass towers — deserves the same fluency."
           </p>
-          <footer style={{ marginTop: 18, fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.28em', textTransform: 'uppercase', color: MUTED }}>
+          <footer style={{ marginTop: 16, fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.28em', textTransform: 'uppercase', color: MUTED }}>
             — Om Poper, Co-Founder
           </footer>
         </blockquote>
