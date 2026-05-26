@@ -43,7 +43,7 @@ router.get('/status', (req, res) => {
 })
 
 // POST /api/stripe/pro-webhook — Stripe sends events here
-router.post('/pro-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+router.post('/pro-webhook', async (req, res) => {
   console.log('[stripe] webhook received, event type will follow after sig check')
 
   if (!stripe) {

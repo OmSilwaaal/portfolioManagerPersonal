@@ -43,8 +43,9 @@ const allowedOrigins = [
 ].filter(Boolean);
 
 app.use(cors({ origin: allowedOrigins, credentials: true }));
-// Raw body for Stripe webhook signature verification
+// Raw body for webhook signature verification — MUST come before express.json()
 app.use('/api/paper-trading/webhook', express.raw({ type: 'application/json' }))
+app.use('/api/stripe/pro-webhook', express.raw({ type: 'application/json' }))
 app.use(express.json({ limit: '50kb' })); // cap request body size
 app.use(sessionMiddleware);
 
