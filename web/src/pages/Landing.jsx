@@ -298,8 +298,9 @@ function FloatingTicker({ t, idx, mouseX, mouseY, visible, price }) {
 function Hero({ onEnter }) {
   const [rdy, setRdy] = useState(false)
   const mouse = useMouse()
-  const scrollY = useScrollY()
   const prices = useLivePrices()
+  const sectionRef = useRef(null)
+  const scrollIndRef = useRef(null)
   const [tickerState, setTickerState] = useState(() => ({
     visible: new Set([0, 1, 2, 3, 4, 5, 6]),
     positions: Object.fromEntries(TICKER_POOL.map((t, i) => [i, { x: t.x, y: t.y }])),
@@ -308,6 +309,21 @@ function Hero({ onEnter }) {
   const cursorPosRef = useRef({ x: typeof window !== 'undefined' ? window.innerWidth / 2 : 0, y: typeof window !== 'undefined' ? window.innerHeight / 2 : 0 })
 
   useEffect(() => { const t = setTimeout(() => setRdy(true), 220); return () => clearTimeout(t) }, [])
+
+  useEffect(() => {
+    let raf = null
+    const onScroll = () => {
+      if (raf) return
+      raf = requestAnimationFrame(() => {
+        const p = Math.min(window.scrollY / (window.innerHeight || 1), 1)
+        if (sectionRef.current) sectionRef.current.style.opacity = String(1 - p * 0.4)
+        if (scrollIndRef.current) scrollIndRef.current.style.opacity = String(Math.max(0, 1 - p * 2))
+        raf = null
+      })
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => { window.removeEventListener('scroll', onScroll); if (raf) cancelAnimationFrame(raf) }
+  }, [])
 
   useEffect(() => {
     const onMove = (e) => {
@@ -335,10 +351,8 @@ function Hero({ onEnter }) {
     return () => window.removeEventListener('mousemove', onMove)
   }, [])
 
-  const heroProgress = Math.min(scrollY / (window.innerHeight || 1), 1)
-
   return (
-    <section style={{ position: 'relative', minHeight: '100vh', background: INK, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: '0 clamp(20px,4vw,48px) 60px', overflow: 'hidden', opacity: 1 - heroProgress * 0.4 }}>
+    <section ref={sectionRef} style={{ position: 'relative', minHeight: '100vh', background: INK, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: '0 clamp(20px,4vw,48px) 60px', overflow: 'hidden' }}>
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 60, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 clamp(20px,4vw,48px)', zIndex: 10 }}>
         <Logo size="sm" />
         <div style={{ display: 'flex', alignItems: 'center', gap: 26 }}>
@@ -394,7 +408,7 @@ function Hero({ onEnter }) {
         </div>
       </div>
 
-      <div style={{ position: 'absolute', bottom: 24, right: 56, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, opacity: rdy ? Math.max(0, 1 - heroProgress * 2) : 0, transition: 'opacity .6s' }}>
+      <div ref={scrollIndRef} style={{ position: 'absolute', bottom: 24, right: 56, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, opacity: rdy ? 1 : 0, transition: 'opacity .6s' }}>
         <Tag>Scroll</Tag>
         <div style={{ width: 1, height: 44, background: `linear-gradient(to bottom, transparent, ${MUTED})`, animation: 'drip 2.4s ease-in-out infinite' }} />
       </div>
@@ -499,38 +513,83 @@ const ARCHIVE = [
 
 function PinnedArchive() {
   const ref = useRef(null)
-  const p = useElementProgress(ref)
-  // Faster scroll: stage crosses 0→1 over a tighter p window
-  const stage = Math.max(0, Math.min(1, (p - 0.12) / 0.38))
-  const maxScroll = ARCHIVE.length * 380 + 240 - (typeof window !== 'undefined' ? window.innerWidth : 1280)
+  const stripRef = useRef(null)
+  const counterRef = useRef(null)
+  const progressBarRef = useRef(null)
+  const progressKnobRef = useRef(null)
+  const cardRefs = useRef([])
+  const dragState = useRef({ active: false, startX: 0, startScroll: 0 })
+  const stageRef = useRef(0)
+  const maxScrollRef = useRef(ARCHIVE.length * 380 + 240 - (typeof window !== 'undefined' ? window.innerWidth : 1280))
   const urgencyColor = u => u === 'Act' ? 'var(--urgency-act)' : u === 'Watch' ? 'var(--urgency-watch)' : 'var(--urgency-low)'
 
-  // Drag-to-scroll on the cards strip
-  const stripRef = useRef(null)
-  const dragState = useRef({ active: false, startX: 0, startScroll: 0, currentStage: 0 })
-  const [dragStage, setDragStage] = useState(null)
+  const syncDOM = (s) => {
+    const maxS = maxScrollRef.current
+    if (stripRef.current) stripRef.current.style.transform = `translateX(${-s * maxS}px)`
+    if (progressBarRef.current) progressBarRef.current.style.width = `${s * 100}%`
+    if (progressKnobRef.current) progressKnobRef.current.style.left = `${s * 100}%`
+    if (counterRef.current) counterRef.current.textContent =
+      `${String(Math.min(ARCHIVE.length, Math.floor(s * ARCHIVE.length) + 1)).padStart(3, '0')} / ${String(ARCHIVE.length).padStart(3, '0')}`
+    const vw = window.innerWidth
+    cardRefs.current.forEach((card, i) => {
+      if (!card) return
+      const cardCenter = (i + 0.5) * 380 - s * maxS + 24
+      const dist = Math.abs(cardCenter - vw / 2)
+      card.style.transform = `scale(${Math.max(0.86, 1 - dist / (vw * 1.6))})`
+      card.style.opacity = String(Math.max(0.35, 1 - dist / (vw * 0.9)))
+    })
+  }
+
+  useEffect(() => {
+    const onResize = () => { maxScrollRef.current = ARCHIVE.length * 380 + 240 - window.innerWidth }
+    window.addEventListener('resize', onResize, { passive: true })
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  useEffect(() => {
+    let raf = null
+    const update = () => {
+      if (raf) return
+      raf = requestAnimationFrame(() => {
+        raf = null
+        if (dragState.current.active) return
+        const el = ref.current
+        if (!el) return
+        const r = el.getBoundingClientRect()
+        const vh = window.innerHeight
+        const p = Math.max(0, Math.min(1, (vh - r.top) / (r.height + vh)))
+        const s = Math.max(0, Math.min(1, (p - 0.12) / 0.38))
+        stageRef.current = s
+        syncDOM(s)
+      })
+    }
+    update()
+    window.addEventListener('scroll', update, { passive: true })
+    window.addEventListener('resize', update, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', update)
+      window.removeEventListener('resize', update)
+      if (raf) cancelAnimationFrame(raf)
+    }
+  }, [])
 
   useEffect(() => {
     const strip = stripRef.current
     if (!strip) return
     const getX = (e) => e.touches ? e.touches[0].clientX : e.clientX
     const onDown = (e) => {
-      dragState.current = { active: true, startX: getX(e), startScroll: dragStage ?? stage, currentStage: dragStage ?? stage }
+      dragState.current = { active: true, startX: getX(e), startScroll: stageRef.current }
       if (!e.touches) strip.style.cursor = 'grabbing'
     }
     const onMove = (e) => {
       if (!dragState.current.active) return
       if (e.cancelable && e.touches) e.preventDefault()
       const dx = getX(e) - dragState.current.startX
-      const delta = -dx / (maxScroll || 1)
-      const newStage = Math.max(0, Math.min(1, dragState.current.startScroll + delta * 1.4))
-      dragState.current.currentStage = newStage
-      setDragStage(newStage)
+      const s = Math.max(0, Math.min(1, dragState.current.startScroll - dx / (maxScrollRef.current || 1) * 1.4))
+      stageRef.current = s
+      syncDOM(s)
     }
-    const onUp = () => {
-      dragState.current.active = false
-      strip.style.cursor = 'grab'
-    }
+    const onUp = () => { dragState.current.active = false; strip.style.cursor = 'grab' }
     strip.addEventListener('mousedown', onDown)
     strip.addEventListener('touchstart', onDown, { passive: true })
     window.addEventListener('mousemove', onMove)
@@ -545,9 +604,7 @@ function PinnedArchive() {
       window.removeEventListener('mouseup', onUp)
       window.removeEventListener('touchend', onUp)
     }
-  }, [stage, maxScroll, dragStage])
-
-  const activeStage = dragStage !== null ? dragStage : stage
+  }, [])
 
   return (
     <section ref={ref} id="archive" style={{ background: INK, height: '150vh', position: 'relative' }}>
@@ -561,49 +618,35 @@ function PinnedArchive() {
           </div>
           <div style={{ textAlign: 'right' }}>
             <Tag>Drag or scroll →</Tag>
-            <div style={{ marginTop: 12, fontFamily: 'var(--font-mono)', fontSize: 11, color: MUTED, letterSpacing: '0.18em' }}>
-              {String(Math.min(ARCHIVE.length, Math.floor(activeStage * ARCHIVE.length) + 1)).padStart(3, '0')} / {String(ARCHIVE.length).padStart(3, '0')}
-            </div>
+            <div ref={counterRef} style={{ marginTop: 12, fontFamily: 'var(--font-mono)', fontSize: 11, color: MUTED, letterSpacing: '0.18em' }}>001 / 008</div>
           </div>
         </div>
 
         <div style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center' }}>
-          <div ref={stripRef} style={{
-            display: 'flex', gap: 32, padding: '0 clamp(20px,4vw,48px)',
-            transform: `translateX(${-activeStage * maxScroll}px)`,
-            transition: dragState.current?.active ? 'none' : 'transform .1s linear',
-            willChange: 'transform', cursor: 'grab',
-          }}>
-            {ARCHIVE.map((a, i) => {
-              const cardCenter = (i + 0.5) * 380 - activeStage * maxScroll + 24
-              const vw = typeof window !== 'undefined' ? window.innerWidth : 1280
-              const dist = Math.abs(cardCenter - vw / 2)
-              const scale = Math.max(0.86, 1 - dist / (vw * 1.6))
-              const opacity = Math.max(0.35, 1 - dist / (vw * 0.9))
-              return (
-                <article key={a.n} style={{ flex: '0 0 348px', background: 'rgba(240,235,224,0.03)', border: '1px solid rgba(240,235,224,0.08)', borderRadius: 3, padding: '32px 28px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 420, transform: `scale(${scale})`, opacity, transition: 'transform .25s, opacity .25s', userSelect: 'none' }}>
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <span style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 96, color: CREAM, letterSpacing: '-0.05em', lineHeight: 0.85 }}>{a.n}</span>
-                      <Tag style={{ color: urgencyColor(a.urgency) }}>{a.urgency}</Tag>
-                    </div>
-                    <div style={{ marginTop: 24, fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.24em', color: MUTED }}>{a.y} · {a.ticker}</div>
+          <div ref={stripRef} style={{ display: 'flex', gap: 32, padding: '0 clamp(20px,4vw,48px)', willChange: 'transform', cursor: 'grab' }}>
+            {ARCHIVE.map((a, i) => (
+              <article key={a.n} ref={el => { cardRefs.current[i] = el }} style={{ flex: '0 0 348px', background: 'rgba(240,235,224,0.03)', border: '1px solid rgba(240,235,224,0.08)', borderRadius: 3, padding: '32px 28px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 420, willChange: 'transform, opacity', userSelect: 'none' }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <span style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 96, color: CREAM, letterSpacing: '-0.05em', lineHeight: 0.85 }}>{a.n}</span>
+                    <Tag style={{ color: urgencyColor(a.urgency) }}>{a.urgency}</Tag>
                   </div>
-                  <div style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 100, 'wght' 500", fontWeight: 500, fontSize: 24, letterSpacing: '-0.02em', lineHeight: 1.22, color: CREAM }}>{a.headline}</div>
-                  <div style={{ borderTop: '1px solid rgba(240,235,224,0.08)', paddingTop: 14, display: 'flex', justifyContent: 'space-between' }}>
-                    <Tag style={{ color: MUTED, fontSize: 9 }}>From the feed</Tag>
-                    <Tag style={{ color: MUTED, fontSize: 9 }}>↘</Tag>
-                  </div>
-                </article>
-              )
-            })}
+                  <div style={{ marginTop: 24, fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.24em', color: MUTED }}>{a.y} · {a.ticker}</div>
+                </div>
+                <div style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 100, 'wght' 500", fontWeight: 500, fontSize: 24, letterSpacing: '-0.02em', lineHeight: 1.22, color: CREAM }}>{a.headline}</div>
+                <div style={{ borderTop: '1px solid rgba(240,235,224,0.08)', paddingTop: 14, display: 'flex', justifyContent: 'space-between' }}>
+                  <Tag style={{ color: MUTED, fontSize: 9 }}>From the feed</Tag>
+                  <Tag style={{ color: MUTED, fontSize: 9 }}>↘</Tag>
+                </div>
+              </article>
+            ))}
           </div>
         </div>
 
         <div style={{ padding: '0 clamp(20px,4vw,48px) 48px' }}>
           <div style={{ height: 1, background: 'rgba(240,235,224,0.10)', position: 'relative' }}>
-            <div style={{ height: 1, background: CREAM, width: `${activeStage * 100}%`, transition: 'width .1s linear' }} />
-            <div style={{ position: 'absolute', top: -3, left: `${activeStage * 100}%`, width: 1, height: 7, background: CREAM, transform: 'translateX(-50%)' }} />
+            <div ref={progressBarRef} style={{ height: 1, background: CREAM, width: '0%' }} />
+            <div ref={progressKnobRef} style={{ position: 'absolute', top: -3, left: '0%', width: 1, height: 7, background: CREAM, transform: 'translateX(-50%)' }} />
           </div>
           <div style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between' }}>
             <Tag>Vol. 01 · Today</Tag>
@@ -615,41 +658,66 @@ function PinnedArchive() {
   )
 }
 
-// Manifesto — 250vh gives ample scroll room so all lines complete while sticky
 function Manifesto() {
   const ref = useRef(null)
-  const p = useElementProgress(ref)
+  const line1Ref = useRef(null)
+  const line2Ref = useRef(null)
+  const line3Ref = useRef(null)
+  const counterRef = useRef(null)
+  const featuresRef = useRef(null)
 
-  // 250vh section, total traversal = 350vh
-  // sticky starts at p = 100/350 = 0.286
-  // sticky ends   at p = 250/350 = 0.714
-  // lp maps [0.286, 0.714] → [0, 1]
-  const lp = Math.max(0, Math.min(1, (p - 0.02) / 0.70))
-  const skewBase = (lp - 0.5) * 10
-
-  const evTY = Math.max(0, (1 - Math.min(1, lp / 0.30)) * 120)
-  const ynTY = Math.max(0, (1 - Math.min(1, Math.max(0, lp - 0.22) / 0.30)) * 120)
-  const ntTY = Math.max(0, (1 - Math.min(1, Math.max(0, lp - 0.46) / 0.34)) * 120)
+  useEffect(() => {
+    let raf = null
+    const update = () => {
+      if (raf) return
+      raf = requestAnimationFrame(() => {
+        raf = null
+        const el = ref.current
+        if (!el) return
+        const r = el.getBoundingClientRect()
+        const vh = window.innerHeight
+        const p = Math.max(0, Math.min(1, (vh - r.top) / (r.height + vh)))
+        const lp = Math.max(0, Math.min(1, (p - 0.02) / 0.70))
+        const skewBase = (lp - 0.5) * 10
+        const evTY = Math.max(0, (1 - Math.min(1, lp / 0.30)) * 120)
+        const ynTY = Math.max(0, (1 - Math.min(1, Math.max(0, lp - 0.22) / 0.30)) * 120)
+        const ntTY = Math.max(0, (1 - Math.min(1, Math.max(0, lp - 0.46) / 0.34)) * 120)
+        if (line1Ref.current) line1Ref.current.style.transform = `translateY(${evTY}%) skewY(${skewBase * 0.4}deg)`
+        if (line2Ref.current) line2Ref.current.style.transform = `translateY(${ynTY}%) skewY(${skewBase * -0.4}deg)`
+        if (line3Ref.current) line3Ref.current.style.transform = `translateY(${ntTY}%)`
+        if (counterRef.current) counterRef.current.textContent = `${String(Math.round(lp * 100)).padStart(3, '0')} / 100`
+        if (featuresRef.current) featuresRef.current.style.opacity = String(Math.min(1, lp * 3))
+      })
+    }
+    update()
+    window.addEventListener('scroll', update, { passive: true })
+    window.addEventListener('resize', update, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', update)
+      window.removeEventListener('resize', update)
+      if (raf) cancelAnimationFrame(raf)
+    }
+  }, [])
 
   return (
     <section ref={ref} id="manifesto" style={{ background: INK, height: '180vh', position: 'relative' }}>
       <div style={{ position: 'sticky', top: 0, height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 clamp(20px,4vw,48px)' }}>
         <div style={{ position: 'absolute', top: 48, left: 'clamp(20px,4vw,48px)' }}><Tag style={{ letterSpacing: '0.32em' }}>§ 04 — What we built</Tag></div>
-        <div style={{ position: 'absolute', top: 48, right: 'clamp(20px,4vw,48px)', fontFamily: 'var(--font-mono)', fontSize: 11, color: MUTED, letterSpacing: '0.18em' }}>{String(Math.round(lp * 100)).padStart(3, '0')} / 100</div>
+        <div ref={counterRef} style={{ position: 'absolute', top: 48, right: 'clamp(20px,4vw,48px)', fontFamily: 'var(--font-mono)', fontSize: 11, color: MUTED, letterSpacing: '0.18em' }}>000 / 100</div>
 
         <div style={{ maxWidth: 1700, margin: '0 auto', width: '100%' }}>
           <div style={{ overflow: 'hidden', lineHeight: 0.86 }}>
-            <div style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(60px, 14vw, 240px)', color: CREAM, letterSpacing: '-0.05em', transform: `translateY(${evTY}%) skewY(${skewBase * 0.4}deg)`, transition: 'transform .05s linear' }}>EVERYTHING</div>
+            <div ref={line1Ref} style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(60px, 14vw, 240px)', color: CREAM, letterSpacing: '-0.05em', willChange: 'transform', transform: 'translateY(120%)' }}>EVERYTHING</div>
           </div>
           <div style={{ overflow: 'hidden', lineHeight: 0.86 }}>
-            <div style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(60px, 14vw, 240px)', color: CREAM, letterSpacing: '-0.05em', transform: `translateY(${ynTY}%) skewY(${skewBase * -0.4}deg)`, transition: 'transform .05s linear' }}>YOU NEED.</div>
+            <div ref={line2Ref} style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(60px, 14vw, 240px)', color: CREAM, letterSpacing: '-0.05em', willChange: 'transform', transform: 'translateY(120%)' }}>YOU NEED.</div>
           </div>
           <div style={{ overflow: 'hidden', lineHeight: 0.86, marginLeft: '8vw', marginTop: 4 }}>
-            <div style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(60px, 14vw, 240px)', color: 'transparent', WebkitTextStroke: `1.2px ${CREAM}`, letterSpacing: '-0.05em', transform: `translateY(${ntTY}%)`, transition: 'transform .05s linear' }}>{"NOTHING YOU DON'T."}</div>
+            <div ref={line3Ref} style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(60px, 14vw, 240px)', color: 'transparent', WebkitTextStroke: `1.2px ${CREAM}`, letterSpacing: '-0.05em', willChange: 'transform', transform: 'translateY(120%)' }}>{"NOTHING YOU DON'T."}</div>
           </div>
         </div>
 
-        <div style={{ position: 'absolute', bottom: 40, left: 'clamp(20px,4vw,48px)', right: 'clamp(20px,4vw,48px)', display: 'flex', gap: 32, flexWrap: 'wrap', justifyContent: 'space-between', opacity: Math.min(1, lp * 3), transition: 'opacity .3s' }}>
+        <div ref={featuresRef} style={{ position: 'absolute', bottom: 40, left: 'clamp(20px,4vw,48px)', right: 'clamp(20px,4vw,48px)', display: 'flex', gap: 32, flexWrap: 'wrap', justifyContent: 'space-between', opacity: 0 }}>
           {[
             { n: '01', l: 'AI urgency on every article' },
             { n: '02', l: 'Portfolio impact analysis' },
@@ -980,33 +1048,41 @@ function Footer() {
 const SECTIONS = ['§ 01', '§ 02', '§ 03', '§ 04', '§ 05', '§ 06']
 
 function ScrollIndex() {
-  const [progress, setProgress] = useState(0)
+  const dotsRef = useRef([])
+
   useEffect(() => {
-    let raf
+    let raf = null
     const update = () => {
       if (raf) return
       raf = requestAnimationFrame(() => {
-        const max = document.documentElement.scrollHeight - window.innerHeight
-        setProgress(max > 0 ? window.scrollY / max : 0)
         raf = null
+        const max = document.documentElement.scrollHeight - window.innerHeight
+        const progress = max > 0 ? window.scrollY / max : 0
+        const at = progress * (SECTIONS.length - 1)
+        dotsRef.current.forEach((dot, i) => {
+          if (!dot) return
+          const here = Math.abs(at - i) < 0.5
+          dot.style.opacity = here ? '1' : '0.4'
+          const label = dot.firstElementChild
+          const line = dot.lastElementChild
+          if (label) label.textContent = here ? SECTIONS[i] : ''
+          if (line) line.style.width = here ? '22px' : '8px'
+        })
       })
     }
     window.addEventListener('scroll', update, { passive: true })
     update()
     return () => { window.removeEventListener('scroll', update); if (raf) cancelAnimationFrame(raf) }
   }, [])
+
   return (
     <div style={{ position: 'fixed', right: 22, top: '50%', transform: 'translateY(-50%)', zIndex: 50, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, mixBlendMode: 'difference', color: CREAM }}>
-      {SECTIONS.map((s, i) => {
-        const at = progress * (SECTIONS.length - 1)
-        const here = Math.abs(at - i) < 0.5
-        return (
-          <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: here ? 1 : 0.4, transition: 'opacity .3s' }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.18em', color: 'inherit' }}>{here ? s : ''}</span>
-            <span style={{ width: here ? 22 : 8, height: 1, background: 'currentColor', transition: 'width .3s' }} />
-          </div>
-        )
-      })}
+      {SECTIONS.map((s, i) => (
+        <div key={s} ref={el => { dotsRef.current[i] = el }} style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: 0.4, transition: 'opacity .3s' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.18em', color: 'inherit' }}></span>
+          <span style={{ width: 8, height: 1, background: 'currentColor', transition: 'width .3s' }} />
+        </div>
+      ))}
     </div>
   )
 }
