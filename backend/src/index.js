@@ -36,6 +36,10 @@ const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
   process.env.FRONTEND_URL,
+  process.env.FRONTEND_URL_WWW,
+  // Always allow both www and non-www variants of travauxus.com
+  'https://travauxus.com',
+  'https://www.travauxus.com',
 ].filter(Boolean);
 
 app.use(cors({ origin: allowedOrigins, credentials: true }));
