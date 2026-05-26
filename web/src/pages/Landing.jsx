@@ -848,6 +848,9 @@ function PhysicsConvergence() {
 
       // Mouse constraint — elastic, not stiff
       const mouse = Mouse.create(container)
+      // Remove Matter.js wheel listeners so the page can still scroll normally
+      mouse.element.removeEventListener('mousewheel', mouse.mousewheel)
+      mouse.element.removeEventListener('DOMMouseScroll', mouse.mousewheel)
       const mc = MouseConstraint.create(engine, {
         mouse,
         constraint: { stiffness: 0.06, damping: 0.12, render: { visible: false } },
