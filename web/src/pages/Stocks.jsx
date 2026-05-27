@@ -316,13 +316,11 @@ export default function Stocks() {
 
       {/* Two-panel layout */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
-        {/* Left: stock list */}
+        {/* Left: stock list — hidden on mobile when detail is open */}
         <div
-          className={`flex flex-col overflow-y-auto border-r border-[#1a1a1a] transition-all duration-200 scrollbar-hide ${
-            selectedTicker ? 'w-80 flex-shrink-0' : 'flex-1'
-          }`}
+          className={`flex flex-col overflow-y-auto border-r border-[#1a1a1a] transition-all duration-200 scrollbar-hide
+            ${selectedTicker ? 'hidden sm:flex sm:w-80 sm:flex-shrink-0' : 'flex-1'}`}
         >
-          {/* Search bar — always visible at top of list */}
           <div className="px-4 pt-4 pb-3 border-b border-[#1a1a1a] flex-shrink-0">
             <TickerSearch onAdd={handleAdd} />
           </div>
@@ -354,13 +352,25 @@ export default function Stocks() {
           )}
         </div>
 
-        {/* Right: detail panel */}
+        {/* Right: detail panel — full screen on mobile */}
         {selectedTicker ? (
-          <div className="flex-1 min-w-0 bg-[#080808]">
-            <DetailPanel ticker={selectedTicker} />
+          <div className="flex-1 min-w-0 bg-[#080808] flex flex-col">
+            {/* Mobile back button */}
+            <button
+              className="sm:hidden flex items-center gap-2 px-4 py-3 text-white/50 hover:text-white border-b border-[#1a1a1a] flex-shrink-0 transition-colors"
+              onClick={() => dispatch(setSelectedTicker(null))}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M19 12H5M12 5l-7 7 7 7"/>
+              </svg>
+              <span className="text-sm">Back to watchlist</span>
+            </button>
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              <DetailPanel ticker={selectedTicker} />
+            </div>
           </div>
         ) : stocks.length > 0 ? (
-          <div className="flex-1 flex items-center justify-center bg-[#080808]">
+          <div className="hidden sm:flex flex-1 items-center justify-center bg-[#080808]">
             <div className="text-center">
               <svg className="mx-auto mb-3" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>

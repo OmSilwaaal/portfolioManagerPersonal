@@ -68,7 +68,7 @@ export default function GovTrades() {
 
       {/* Summary stats */}
       {summary && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
           <div className="bg-[#141414] border border-[#2a2a2a] rounded-lg p-3">
             <p className="text-gray-400 text-xs">Total trades (30d)</p>
             <p className="text-white font-bold text-xl mt-1">{summary.totalTrades}</p>
@@ -127,17 +127,17 @@ export default function GovTrades() {
           <option value="90">Last 90 days</option>
         </select>
 
-        <form onSubmit={handleTickerSearch} className="flex gap-2">
+        <form onSubmit={handleTickerSearch} className="flex gap-2 w-full sm:w-auto">
           <input
             type="text"
             value={tickerInput}
             onChange={(e) => setTickerInput(e.target.value.toUpperCase())}
             placeholder="Filter by ticker..."
-            className="bg-[#1a1a1a] border border-[#2a2a2a] text-gray-300 text-sm rounded-lg px-3 py-2 w-36 focus:outline-none focus:border-[#3b82f6] placeholder-gray-600"
+            className="bg-[#1a1a1a] border border-[#2a2a2a] text-gray-300 text-sm rounded-lg px-3 py-2 flex-1 sm:w-36 focus:outline-none focus:border-[#3b82f6] placeholder-gray-600"
           />
           <button
             type="submit"
-            className="bg-[#1f1f1f] border border-[#2a2a2a] text-gray-400 hover:text-white text-sm px-3 py-2 rounded-lg transition-colors"
+            className="bg-[#1f1f1f] border border-[#2a2a2a] text-gray-400 hover:text-white text-sm px-4 py-2 rounded-lg transition-colors"
           >
             Search
           </button>

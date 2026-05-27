@@ -206,7 +206,7 @@ export default function Feed() {
   const noCategories = watchedCategories.length === 0
 
   return (
-    <main style={{ flex: 1, padding: '32px 40px', maxWidth: 960, margin: '0 auto', width: '100%' }}>
+    <main className="flex-1 px-4 py-6 sm:px-10 sm:py-8 w-full" style={{ maxWidth: 960, margin: '0 auto' }}>
 
       {/* Personalized header */}
       <div style={{ marginBottom: 28 }}>
@@ -251,7 +251,8 @@ export default function Feed() {
                 key={chip}
                 onClick={() => dispatch(setFeedSubFilter(isActive ? null : chip))}
                 style={{
-                  padding: '4px 10px',
+                  padding: '7px 14px',
+                  minHeight: 36,
                   borderRadius: 'var(--r-pill)',
                   fontFamily: 'var(--font-mono)',
                   fontSize: 10,
@@ -286,7 +287,7 @@ export default function Feed() {
       )}
 
       {isLoading && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {[...Array(5)].map((_, i) => (
             <SkeletonCard key={i} />
           ))}
@@ -300,11 +301,11 @@ export default function Feed() {
       )}
 
       {!isLoading && filtered.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {filtered.slice(0, isPro ? filtered.length : FREE_ITEM_LIMIT).map((item, idx) => (
             <div
               key={item.id || `feed-${idx}`}
-              style={item.urgency === 'Act Now' ? { gridColumn: '1 / -1' } : {}}
+              className={item.urgency === 'Act Now' ? 'col-span-full' : ''}
             >
               <FeedCard
                 type={item._feedType || item.type || 'stock'}
@@ -315,9 +316,9 @@ export default function Feed() {
             </div>
           ))}
           {!isPro && filtered.length > FREE_ITEM_LIMIT && (
-            <div style={{ gridColumn: '1 / -1' }}>
+            <div className="col-span-full">
               <ProGate label="Unlock full feed">
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {filtered.slice(FREE_ITEM_LIMIT, FREE_ITEM_LIMIT + 3).map((item, idx) => (
                     <FeedCard
                       key={`locked-${idx}`}

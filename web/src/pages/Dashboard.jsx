@@ -73,12 +73,12 @@ export default function Dashboard() {
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, background: INK }}>
 
       {/* Header */}
-      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 40px', borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
+      <header className="flex items-center justify-between px-5 py-4 sm:px-10 sm:py-5 flex-shrink-0" style={{ borderBottom: `1px solid ${BORDER}` }}>
         <div>
           <h1 style={{ fontFamily: 'var(--font-sans)', fontSize: 18, fontWeight: 600, letterSpacing: '-0.022em', color: CREAM, margin: 0 }}>Dashboard</h1>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.24em', textTransform: 'uppercase', color: MUTED, marginTop: 4, display: 'block' }}>Market overview · latest news</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div className="hidden sm:flex items-center gap-3">
           <div style={{ position: 'relative', background: INK8, border: `1px solid ${BORDER}`, borderRadius: 'var(--r-sm)', padding: '7px 12px 7px 32px', width: 220 }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ position: 'absolute', left: 10, top: 9, color: MUTED }}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
             <input placeholder="Search tickers, news…" style={{ background: 'transparent', border: 0, outline: 'none', width: '100%', fontFamily: 'var(--font-sans)', fontSize: 12, color: CREAM }} />
@@ -87,8 +87,8 @@ export default function Dashboard() {
       </header>
 
       {/* Body */}
-      <main style={{ flex: 1, overflowY: 'auto', padding: '32px 40px' }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto', display: 'grid', gridTemplateColumns: '1fr 320px', gap: 32, alignItems: 'start' }}>
+      <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-10 sm:py-8">
+        <div className="max-w-[1200px] mx-auto grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 lg:gap-8 items-start">
 
           {/* Left: News Feed */}
           <section>
