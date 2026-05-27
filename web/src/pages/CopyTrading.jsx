@@ -1,91 +1,51 @@
-import CopyTradeCard from '../components/CopyTradeCard'
-import FreemiumGate from '../components/FreemiumGate'
-
-const STUB_TRADES = [
-  {
-    ticker: 'NVDA',
-    direction: 'BUY',
-    confidence: 84,
-    reasoning:
-      'NVIDIA continues to dominate the AI chip market. Strong demand from data centers and recent partnership announcements suggest continued growth.',
-    entryPrice: 875.0,
-    targetPrice: 960.0,
-    stopLoss: 840.0,
-  },
-  {
-    ticker: 'AAPL',
-    direction: 'BUY',
-    confidence: 71,
-    reasoning:
-      'Apple services revenue growth remains strong. The upcoming product cycle and expanding AI features could drive new upgrade cycles.',
-    entryPrice: 185.5,
-    targetPrice: 205.0,
-    stopLoss: 178.0,
-  },
-  {
-    ticker: 'META',
-    direction: 'SELL',
-    confidence: 58,
-    reasoning:
-      'Valuation concerns after strong run-up. Advertising market headwinds and rising capex for AI infrastructure may pressure margins short-term.',
-    entryPrice: 520.0,
-    targetPrice: 475.0,
-    stopLoss: 540.0,
-  },
-]
+import { Link } from 'react-router-dom'
 
 export default function CopyTrading() {
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <header className="flex items-center justify-between px-6 py-4 border-b border-[#1f1f1f] dark:border-[#1f1f1f] border-[#e5e7eb]">
+      <header className="flex items-center justify-between px-6 py-4 border-b border-[#1f1f1f]">
         <div>
           <h1 className="text-xl font-semibold text-white">Copy Trading</h1>
           <p className="text-sm text-[#a1a1aa]">AI-generated trade signals</p>
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-screen-xl mx-auto space-y-6">
-          {/* Disclaimer banner */}
-          <div className="flex items-start gap-3 p-4 bg-yellow-400/10 border border-yellow-400/30 rounded-md">
-            <span className="text-yellow-400 flex-shrink-0 text-base">⚠</span>
-            <p className="text-sm text-yellow-400">
-              <strong>Important Disclaimer:</strong> This is for educational purposes only and is
-              not financial advice. Past performance does not guarantee future results. Never invest
-              more than you can afford to lose.
-            </p>
+      <main className="flex-1 overflow-y-auto p-6 flex items-center justify-center">
+        <div className="max-w-md w-full text-center">
+          <div
+            className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6"
+            style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.2)' }}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
+              <polyline points="16 7 22 7 22 13"/>
+            </svg>
           </div>
 
-          {/* Trade signals */}
-          <div>
-            <h2 className="text-base font-semibold text-white mb-4">
-              AI Trade Signals
-              <span className="ml-2 text-xs font-normal text-[#a1a1aa]">(Simulated data)</span>
-            </h2>
+          <h2 className="text-2xl font-bold text-white mb-3 tracking-tight">Coming Soon</h2>
+          <p className="text-[#a1a1aa] text-sm leading-relaxed mb-8">
+            AI-powered trade signals are in development. We're training our models on real market data to surface high-conviction ideas with entry prices, targets, and stop losses.
+          </p>
 
-            <div className="space-y-4">
-              {STUB_TRADES.map((trade, index) => (
-                <FreemiumGate key={trade.ticker} isLocked={index >= 2}>
-                  <CopyTradeCard trade={trade} />
-                </FreemiumGate>
-              ))}
-            </div>
+          <div className="rounded-xl p-5 mb-8 text-left space-y-3" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+            <p className="text-xs text-[#6b7280] uppercase tracking-widest font-semibold mb-3">What's coming</p>
+            {[
+              'AI-scored trade signals updated daily',
+              'Entry price, target, and stop loss for every signal',
+              'Confidence scoring based on news + technicals',
+              'One-click copy to Paper Trading',
+            ].map((item) => (
+              <div key={item} className="flex items-start gap-2.5">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 flex-shrink-0">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                <span className="text-sm text-[#a1a1aa]">{item}</span>
+              </div>
+            ))}
           </div>
 
-          {/* How it works */}
-          <div className="p-4 bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)] rounded-md">
-            <h3 className="text-sm font-semibold text-white mb-3">
-              How This Works
-            </h3>
-            <div className="space-y-2 text-sm text-[#a1a1aa]">
-              <p>1. Our AI analyzes news, earnings, and market data to generate trade ideas.</p>
-              <p>2. Each signal includes a confidence score, entry price, target, and stop loss.</p>
-              <p>3. You decide whether to act — we never execute trades on your behalf.</p>
-            </div>
-          </div>
-
-          <p className="text-xs text-[#6b7280] text-center">
-            For educational purposes only. Not financial advice. Trading involves significant risk.
+          <p className="text-[11px] text-[#4b5563]">
+            For educational purposes only. Not financial advice.
           </p>
         </div>
       </main>

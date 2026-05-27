@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
+import { useSelector } from 'react-redux'
 import { useAuth } from '../contexts/AuthContext'
+import ProGate from '../components/ProGate'
 import TradingViewChart from '../components/TradingViewChart'
 import {
   useGetPortfolioQuery,
@@ -13,69 +15,7 @@ import {
 import { useGetStockQuery } from '../api/stocksApi'
 import JargonTooltip from '../components/JargonTooltip'
 
-/* ─── Access gate ─────────────────────────────────────────────────────────── */
-const VALID_CODES = new Set(['MARKETIQ2026', 'PAPERTRADER', 'EARLYACCESS', 'TRADEBETA'])
-const LS_KEY = 'miq_pt_unlocked'
-const ORDER_LS_KEY = 'miq_group_order' // reuse key pattern
-
-function useAccessCode() {
-  const [unlocked, setUnlocked] = useState(() => localStorage.getItem(LS_KEY) === '1')
-  const unlock = (code) => {
-    if (VALID_CODES.has(code.trim().toUpperCase())) {
-      localStorage.setItem(LS_KEY, '1')
-      setUnlocked(true)
-      return true
-    }
-    return false
-  }
-  return { unlocked, unlock }
-}
-
-function AccessGate({ onUnlock }) {
-  const [code, setCode] = useState('')
-  const [error, setError] = useState('')
-
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    if (!onUnlock(code)) setError('Invalid code. Please try again.')
-  }
-
-  return (
-    <div className="flex-1 flex flex-col items-center justify-center min-h-0 bg-[#0a0a0a] px-6">
-      <div className="w-full max-w-sm">
-        <div
-          className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-6"
-          style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-          </svg>
-        </div>
-        <h1 className="text-2xl font-bold text-white text-center tracking-tight mb-2">Paper Trading</h1>
-        <p className="text-white/35 text-sm text-center mb-8">Early access feature — enter your code to continue.</p>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-          <input
-            type="text"
-            value={code}
-            onChange={(e) => { setCode(e.target.value); setError('') }}
-            placeholder="Enter access code"
-            autoFocus
-            className="w-full px-4 py-3 rounded-xl text-sm text-white placeholder-white/20 focus:outline-none tracking-widest uppercase"
-            style={{ background: 'rgba(255,255,255,0.05)', border: error ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(255,255,255,0.10)' }}
-          />
-          {error && <p className="text-red-400 text-xs text-center">{error}</p>}
-          <button
-            type="submit"
-            disabled={!code.trim()}
-            className="w-full py-3 rounded-xl text-sm font-semibold bg-white hover:bg-gray-100 text-[#0a0a0a] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            Unlock
-          </button>
-        </form>
-      </div>
-    </div>
-  )
-}
+/* ─── Helpers ─────────────────────────────────────────────────────────────── */
 
 /* ─── Helpers ─────────────────────────────────────────────────────────────── */
 const fmt = (n, dec = 2) =>
@@ -598,10 +538,26 @@ function Leaderboard({ currentUserId }) {
 
 /* ─── Main page ───────────────────────────────────────────────────────────── */
 export default function PaperTrading() {
-  const { unlocked, unlock } = useAccessCode()
   const { user } = useAuth()
+  const isPro = useSelector((state) => state.preferences.isPro)
 
-  if (!unlocked) return <AccessGate onUnlock={unlock} />
+  if (!isPro) {
+    return (
+      <div className="flex-1 flex flex-col min-h-0 bg-[#0a0a0a]">
+        <header className="px-6 py-4 border-b flex items-center" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+          <div>
+            <h1 className="text-xl font-semibold text-white">Paper Trading</h1>
+            <p className="text-sm text-white/40">Practice trading with virtual cash</p>
+          </div>
+        </header>
+        <div className="flex-1 flex items-center justify-center p-6">
+          <ProGate label="Paper Trading">
+            <div className="w-full h-48 rounded-2xl" style={{ background: 'rgba(255,255,255,0.04)' }} />
+          </ProGate>
+        </div>
+      </div>
+    )
+  }
 
   return <PaperTradingInner userId={user?.id} />
 }

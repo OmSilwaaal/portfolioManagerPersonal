@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+
 export default function FreemiumGate({ isLocked, children }) {
   if (!isLocked) {
     return <>{children}</>
@@ -10,12 +12,12 @@ export default function FreemiumGate({ isLocked, children }) {
       </div>
       <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0f0f0f]/60 dark:bg-[#0f0f0f]/60">
         <p className="text-[#a1a1aa] text-sm mb-3">Pro feature</p>
-        <a
-          href="#affiliate-placeholder"
-          className="px-4 py-2 bg-[#3b82f6] text-white text-sm font-medium rounded-md hover:bg-blue-500 transition-colors"
+        <Link
+          to="/pricing"
+          className="px-4 py-2 bg-[#f59e0b] text-[#0a0a0a] text-sm font-bold rounded-md hover:bg-[#d97706] transition-colors"
         >
           Upgrade to Pro
-        </a>
+        </Link>
       </div>
     </div>
   )

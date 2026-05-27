@@ -20,13 +20,15 @@ const notificationsRouter = require('./routes/notifications');
 const { router: explainRouter } = require('./routes/stockExplainer');
 const { router: stripeRouter } = require('./routes/stripe');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
-const { sessionMiddleware, requireAuth, validateTicker } = require('./middleware/auth');
+const { sessionMiddleware, requireAuth } = require('./middleware/auth');
 const { getBudgetStatus } = require('./services/claude');
 
 // Initialize DB on startup
 require('./db/schema').getDb();
 const { warmCoinList } = require('./services/search');
 warmCoinList();
+const { startAlertPoller } = require('./services/alertPoller');
+startAlertPoller();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -93,7 +95,7 @@ app.use('/api/explain', aiLimiter, explainRouter);
 app.use('/api/stripe', stripeRouter);
 
 // Health check
-app.get('/health', (req, res) => {
+app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString(), budget: getBudgetStatus() });
 });
 

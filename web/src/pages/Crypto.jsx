@@ -75,7 +75,7 @@ export default function Crypto() {
       <header className="flex items-center justify-between px-6 py-4 border-b border-[#1f1f1f] dark:border-[#1f1f1f] border-[#e5e7eb]">
         <div>
           <h1 className="text-xl font-semibold text-white">Crypto</h1>
-          <p className="text-sm text-[#a1a1aa]">Cryptocurrency prices and news</p>
+          <p className="text-sm text-[#a1a1aa]">Cryptocurrency prices and charts</p>
         </div>
       </header>
 
