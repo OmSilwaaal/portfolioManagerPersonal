@@ -400,7 +400,7 @@ function Hero({ onEnter }) {
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 48, flexWrap: 'wrap', gap: 24, position: 'relative', zIndex: 2 }}>
-        <p style={{ fontFamily: 'var(--font-sans)', fontSize: 14, lineHeight: 1.9, color: MUTED, maxWidth: 280, margin: 0, opacity: rdy ? 1 : 0, transform: rdy ? 'none' : 'translateY(16px)', transition: 'opacity .9s ease .7s, transform .9s ease .7s' }}>Real-time market intelligence<br />in plain English. No jargon.</p>
+        <p style={{ fontFamily: 'var(--font-sans)', fontSize: 14, lineHeight: 1.9, color: MUTED, maxWidth: 300, margin: 0, opacity: rdy ? 1 : 0, transform: rdy ? 'none' : 'translateY(16px)', transition: 'opacity .9s ease .7s, transform .9s ease .7s' }}>AI news feed · stock watchlist · government<br />trades · price alerts · paper trading.<br />All in plain English.</p>
         <div style={{ opacity: rdy ? 1 : 0, transition: 'opacity .9s ease .8s' }}>
           <Button variant="primary" tone="paper" icon="arrow" onClick={onEnter}>Get started free</Button>
         </div>
@@ -609,7 +609,7 @@ function PinnedArchive() {
       <div style={{ position: 'sticky', top: 0, height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '64px clamp(20px,4vw,48px) 0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
-            <Tag style={{ letterSpacing: '0.32em' }}>§ 03 — The archive</Tag>
+            <Tag style={{ letterSpacing: '0.32em' }}>§ 04 — The archive</Tag>
             <div style={{ marginTop: 12, fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(40px, 6vw, 90px)', color: CREAM, letterSpacing: '-0.045em', lineHeight: 0.9 }}>
               EVERY SIGNAL,<br />INDEXED.
             </div>
@@ -700,7 +700,7 @@ function Manifesto() {
   return (
     <section ref={ref} id="manifesto" style={{ background: INK, height: '180vh', position: 'relative' }}>
       <div style={{ position: 'sticky', top: 0, height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 clamp(20px,4vw,48px)' }}>
-        <div style={{ position: 'absolute', top: 48, left: 'clamp(20px,4vw,48px)' }}><Tag style={{ letterSpacing: '0.32em' }}>§ 04 — What we built</Tag></div>
+        <div style={{ position: 'absolute', top: 48, left: 'clamp(20px,4vw,48px)' }}><Tag style={{ letterSpacing: '0.32em' }}>§ 05 — What we built</Tag></div>
         <div ref={counterRef} style={{ position: 'absolute', top: 48, right: 'clamp(20px,4vw,48px)', fontFamily: 'var(--font-mono)', fontSize: 11, color: MUTED, letterSpacing: '0.18em' }}>000 / 100</div>
 
         <div style={{ maxWidth: 1700, margin: '0 auto', width: '100%' }}>
@@ -715,16 +715,18 @@ function Manifesto() {
           </div>
         </div>
 
-        <div ref={featuresRef} style={{ position: 'absolute', bottom: 40, left: 'clamp(20px,4vw,48px)', right: 'clamp(20px,4vw,48px)', display: 'flex', gap: 32, flexWrap: 'wrap', justifyContent: 'space-between', opacity: 0 }}>
+        <div ref={featuresRef} style={{ position: 'absolute', bottom: 32, left: 'clamp(20px,4vw,48px)', right: 'clamp(20px,4vw,48px)', display: 'flex', gap: 24, flexWrap: 'wrap', justifyContent: 'space-between', opacity: 0 }}>
           {[
-            { n: '01', l: 'AI urgency on every article' },
-            { n: '02', l: 'Portfolio impact analysis' },
-            { n: '03', l: 'Government trades tracker' },
-            { n: '04', l: 'Real-time price alerts' },
+            { n: '01', l: 'AI feed — urgency scored' },
+            { n: '02', l: 'Stocks & crypto watchlist' },
+            { n: '03', l: 'Congressional trades tracker' },
+            { n: '04', l: 'Commodities with AI context' },
+            { n: '05', l: 'Real-time price alerts' },
+            { n: '06', l: 'Paper trading leaderboard' },
           ].map(f => (
-            <div key={f.n} style={{ flex: 1, borderTop: `1px solid ${BORDER}`, paddingTop: 14 }}>
-              <Tag style={{ display: 'block', marginBottom: 8 }}>{f.n}</Tag>
-              <div style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: MUTED, lineHeight: 1.5 }}>{f.l}</div>
+            <div key={f.n} style={{ flex: '1 1 120px', borderTop: `1px solid ${BORDER}`, paddingTop: 12 }}>
+              <Tag style={{ display: 'block', marginBottom: 6 }}>{f.n}</Tag>
+              <div style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: MUTED, lineHeight: 1.5 }}>{f.l}</div>
             </div>
           ))}
         </div>
@@ -947,7 +949,7 @@ function PhysicsConvergence() {
     return (
       <section style={{ background: CREAM, padding: '80px 24px 60px', position: 'relative', overflow: 'hidden' }}>
         <div style={{ marginBottom: 40 }}>
-          <Tag tone="dark" style={{ letterSpacing: '0.32em' }}>§ 05 — From chaos, signal</Tag>
+          <Tag tone="dark" style={{ letterSpacing: '0.32em' }}>§ 06 — From chaos, signal</Tag>
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
           {PHYS_ITEMS.filter(f => f.type === 'tag' || f.type === 'price' || f.type === 'label').map((f, i) => (
@@ -971,7 +973,7 @@ function PhysicsConvergence() {
   return (
     <section ref={sectionRef} style={{ background: CREAM, height: '100vh', position: 'relative', overflow: 'hidden' }}>
       <div style={{ position: 'absolute', top: 48, left: 'clamp(20px,4vw,48px)', zIndex: 10 }}>
-        <Tag tone="dark" style={{ letterSpacing: '0.32em' }}>§ 05 — From chaos, signal</Tag>
+        <Tag tone="dark" style={{ letterSpacing: '0.32em' }}>§ 06 — From chaos, signal</Tag>
       </div>
       <div style={{ position: 'absolute', top: 48, right: 'clamp(20px,4vw,48px)', zIndex: 10, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'rgba(11,11,11,0.36)', letterSpacing: '0.18em' }}>
         Drag · Play
@@ -984,13 +986,98 @@ function PhysicsConvergence() {
   )
 }
 
+const FEATURES = [
+  {
+    n: '01', tag: 'Daily',
+    title: 'AI News Feed',
+    body: 'Every story scored Act Now, Watch, or Low. Know which news actually moves your holdings before the market reacts.',
+  },
+  {
+    n: '02', tag: 'Live data',
+    title: 'Stock Watchlist',
+    body: 'Track any ticker with real-time prices, TradingView charts, and one-tap AI context — why it\'s moving and what it means.',
+  },
+  {
+    n: '03', tag: 'STOCK Act',
+    title: 'Gov Trades',
+    body: 'Congressional stock trades surfaced the moment they\'re disclosed. See exactly what senators and representatives are buying and selling.',
+  },
+  {
+    n: '04', tag: 'Macro',
+    title: 'Commodities',
+    body: 'Gold, crude oil, natural gas, wheat, and more — each with AI-generated context on why prices are moving today.',
+  },
+  {
+    n: '05', tag: 'Instant',
+    title: 'Price Alerts',
+    body: 'Set a target price on any stock or crypto. We check it every five minutes and mark it triggered the moment conditions are met.',
+  },
+  {
+    n: '06', tag: 'Risk-free',
+    title: 'Paper Trading',
+    body: 'Start with $500 of virtual cash. Buy, sell, set stop-losses and take-profit orders, then compete on the live leaderboard.',
+  },
+]
+
+function FeaturesSection() {
+  const ref = useRef(null)
+  const [vis, setVis] = useState(false)
+  useEffect(() => {
+    const o = new IntersectionObserver(([e]) => { if (e.isIntersecting) setVis(true) }, { threshold: 0.04 })
+    if (ref.current) o.observe(ref.current)
+    return () => o.disconnect()
+  }, [])
+
+  return (
+    <section ref={ref} style={{ background: INK, borderTop: `1px solid ${BORDER}` }}>
+      {/* Section header */}
+      <div style={{ padding: '72px clamp(20px,4vw,48px) 52px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 24 }}>
+        <div>
+          <Tag style={{ letterSpacing: '0.32em' }}>§ 03 — What\'s inside</Tag>
+          <div style={{ marginTop: 18, fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(38px,7vw,96px)', color: CREAM, letterSpacing: '-0.045em', lineHeight: 0.88 }}>
+            SIX TOOLS.<br />ONE PLATFORM.
+          </div>
+        </div>
+        <p style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: MUTED, maxWidth: 260, lineHeight: 1.75, margin: 0 }}>
+          Everything a serious investor needs.<br />Nothing to slow you down.
+        </p>
+      </div>
+
+      {/* Feature grid — 1px gap lines create the grid lines effect */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1px', background: BORDER }}>
+        {FEATURES.map((f, i) => (
+          <div key={f.n} style={{
+            background: INK, padding: '32px 28px 36px',
+            opacity: vis ? 1 : 0,
+            transform: vis ? 'translateY(0)' : 'translateY(28px)',
+            transition: `opacity .65s ease ${i * 70}ms, transform .65s cubic-bezier(0.16,1,0.3,1) ${i * 70}ms`,
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 }}>
+              <span style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 48, color: 'rgba(240,235,224,0.07)', letterSpacing: '-0.05em', lineHeight: 1 }}>{f.n}</span>
+              <Tag style={{ color: 'var(--moss-200)', letterSpacing: '0.18em' }}>{f.tag}</Tag>
+            </div>
+            <div style={{ fontFamily: 'var(--font-sans)', fontSize: 15, fontWeight: 600, color: CREAM, marginBottom: 10, letterSpacing: '-0.01em' }}>{f.title}</div>
+            <div style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: MUTED, lineHeight: 1.75 }}>{f.body}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Bottom rule with pricing nudge */}
+      <div style={{ padding: '28px clamp(20px,4vw,48px)', borderTop: `1px solid ${BORDER}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+        <Tag>Free tier available — Pro from $12/mo</Tag>
+        <Tag style={{ color: 'var(--moss-200)' }}>No credit card required to start →</Tag>
+      </div>
+    </section>
+  )
+}
+
 function CtaSection({ onEnter }) {
   const ref = useRef(null)
   const p = useElementProgress(ref)
   const mouse = useMouse()
   return (
     <section ref={ref} style={{ background: INK, minHeight: '100vh', padding: '60px clamp(20px,4vw,48px)', display: 'flex', flexDirection: 'column', justifyContent: 'center', position: 'relative' }}>
-      <div style={{ position: 'absolute', top: 48, left: 'clamp(20px,4vw,48px)' }}><Tag style={{ letterSpacing: '0.32em' }}>§ 06 — Begin</Tag></div>
+      <div style={{ position: 'absolute', top: 48, left: 'clamp(20px,4vw,48px)' }}><Tag style={{ letterSpacing: '0.32em' }}>§ 07 — Begin</Tag></div>
       <div style={{ maxWidth: 1500, margin: '0 auto', width: '100%' }}>
         <Rule vis={p > 0.1} />
         <div style={{ marginTop: 48, transform: `translate3d(${mouse.nx * 12}px, ${mouse.ny * 8}px, 0)`, transition: 'transform .8s cubic-bezier(0.16,1,0.3,1)' }}>
@@ -1025,7 +1112,7 @@ function Footer() {
         {/* Right: all content stacked vertically */}
         <div style={{ borderLeft: `1px solid ${BORDER}`, padding: '60px clamp(20px,4vw,48px)', display: 'flex', flexDirection: 'column', gap: 36, minWidth: 'min(300px,100%)', alignSelf: 'stretch', justifyContent: 'flex-end' }}>
           <Logo size="sm" />
-          <p style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: 'rgba(240,235,224,0.22)', maxWidth: 220, lineHeight: 1.8, margin: 0 }}>Market intelligence for everyone.</p>
+          <p style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: 'rgba(240,235,224,0.22)', maxWidth: 220, lineHeight: 1.8, margin: 0 }}>AI news feed, stock watchlist, gov trades, price alerts, and paper trading — in plain English.</p>
           {[
             { col: 'Product', links: ['Features', 'Pricing', 'Changelog'] },
             { col: 'Archive', links: ['Today', 'This week', 'Vol. 01'] },
@@ -1046,7 +1133,7 @@ function Footer() {
   )
 }
 
-const SECTIONS = ['§ 01', '§ 02', '§ 03', '§ 04', '§ 05', '§ 06']
+const SECTIONS = ['§ 01', '§ 02', '§ 03', '§ 04', '§ 05', '§ 06', '§ 07']
 
 function ScrollIndex() {
   const dotsRef = useRef([])
@@ -1125,6 +1212,7 @@ export default function Landing() {
       <Hero onEnter={onEnter} />
       <DualMarquee />
       <LanguageWall />
+      <FeaturesSection />
       <PinnedArchive />
       <Manifesto />
       <PhysicsConvergence />
