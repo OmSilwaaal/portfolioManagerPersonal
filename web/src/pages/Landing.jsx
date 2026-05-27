@@ -360,14 +360,14 @@ function Hero({ onEnter }) {
         </div>
       </div>
 
-      {/* Founder quote — upper left */}
+      {/* Founder quote — upper right, shifted toward center */}
       <div style={{
-        position: 'absolute', top: '20%', left: 'clamp(20px,4vw,48px)',
-        textAlign: 'left', pointerEvents: 'none', zIndex: 2,
+        position: 'absolute', top: '18%', right: 'clamp(60px,10vw,160px)',
+        textAlign: 'right', pointerEvents: 'none', zIndex: 2,
         opacity: rdy ? 1 : 0, transition: 'opacity .8s ease 1.0s',
-        maxWidth: 480,
+        maxWidth: 420,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 14, marginBottom: 18 }}>
           <Tag>Market Intelligence</Tag>
           <div style={{ width: 28, height: 1, background: BORDER }} />
           <Tag>Vol. 01 · Est. 2026</Tag>
@@ -986,197 +986,90 @@ function PhysicsConvergence() {
   )
 }
 
-/* ── Feature mockups ──────────────────────────────────────────────────────── */
-function MockFeed() {
-  const rows = [
-    { ticker: 'AAPL', u: 'Act', headline: 'Apple beats Q3; Services hits all-time high.' },
-    { ticker: 'NVDA', u: 'Watch', headline: 'Senate panel signals new AI chip export curbs.' },
-    { ticker: 'BTC',  u: 'Low',  headline: 'Spot-ETF flows positive for fourth straight day.' },
-  ]
-  const uc = u => u === 'Act' ? 'var(--urgency-act)' : u === 'Watch' ? 'var(--urgency-watch)' : 'var(--urgency-low)'
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column' }}>
-      {rows.map((r, i) => (
-        <div key={i} style={{ padding: '12px 16px', borderBottom: i < 2 ? `1px solid ${BORDER}` : 'none', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.2em', textTransform: 'uppercase', color: uc(r.u), flexShrink: 0, marginTop: 3, minWidth: 36 }}>{r.u}</span>
-          <div>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.18em', color: MUTED, display: 'block', marginBottom: 3 }}>{r.ticker}</span>
-            <span style={{ fontFamily: 'var(--font-sans)', fontSize: 11, color: CREAM, lineHeight: 1.4 }}>{r.headline}</span>
-          </div>
-        </div>
-      ))}
-    </div>
-  )
+/* ── Scramble reveal ─────────────────────────────────────────────────────── */
+function ScrambleText({ text }) {
+  const [display, setDisplay] = useState(text)
+  const CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789·—×+!%$#'
+  useEffect(() => {
+    if (!text) return
+    let revealed = 0
+    let rafId = null
+    let lastTs = 0
+    const STEP_MS = 16
+    const tick = (ts) => {
+      if (ts - lastTs >= STEP_MS) { lastTs = ts; revealed = Math.min(text.length, revealed + 1) }
+      const scrambled = text.slice(0, revealed) + text.slice(revealed).replace(/[^ ]/g, () => CHARS[Math.floor(Math.random() * CHARS.length)])
+      setDisplay(scrambled)
+      if (revealed < text.length) rafId = requestAnimationFrame(tick)
+      else setDisplay(text)
+    }
+    setDisplay(text.replace(/[^ ]/g, () => CHARS[Math.floor(Math.random() * CHARS.length)]))
+    rafId = requestAnimationFrame(tick)
+    return () => { if (rafId) cancelAnimationFrame(rafId) }
+  }, [text])
+  return <>{display}</>
 }
 
-function MockWatchlist() {
-  const rows = [
-    { t: 'AAPL', p: '$192.40', c: '+2.40%', pos: true },
-    { t: 'NVDA', p: '$489.20', c: '−3.18%', pos: false },
-    { t: 'MSFT', p: '$408.20', c: '+0.61%', pos: true },
-    { t: 'BTC',  p: '$42,180', c: '+1.73%', pos: true },
-  ]
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column' }}>
-      {rows.map((r, i) => (
-        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 16px', borderBottom: i < 3 ? `1px solid ${BORDER}` : 'none' }}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, color: CREAM, letterSpacing: '0.08em', width: 40 }}>{r.t}</span>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--on-ink-text-2)' }}>{r.p}</span>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: r.pos ? 'var(--positive)' : 'var(--negative)', minWidth: 52, textAlign: 'right' }}>{r.c}</span>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function MockGovTrades() {
-  const rows = [
-    { name: 'PELOSI, N.', ticker: 'NVDA', amt: '$250K–$500K', side: 'BUY' },
-    { name: 'KENNEDY, J.', ticker: 'AAPL', amt: '$50K–$100K', side: 'SELL' },
-    { name: 'TUBERVILLE', ticker: 'SPY',  amt: '$100K–$250K', side: 'BUY' },
-  ]
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column' }}>
-      {rows.map((r, i) => (
-        <div key={i} style={{ padding: '10px 14px', borderBottom: i < 2 ? `1px solid ${BORDER}` : 'none' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.12em', color: MUTED }}>{r.name}</span>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.18em', color: r.side === 'BUY' ? 'var(--positive)' : 'var(--negative)' }}>{r.side}</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, color: CREAM }}>{r.ticker}</span>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: MUTED }}>{r.amt}</span>
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function MockCommodities() {
-  const rows = [
-    { t: 'GOLD',    p: '$2,024', c: '+1.20%', pos: true },
-    { t: 'OIL',     p: '$78.40', c: '−0.82%', pos: false },
-    { t: 'NAT GAS', p: '$2.84',  c: '+3.15%', pos: true },
-    { t: 'WHEAT',   p: '$580.2', c: '−0.44%', pos: false },
-  ]
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column' }}>
-      {rows.map((r, i) => (
-        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 16px', borderBottom: i < 3 ? `1px solid ${BORDER}` : 'none' }}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: MUTED, letterSpacing: '0.1em', width: 56 }}>{r.t}</span>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: CREAM }}>{r.p}</span>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: r.pos ? 'var(--positive)' : 'var(--negative)' }}>{r.c}</span>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function MockAlerts() {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', padding: '14px 16px', gap: 10 }}>
-      {[
-        { ticker: 'AAPL', dir: 'rises above', price: '$200.00', hit: true },
-        { ticker: 'TSLA', dir: 'falls below', price: '$180.00', hit: false },
-        { ticker: 'BTC',  dir: 'rises above', price: '$45,000', hit: false },
-      ].map((a, i) => (
-        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', border: `1px solid ${a.hit ? 'var(--moss-300)' : BORDER}`, borderRadius: 2 }}>
-          <div style={{ width: 6, height: 6, borderRadius: '50%', background: a.hit ? 'var(--moss-300)' : MUTED, flexShrink: 0 }} />
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: CREAM, fontWeight: 600 }}>{a.ticker}</span>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: MUTED, flex: 1 }}>{a.dir} {a.price}</span>
-          {a.hit && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 7, letterSpacing: '0.18em', color: 'var(--moss-200)', textTransform: 'uppercase' }}>Triggered</span>}
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function MockPaperTrading() {
-  const positions = [
-    { t: 'AAPL', sh: 3, pnl: '+$42.20', pct: '+7.3%', pos: true },
-    { t: 'NVDA', sh: 1, pnl: '−$12.80', pct: '−2.6%', pos: false },
-    { t: 'BTC',  sh: 0.25, pnl: '+$88.40', pct: '+11.2%', pos: true },
-  ]
-  return (
-    <div>
-      <div style={{ display: 'flex', gap: 0, borderBottom: `1px solid ${BORDER}` }}>
-        {[{ l: 'Cash', v: '$287.40' }, { l: 'Value', v: '$1,104.60' }, { l: 'P&L', v: '+$117.80' }].map((s, i) => (
-          <div key={i} style={{ flex: 1, padding: '10px 12px', borderRight: i < 2 ? `1px solid ${BORDER}` : 'none' }}>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 7, letterSpacing: '0.22em', textTransform: 'uppercase', color: MUTED, marginBottom: 4 }}>{s.l}</div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, color: i === 2 ? 'var(--positive)' : CREAM }}>{s.v}</div>
-          </div>
-        ))}
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
-        {positions.map((p, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderBottom: i < 2 ? `1px solid ${BORDER}` : 'none' }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, color: CREAM, width: 36 }}>{p.t}</span>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: MUTED }}>{p.sh} sh</span>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: p.pos ? 'var(--positive)' : 'var(--negative)' }}>{p.pnl}</span>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: p.pos ? 'var(--positive)' : 'var(--negative)' }}>{p.pct}</span>
-          </div>
-        ))}
-      </div>
-      <div style={{ padding: '8px 12px', borderTop: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.18em', color: 'var(--ochre-300)' }}>★ #1 LEADERBOARD</span>
-      </div>
-    </div>
-  )
-}
-
-/* ── Interactive features section ─────────────────────────────────────────── */
-const FEATURE_CARDS = [
+/* ── Features data ───────────────────────────────────────────────────────── */
+const FEATURES = [
   {
-    id: 'feed', n: '01', tag: 'Daily · AI-scored',
-    title: 'AI News Feed',
+    id: 'feed', n: '01', title: 'AI NEWS FEED', tag: 'Daily · AI-scored',
+    hint: [
+      { text: 'ACT NOW', color: 'var(--urgency-act)' },
+      { text: 'WATCH',   color: 'var(--urgency-watch)' },
+      { text: 'LOW',     color: 'var(--urgency-low)' },
+    ],
     body: 'Every story scored Act Now, Watch, or Low. Know which news actually moves your holdings before the market reacts.',
-    mockup: MockFeed,
-    area: 'feed',
   },
   {
-    id: 'watch', n: '02', tag: 'Live data',
-    title: 'Stock Watchlist',
-    body: 'Track any ticker with real-time prices, TradingView charts, and one-tap AI context on why it\'s moving.',
-    mockup: MockWatchlist,
-    area: 'watch',
+    id: 'watch', n: '02', title: 'STOCK WATCHLIST', tag: 'Live data',
+    hint: [
+      { text: 'AAPL +2.40%', color: 'var(--positive)' },
+      { text: 'NVDA −3.18%', color: 'var(--negative)' },
+    ],
+    body: "Track any ticker with real-time prices, TradingView charts, and one-tap AI context on why it's moving.",
   },
   {
-    id: 'gov', n: '03', tag: 'STOCK Act',
-    title: 'Gov Trades',
-    body: 'Congressional stock trades the moment they\'re disclosed — see what senators and representatives are actually buying.',
-    mockup: MockGovTrades,
-    area: 'gov',
+    id: 'gov', n: '03', title: 'GOV TRADES', tag: 'STOCK Act',
+    hint: [
+      { text: 'PELOSI',     color: MUTED },
+      { text: 'NVDA · BUY', color: 'var(--positive)' },
+      { text: '$500K',      color: MUTED },
+    ],
+    body: "Congressional stock trades the moment they're disclosed — see what senators and representatives are actually buying.",
   },
   {
-    id: 'alerts', n: '04', tag: 'Instant',
-    title: 'Price Alerts',
+    id: 'alerts', n: '04', title: 'PRICE ALERTS', tag: 'Instant',
+    hint: [
+      { text: '◉ AAPL > $200', color: 'var(--moss-200)' },
+      { text: 'TRIGGERED',     color: 'var(--positive)' },
+    ],
     body: 'Set a target price on any stock or crypto. Checked every five minutes — marked triggered the instant conditions are met.',
-    mockup: MockAlerts,
-    area: 'alerts',
   },
   {
-    id: 'comm', n: '05', tag: 'Macro',
-    title: 'Commodities',
+    id: 'comm', n: '05', title: 'COMMODITIES', tag: 'Macro',
+    hint: [
+      { text: 'GOLD +1.20%', color: 'var(--positive)' },
+      { text: 'OIL −0.82%',  color: 'var(--negative)' },
+    ],
     body: 'Gold, crude oil, gas, wheat — with AI-generated context on why prices are moving today, not just the number.',
-    mockup: MockCommodities,
-    area: 'comm',
   },
   {
-    id: 'paper', n: '06', tag: 'Risk-free',
-    title: 'Paper Trading',
+    id: 'paper', n: '06', title: 'PAPER TRADING', tag: 'Risk-free',
+    hint: [
+      { text: '#1 LEADERBOARD', color: 'var(--ochre-300)' },
+      { text: 'P&L +$117',      color: 'var(--positive)' },
+    ],
     body: 'Start with $500 virtual cash. Buy, sell, set stop-losses and take-profit orders. Compete on the live global leaderboard.',
-    mockup: MockPaperTrading,
-    area: 'paper',
   },
 ]
 
+/* ── Features section — editorial row layout ─────────────────────────────── */
 function FeaturesSection() {
   const [active, setActive] = useState(null)
   const tooltipRef = useRef(null)
   const isMobile = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
 
-  // Update tooltip position directly in DOM — no setState on mousemove
   useEffect(() => {
     let raf = null
     const onMove = (e) => {
@@ -1186,10 +1079,10 @@ function FeaturesSection() {
         raf = null
         if (!tooltipRef.current) return
         const vw = window.innerWidth, vh = window.innerHeight
-        const tw = 300, th = 220
-        let x = e.clientX + 28
-        let y = e.clientY - 24
-        if (x + tw > vw - 20) x = e.clientX - tw - 28
+        const tw = 340, th = 220
+        let x = e.clientX + 32
+        let y = e.clientY - 32
+        if (x + tw > vw - 20) x = e.clientX - tw - 32
         if (y < 20) y = 20
         if (y + th > vh - 20) y = vh - th - 20
         tooltipRef.current.style.left = x + 'px'
@@ -1200,7 +1093,7 @@ function FeaturesSection() {
     return () => { window.removeEventListener('mousemove', onMove); if (raf) cancelAnimationFrame(raf) }
   }, [])
 
-  const activeCard = FEATURE_CARDS.find(f => f.id === active)
+  const activeFeature = FEATURES.find(f => f.id === active)
 
   return (
     <section style={{ background: INK, borderTop: `1px solid ${BORDER}`, position: 'relative' }}>
@@ -1213,71 +1106,92 @@ function FeaturesSection() {
           </div>
         </div>
         {!isMobile && (
-          <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.18em', color: MUTED, margin: 0 }}>
-            Hover to explore →
-          </p>
+          <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.18em', color: MUTED, margin: 0 }}>Hover a row →</p>
         )}
       </div>
 
-      {/* Asymmetric grid */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(3, 1fr)',
-        gridTemplateRows: 'auto auto auto',
-        gridTemplateAreas: `
-          "feed  watch  gov"
-          "feed  alerts comm"
-          "paper paper  paper"
-        `,
-        gap: '1px',
-        background: BORDER,
-        margin: '40px 0 0',
-      }}>
-        {FEATURE_CARDS.map((f) => {
-          const Mockup = f.mockup
+      {/* Editorial rows */}
+      <div style={{ marginTop: 48, borderTop: `1px solid ${BORDER}` }}>
+        {FEATURES.map((f) => {
           const isActive = active === f.id
           return (
-            <div
+            <article
               key={f.id}
               onMouseEnter={() => !isMobile && setActive(f.id)}
               onMouseLeave={() => !isMobile && setActive(null)}
               style={{
-                gridArea: f.area,
-                background: isActive ? 'rgba(240,235,224,0.025)' : INK,
-                position: 'relative',
-                overflow: 'hidden',
-                transition: 'background 0.2s ease',
+                display: 'flex', alignItems: 'center', flexWrap: 'wrap',
+                gap: '2vw',
+                padding: '26px clamp(20px,4vw,48px)',
+                borderBottom: `1px solid ${BORDER}`,
+                background: isActive ? 'rgba(240,235,224,0.022)' : 'transparent',
+                transition: 'background 0.4s cubic-bezier(0.16,1,0.3,1)',
                 cursor: 'crosshair',
-                minHeight: f.id === 'paper' ? 'auto' : 180,
               }}
             >
-              {/* Section number — ghost behind content */}
+              {/* Index number */}
               <span style={{
-                position: 'absolute', top: -8, right: 12,
+                fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 500,
+                letterSpacing: '0.28em',
+                color: isActive ? MUTED : 'rgba(240,235,224,0.22)',
+                flexShrink: 0, minWidth: 22,
+                transition: 'color 0.3s',
+              }}>{f.n}</span>
+
+              {/* Feature name — large editorial display type */}
+              <span style={{
                 fontFamily: 'var(--font-display)',
                 fontVariationSettings: "'wdth' 125, 'wght' 700",
                 fontStretch: '125%', fontWeight: 700,
-                fontSize: 88, color: 'rgba(240,235,224,0.04)',
-                letterSpacing: '-0.05em', lineHeight: 1,
-                pointerEvents: 'none', userSelect: 'none',
-              }}>{f.n}</span>
+                fontSize: 'clamp(22px, 3.6vw, 58px)',
+                color: isActive ? CREAM : 'rgba(240,235,224,0.58)',
+                letterSpacing: '-0.04em', lineHeight: 0.92,
+                flex: '0 0 auto',
+                transition: 'color 0.35s cubic-bezier(0.16,1,0.3,1)',
+              }}>{f.title}</span>
 
-              {/* Tag strip */}
-              <div style={{ padding: '12px 14px 10px', borderBottom: `1px solid ${BORDER}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Tag style={{ letterSpacing: '0.22em', color: isActive ? 'var(--moss-200)' : MUTED, transition: 'color 0.2s' }}>{f.title}</Tag>
-                <Tag style={{ color: 'var(--on-ink-text-4)', letterSpacing: '0.14em' }}>{f.tag}</Tag>
+              {/* Expanding rule */}
+              <div style={{
+                flex: 1, height: 1, minWidth: 16,
+                background: isActive ? 'rgba(240,235,224,0.14)' : BORDER,
+                transition: 'background 0.4s',
+              }} />
+
+              {/* Raw typographic data hint */}
+              <div style={{
+                display: 'flex', gap: 18, alignItems: 'center', flexShrink: 0,
+                opacity: isActive ? 1 : 0.42,
+                transition: 'opacity 0.35s',
+              }}>
+                {f.hint.map((h, i) => (
+                  <span key={i} style={{
+                    fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 500,
+                    letterSpacing: '0.18em', textTransform: 'uppercase',
+                    color: h.color, whiteSpace: 'nowrap',
+                  }}>{h.text}</span>
+                ))}
               </div>
 
-              {/* Mockup content */}
-              <Mockup />
+              {/* Tag + directional arrow */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+                <Tag style={{
+                  color: isActive ? 'var(--moss-200)' : 'var(--on-ink-text-4)',
+                  transition: 'color 0.3s', letterSpacing: '0.16em',
+                }}>{f.tag}</Tag>
+                <span style={{
+                  fontFamily: 'var(--font-mono)', fontSize: 12,
+                  color: isActive ? CREAM : 'rgba(240,235,224,0.16)',
+                  transition: 'color 0.3s, transform 0.3s',
+                  display: 'inline-block',
+                  transform: isActive ? 'translate(3px,-2px)' : 'none',
+                }}>↘</span>
+              </div>
 
-              {/* Mobile info (visible without hover on touch devices) */}
+              {/* Mobile: description inline */}
               {isMobile && (
-                <div style={{ padding: '12px 14px', borderTop: `1px solid ${BORDER}` }}>
-                  <p style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: MUTED, lineHeight: 1.6, margin: 0 }}>{f.body}</p>
-                </div>
+                <p style={{ width: '100%', fontFamily: 'var(--font-sans)', fontSize: 13, color: MUTED, lineHeight: 1.75, margin: '10px 0 0 30px' }}>{f.body}</p>
               )}
-            </div>
+            </article>
           )
         })}
       </div>
@@ -1288,42 +1202,36 @@ function FeaturesSection() {
         <Tag style={{ color: 'var(--moss-200)' }}>No credit card required →</Tag>
       </div>
 
-      {/* Cursor-following tooltip (desktop only) */}
+      {/* Cursor-following tooltip with scramble reveal (desktop only) */}
       {!isMobile && (
         <div
           ref={tooltipRef}
           style={{
-            position: 'fixed',
-            top: 0, left: 0,
-            zIndex: 9000,
-            pointerEvents: 'none',
-            width: 300,
-            opacity: activeCard ? 1 : 0,
-            transform: 'translate(0px, 0px)',
-            transition: 'opacity 0.15s ease',
+            position: 'fixed', top: 0, left: 0,
+            zIndex: 9000, pointerEvents: 'none',
+            width: 340,
+            opacity: activeFeature ? 1 : 0,
+            transition: 'opacity 0.18s ease',
           }}
         >
-          {activeCard && (
-            <div style={{
-              background: CREAM,
-              border: `1px solid rgba(11,11,11,0.18)`,
-              padding: '20px 22px 22px',
-            }}>
-              {/* Ghost number */}
-              <div style={{
-                fontFamily: 'var(--font-display)',
-                fontVariationSettings: "'wdth' 125, 'wght' 700",
-                fontStretch: '125%', fontWeight: 700,
-                fontSize: 64, color: 'rgba(11,11,11,0.06)',
-                letterSpacing: '-0.05em', lineHeight: 0.9,
-                marginBottom: -8,
-              }}>{activeCard.n}</div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 10 }}>
-                <span style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 110, 'wght' 600", fontWeight: 600, fontSize: 20, color: INK, letterSpacing: '-0.02em' }}>{activeCard.title}</span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'rgba(11,11,11,0.35)' }}>{activeCard.tag}</span>
+          {activeFeature && (
+            <div style={{ background: CREAM, border: `1px solid rgba(11,11,11,0.13)`, padding: '26px 28px 28px' }}>
+              {/* Number + title row */}
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 14 }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.28em', color: 'rgba(11,11,11,0.26)', textTransform: 'uppercase' }}>{activeFeature.n}</span>
+                <span style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 110, 'wght' 700", fontWeight: 700, fontSize: 22, color: INK, letterSpacing: '-0.025em', lineHeight: 1 }}>{activeFeature.title}</span>
               </div>
-              <div style={{ height: 1, background: 'rgba(11,11,11,0.10)', marginBottom: 12 }} />
-              <p style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: 'rgba(11,11,11,0.60)', lineHeight: 1.75, margin: 0 }}>{activeCard.body}</p>
+              {/* Data hint chips */}
+              <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 16 }}>
+                {activeFeature.hint.map((h, i) => (
+                  <span key={i} style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: h.color }}>{h.text}</span>
+                ))}
+              </div>
+              <div style={{ height: 1, background: 'rgba(11,11,11,0.08)', marginBottom: 18 }} />
+              {/* Body text with scramble animation — keyed on id so it re-runs per card */}
+              <p style={{ fontFamily: 'var(--font-sans)', fontSize: 14, color: 'rgba(11,11,11,0.82)', lineHeight: 1.88, margin: 0, fontWeight: 400 }}>
+                <ScrambleText key={activeFeature.id} text={activeFeature.body} />
+              </p>
             </div>
           )}
         </div>
