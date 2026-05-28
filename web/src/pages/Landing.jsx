@@ -721,7 +721,7 @@ function PhysicsConvergence() {
       const W = container.offsetWidth || window.innerWidth
       const H = container.offsetHeight || window.innerHeight
 
-      const engine = Engine.create({ positionIterations: 6, velocityIterations: 6 })
+      const engine = Engine.create({ positionIterations: 3, velocityIterations: 3, constraintIterations: 2 })
       engine.gravity.y = 3.2
 
       // Create a body per item using element dimensions
@@ -777,17 +777,23 @@ function PhysicsConvergence() {
       })
       Composite.add(engine.world, mc)
 
+      // Cache container rect — avoids getBoundingClientRect() inside RAF tick
+      let containerRect = container.getBoundingClientRect()
+      const updateRect = () => { containerRect = container.getBoundingClientRect() }
+      window.addEventListener('resize', updateRect, { passive: true })
+      window.addEventListener('scroll', updateRect, { passive: true })
+
       // RAF loop: update engine + sync DOM positions
       let prev = performance.now()
       const tick = (now) => {
-        const delta = Math.min(now - prev, 50)
+        const delta = Math.min(now - prev, 32)
         prev = now
 
         // Soft cursor influence — repel nearby bodies gently
-        const rect = container.getBoundingClientRect()
-        const cx = cursorRef.current.x - rect.left
-        const cy = cursorRef.current.y - rect.top
-        mBodies.forEach(b => {
+        const cx = cursorRef.current.x - containerRect.left
+        const cy = cursorRef.current.y - containerRect.top
+        for (let i = 0; i < mBodies.length; i++) {
+          const b = mBodies[i]
           const dx = b.position.x - cx
           const dy = b.position.y - cy
           const dist = Math.hypot(dx, dy)
@@ -795,30 +801,28 @@ function PhysicsConvergence() {
             const f = 0.000065 * (1 - dist / 140)
             Body.applyForce(b, b.position, { x: (dx / dist) * f, y: (dy / dist) * f })
           }
-        })
+        }
 
         Engine.update(engine, delta)
 
-        // Sync DOM elements to physics positions
-        mBodies.forEach((b, i) => {
+        // Sync DOM — single transform string per element, no left/top mutations
+        for (let i = 0; i < mBodies.length; i++) {
+          const b  = mBodies[i]
           const el = itemRefs.current[i]
-          if (!el) return
+          if (!el) continue
           const isDragging = mc.body === b
-          el.style.left = b.position.x + 'px'
-          el.style.top  = b.position.y + 'px'
-          el.style.transform = `translate(-50%, -50%) rotate(${b.angle}rad)`
+          const scale = isDragging ? 1.08 : 1
+          el.style.transform = `translate(${b.position.x}px, ${b.position.y}px) translate(-50%, -50%) rotate(${b.angle}rad) scale(${scale})`
           if (isDragging) {
-            el.style.filter    = 'drop-shadow(0 18px 36px rgba(11,11,11,0.28))'
-            el.style.scale     = '1.08'
-            el.style.zIndex    = '20'
-            el.style.cursor    = 'grabbing'
+            el.style.filter  = 'drop-shadow(0 18px 36px rgba(11,11,11,0.28))'
+            el.style.zIndex  = '20'
+            el.style.cursor  = 'grabbing'
           } else {
-            el.style.filter    = ''
-            el.style.scale     = '1'
-            el.style.zIndex    = ''
-            el.style.cursor    = 'grab'
+            el.style.filter  = ''
+            el.style.zIndex  = ''
+            el.style.cursor  = 'grab'
           }
-        })
+        }
 
         rafId = requestAnimationFrame(tick)
       }
@@ -827,6 +831,8 @@ function PhysicsConvergence() {
       cleanupRef.current = () => {
         cancelAnimationFrame(rafId)
         Engine.clear(engine)
+        window.removeEventListener('resize', updateRect)
+        window.removeEventListener('scroll', updateRect)
       }
     }
 
@@ -845,10 +851,10 @@ function PhysicsConvergence() {
 
   const renderItem = (f, i) => {
     const base = {
-      position: 'absolute', left: '50%', top: '-200px',
-      transform: 'translate(-50%, -50%)',
+      position: 'absolute', left: 0, top: 0,
+      transform: 'translate(-200px, -200px)',
       cursor: 'grab', userSelect: 'none', WebkitUserSelect: 'none',
-      willChange: 'transform, left, top',
+      willChange: 'transform',
     }
     if (f.type === 'big') return (
       <span key={i} ref={el => { itemRefs.current[i] = el }} style={{ ...base, fontFamily: 'var(--font-display)', fontVariationSettings: `'wdth' 125, 'wght' ${f.wt}`, fontStretch: '125%', fontWeight: f.wt, fontSize: f.sz, color: f.col, letterSpacing: '-0.05em', lineHeight: 0.82, whiteSpace: 'nowrap' }}>{f.v}</span>
