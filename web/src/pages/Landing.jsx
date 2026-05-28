@@ -498,163 +498,6 @@ function LanguageWall() {
   )
 }
 
-const ARCHIVE = [
-  { n: '001', y: '03:14', ticker: 'AAPL', headline: 'Apple beats Q3; Services hits all-time high.', urgency: 'Act' },
-  { n: '002', y: '03:48', ticker: 'NVDA', headline: 'Senate panel signals new AI export curbs.', urgency: 'Watch' },
-  { n: '003', y: '04:01', ticker: 'BTC',  headline: 'Spot-ETF flows positive for fourth day.', urgency: 'Low' },
-  { n: '004', y: '04:22', ticker: 'GOLD', headline: 'Bullion edges to seven-week high on weak dollar.', urgency: 'Low' },
-  { n: '005', y: '05:05', ticker: 'FOMC', headline: "Minutes Wednesday — 'higher for longer' read.", urgency: 'Watch' },
-  { n: '006', y: '05:18', ticker: 'TSLA', headline: 'Berlin Gigafactory restart slips a week.', urgency: 'Low' },
-  { n: '007', y: '05:44', ticker: 'OXY',  headline: "Buffett's Berkshire boosts Occidental again.", urgency: 'Watch' },
-  { n: '008', y: '06:30', ticker: 'META', headline: 'Reels ad load hits parity with Feed.', urgency: 'Low' },
-]
-
-function PinnedArchive() {
-  const ref = useRef(null)
-  const stripRef = useRef(null)
-  const counterRef = useRef(null)
-  const progressBarRef = useRef(null)
-  const progressKnobRef = useRef(null)
-  const cardRefs = useRef([])
-  const dragState = useRef({ active: false, startX: 0, startScroll: 0 })
-  const stageRef = useRef(0)
-  const maxScrollRef = useRef(ARCHIVE.length * 380 + 240 - (typeof window !== 'undefined' ? window.innerWidth : 1280))
-  const urgencyColor = u => u === 'Act' ? 'var(--urgency-act)' : u === 'Watch' ? 'var(--urgency-watch)' : 'var(--urgency-low)'
-
-  const syncDOM = (s) => {
-    const maxS = maxScrollRef.current
-    if (stripRef.current) stripRef.current.style.transform = `translateX(${-s * maxS}px)`
-    if (progressBarRef.current) progressBarRef.current.style.width = `${s * 100}%`
-    if (progressKnobRef.current) progressKnobRef.current.style.left = `${s * 100}%`
-    if (counterRef.current) counterRef.current.textContent =
-      `${String(Math.min(ARCHIVE.length, Math.floor(s * ARCHIVE.length) + 1)).padStart(3, '0')} / ${String(ARCHIVE.length).padStart(3, '0')}`
-    const vw = window.innerWidth
-    cardRefs.current.forEach((card, i) => {
-      if (!card) return
-      const cardCenter = (i + 0.5) * 380 - s * maxS + 24
-      const dist = Math.abs(cardCenter - vw / 2)
-      card.style.transform = `scale(${Math.max(0.86, 1 - dist / (vw * 1.6))})`
-      card.style.opacity = String(Math.max(0.35, 1 - dist / (vw * 0.9)))
-    })
-  }
-
-  useEffect(() => {
-    const onResize = () => { maxScrollRef.current = ARCHIVE.length * 380 + 240 - window.innerWidth }
-    window.addEventListener('resize', onResize, { passive: true })
-    return () => window.removeEventListener('resize', onResize)
-  }, [])
-
-  useEffect(() => {
-    let raf = null
-    const update = () => {
-      if (raf) return
-      raf = requestAnimationFrame(() => {
-        raf = null
-        if (dragState.current.active) return
-        const el = ref.current
-        if (!el) return
-        const r = el.getBoundingClientRect()
-        const vh = window.innerHeight
-        const p = Math.max(0, Math.min(1, (vh - r.top) / (r.height + vh)))
-        const s = Math.max(0, Math.min(1, (p - 0.12) / 0.38))
-        stageRef.current = s
-        syncDOM(s)
-      })
-    }
-    update()
-    window.addEventListener('scroll', update, { passive: true })
-    window.addEventListener('resize', update, { passive: true })
-    return () => {
-      window.removeEventListener('scroll', update)
-      window.removeEventListener('resize', update)
-      if (raf) cancelAnimationFrame(raf)
-    }
-  }, [])
-
-  useEffect(() => {
-    const strip = stripRef.current
-    if (!strip) return
-    const getX = (e) => e.touches ? e.touches[0].clientX : e.clientX
-    const onDown = (e) => {
-      dragState.current = { active: true, startX: getX(e), startScroll: stageRef.current }
-      if (!e.touches) strip.style.cursor = 'grabbing'
-    }
-    const onMove = (e) => {
-      if (!dragState.current.active) return
-      if (e.cancelable && e.touches) e.preventDefault()
-      const dx = getX(e) - dragState.current.startX
-      const s = Math.max(0, Math.min(1, dragState.current.startScroll - dx / (maxScrollRef.current || 1) * 1.4))
-      stageRef.current = s
-      syncDOM(s)
-    }
-    const onUp = () => { dragState.current.active = false; strip.style.cursor = 'grab' }
-    strip.addEventListener('mousedown', onDown)
-    strip.addEventListener('touchstart', onDown, { passive: true })
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('touchmove', onMove, { passive: false })
-    window.addEventListener('mouseup', onUp)
-    window.addEventListener('touchend', onUp)
-    return () => {
-      strip.removeEventListener('mousedown', onDown)
-      strip.removeEventListener('touchstart', onDown)
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('touchmove', onMove)
-      window.removeEventListener('mouseup', onUp)
-      window.removeEventListener('touchend', onUp)
-    }
-  }, [])
-
-  return (
-    <section ref={ref} id="archive" style={{ background: INK, height: '150vh', position: 'relative' }}>
-      <div style={{ position: 'sticky', top: 0, height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '64px clamp(20px,4vw,48px) 0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div>
-            <Tag style={{ letterSpacing: '0.32em' }}>§ 04 — The archive</Tag>
-            <div style={{ marginTop: 12, fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(40px, 6vw, 90px)', color: CREAM, letterSpacing: '-0.045em', lineHeight: 0.9 }}>
-              EVERY SIGNAL,<br />INDEXED.
-            </div>
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <Tag>Drag or scroll →</Tag>
-            <div ref={counterRef} style={{ marginTop: 12, fontFamily: 'var(--font-mono)', fontSize: 11, color: MUTED, letterSpacing: '0.18em' }}>001 / 008</div>
-          </div>
-        </div>
-
-        <div style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center' }}>
-          <div ref={stripRef} style={{ display: 'flex', gap: 32, padding: '0 clamp(20px,4vw,48px)', willChange: 'transform', cursor: 'grab' }}>
-            {ARCHIVE.map((a, i) => (
-              <article key={a.n} ref={el => { cardRefs.current[i] = el }} style={{ flex: '0 0 348px', background: 'rgba(240,235,224,0.03)', border: '1px solid rgba(240,235,224,0.08)', borderRadius: 3, padding: '32px 28px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 420, willChange: 'transform, opacity', userSelect: 'none' }}>
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <span style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 96, color: CREAM, letterSpacing: '-0.05em', lineHeight: 0.85 }}>{a.n}</span>
-                    <Tag style={{ color: urgencyColor(a.urgency) }}>{a.urgency}</Tag>
-                  </div>
-                  <div style={{ marginTop: 24, fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.24em', color: MUTED }}>{a.y} · {a.ticker}</div>
-                </div>
-                <div style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 100, 'wght' 500", fontWeight: 500, fontSize: 24, letterSpacing: '-0.02em', lineHeight: 1.22, color: CREAM }}>{a.headline}</div>
-                <div style={{ borderTop: '1px solid rgba(240,235,224,0.08)', paddingTop: 14, display: 'flex', justifyContent: 'space-between' }}>
-                  <Tag style={{ color: MUTED, fontSize: 9 }}>From the feed</Tag>
-                  <Tag style={{ color: MUTED, fontSize: 9 }}>↘</Tag>
-                </div>
-              </article>
-            ))}
-          </div>
-        </div>
-
-        <div style={{ padding: '0 clamp(20px,4vw,48px) 48px' }}>
-          <div style={{ height: 1, background: 'rgba(240,235,224,0.10)', position: 'relative' }}>
-            <div ref={progressBarRef} style={{ height: 1, background: CREAM, width: '0%' }} />
-            <div ref={progressKnobRef} style={{ position: 'absolute', top: -3, left: '0%', width: 1, height: 7, background: CREAM, transform: 'translateX(-50%)' }} />
-          </div>
-          <div style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between' }}>
-            <Tag>Vol. 01 · Today</Tag>
-            <Tag>Live archive · auto-updating</Tag>
-          </div>
-        </div>
-      </div>
-    </section>
-  )
-}
 
 function Manifesto() {
   const ref = useRef(null)
@@ -1302,7 +1145,7 @@ function Footer() {
   )
 }
 
-const SECTIONS = ['§ 01', '§ 02', '§ 03', '§ 04', '§ 05', '§ 06', '§ 07']
+const SECTIONS = ['§ 01', '§ 02', '§ 03', '§ 04', '§ 05', '§ 06']
 
 function ScrollIndex() {
   const dotsRef = useRef([])
@@ -1382,7 +1225,6 @@ export default function Landing() {
       <DualMarquee />
       <LanguageWall />
       <FeaturesSection />
-      <PinnedArchive />
       <Manifesto />
       <PhysicsConvergence />
       <CtaSection onEnter={onEnter} />
