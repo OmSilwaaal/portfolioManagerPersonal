@@ -208,7 +208,9 @@ export default function Sidebar() {
     >
       {/* Logo */}
       <div className="flex items-center px-5 py-5 border-b" style={{ borderColor: 'var(--on-ink-border)' }}>
-        <Logo />
+        <Link to="/" onClick={() => sessionStorage.removeItem('tvx_intro')} style={{ textDecoration: 'none' }}>
+          <Logo />
+        </Link>
       </div>
 
       {/* Nav */}
