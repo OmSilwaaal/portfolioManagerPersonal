@@ -24,6 +24,7 @@ import CreateGroup from './pages/CreateGroup'
 import Profile from './pages/Profile'
 import Landing from './pages/Landing'
 import Pricing from './pages/Pricing'
+import Portfolio from './pages/Portfolio'
 
 // Import API modules to register endpoints
 import './api/stocksApi'
@@ -33,6 +34,7 @@ import './api/alertsApi'
 import './api/searchApi'
 import './api/notificationsApi'
 import './api/explainerApi'
+import './api/snaptradeApi'
 
 function Spinner() {
   return (
@@ -131,6 +133,7 @@ function AppInner() {
         <Route path="/groups/new" element={<CreateGroup />} />
         <Route path="/groups/:id" element={<GroupDetail />} />
         <Route path="/profile/:userId" element={<Profile />} />
+        <Route path="/portfolio" element={<Portfolio />} />
         <Route path="/gov-trades" element={<GovTrades />} />
         <Route path="/commodities" element={<Commodities />} />
         <Route path="/settings" element={<Settings />} />

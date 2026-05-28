@@ -135,6 +135,16 @@ function initSchema() {
     );
   `);
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS snaptrade_connections (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id         TEXT    NOT NULL UNIQUE,
+      snaptrade_user_id   TEXT NOT NULL,
+      snaptrade_user_secret TEXT NOT NULL,
+      connected_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
   // Migrations — add columns if they don't exist (SQLite lacks ADD COLUMN IF NOT EXISTS)
   try { db.exec('ALTER TABLE paper_positions ADD COLUMN targetPrice REAL DEFAULT NULL') } catch (_) {}
   try { db.exec('ALTER TABLE paper_positions ADD COLUMN stopLoss REAL DEFAULT NULL') } catch (_) {}
