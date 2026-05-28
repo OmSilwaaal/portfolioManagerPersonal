@@ -124,7 +124,7 @@ function AppInner() {
       <Route path="/terms" element={<Terms />} />
       <Route path="/disclaimer" element={<Disclaimer />} />
       <Route path="/onboarding" element={<Onboarding />} />
-      <Route path="/app" element={<Navigate to="/feed" replace />} />
+      <Route path="/app" element={<Navigate to="/dashboard" replace />} />
 
       {/* Protected — with sidebar */}
       <Route element={<ProtectedLayout />}>
