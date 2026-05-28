@@ -1185,12 +1185,10 @@ function FeaturesSection() {
             zIndex: 9000, pointerEvents: 'none',
             width: 340,
             opacity: activeFeature ? 1 : 0,
-            transition: 'opacity 0.05s ease',
           }}
         >
           {activeFeature && (
-            <div key={activeFeature.id} style={{ background: CREAM, border: `1px solid rgba(11,11,11,0.13)`, padding: '26px 28px 28px', position: 'relative', overflow: 'hidden', animation: 'tooltipReveal 0.52s cubic-bezier(0.16,1,0.3,1) forwards' }}>
-              <RadialRevealOverlay trigger={activeFeature.id} />
+            <div key={activeFeature.id} style={{ background: CREAM, border: `1px solid rgba(11,11,11,0.13)`, padding: '26px 28px 28px', position: 'relative' }}>
               {/* Number + title row */}
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 14 }}>
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.28em', color: 'rgba(11,11,11,0.26)', textTransform: 'uppercase' }}>{activeFeature.n}</span>
