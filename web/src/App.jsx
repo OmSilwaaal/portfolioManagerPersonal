@@ -26,6 +26,8 @@ import Landing from './pages/Landing'
 import Pricing from './pages/Pricing'
 import Portfolio from './pages/Portfolio'
 import PrivacyPolicy from './pages/PrivacyPolicy'
+import Terms from './pages/Terms'
+import Disclaimer from './pages/Disclaimer'
 
 // Import API modules to register endpoints
 import './api/stocksApi'
@@ -119,6 +121,8 @@ function AppInner() {
       {/* Public */}
       <Route path="/" element={<Landing />} />
       <Route path="/privacy" element={<PrivacyPolicy />} />
+      <Route path="/terms" element={<Terms />} />
+      <Route path="/disclaimer" element={<Disclaimer />} />
       <Route path="/onboarding" element={<Onboarding />} />
       <Route path="/app" element={<Navigate to="/feed" replace />} />
 

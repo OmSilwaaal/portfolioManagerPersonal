@@ -305,9 +305,9 @@ function SignUpScreen({ onNameStored }) {
         {/* Legal footer */}
         <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'rgba(240,235,224,0.22)', textAlign: 'center', marginTop: 28, lineHeight: 1.9 }}>
           BY CONTINUING YOU AGREE TO OUR{' '}
-          <a href="/privacy" style={{ color: MUTED, textDecoration: 'underline', textUnderlineOffset: 3 }}>
-            PRIVACY POLICY
-          </a>
+          <a href="/terms" style={{ color: MUTED, textDecoration: 'underline', textUnderlineOffset: 3 }}>TERMS</a>
+          {' '}AND{' '}
+          <a href="/privacy" style={{ color: MUTED, textDecoration: 'underline', textUnderlineOffset: 3 }}>PRIVACY POLICY</a>
           .{' '}NOT FINANCIAL ADVICE.
         </p>
       </div>

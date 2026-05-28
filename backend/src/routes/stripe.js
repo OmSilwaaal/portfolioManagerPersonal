@@ -71,15 +71,12 @@ router.get('/status', (req, res) => {
 
 // POST /api/stripe/pro-webhook — Stripe sends events here
 router.post('/pro-webhook', async (req, res) => {
-  console.log('[stripe] webhook received, event type will follow after sig check')
-
   if (!stripe) {
-    console.warn('[stripe] webhook hit but Stripe not initialised — check STRIPE_SECRET_KEY')
     return res.sendStatus(200)
   }
 
   if (!process.env.STRIPE_PRO_WEBHOOK_SECRET) {
-    console.warn('[stripe] STRIPE_PRO_WEBHOOK_SECRET not set — cannot verify signature')
+    console.error('[stripe] STRIPE_PRO_WEBHOOK_SECRET not set — cannot verify signature')
     return res.status(400).send('Webhook secret not configured')
   }
 
@@ -95,38 +92,38 @@ router.post('/pro-webhook', async (req, res) => {
     return res.status(400).send(`Webhook error: ${err.message}`)
   }
 
-  console.log('[stripe] event verified:', event.type)
-
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object
     const userId = session.client_reference_id || session.metadata?.userId
-    console.log('[stripe] checkout completed, userId:', userId)
     if (userId) {
       const { error } = await supabase.auth.admin.updateUserById(userId, {
         app_metadata: { isPro: true, stripeCustomerId: session.customer },
       })
       if (error) {
-        console.error('[stripe] failed to set isPro on user', userId, error)
-      } else {
-        console.log('[stripe] user', userId, 'marked as Pro ✓')
+        console.error('[stripe] failed to set isPro on user', userId, error.message)
       }
     } else {
-      console.warn('[stripe] checkout.session.completed received but no userId found in session')
+      console.error('[stripe] checkout.session.completed: no userId in session', session.id)
     }
   }
 
   if (event.type === 'customer.subscription.deleted') {
     const sub = event.data.object
-    console.log('[stripe] subscription cancelled, customer:', sub.customer)
-    const { data: listData } = await supabase.auth.admin.listUsers({ perPage: 1000 })
-    const user = listData?.users?.find((u) => u.app_metadata?.stripeCustomerId === sub.customer)
-    if (user) {
-      await supabase.auth.admin.updateUserById(user.id, {
-        app_metadata: { isPro: false, stripeCustomerId: sub.customer },
-      })
-      console.log('[stripe] user', user.id, 'downgraded from Pro')
-    } else {
-      console.warn('[stripe] could not find user for cancelled customer:', sub.customer)
+    try {
+      const { data: listData, error: listError } = await supabase.auth.admin.listUsers({ perPage: 1000 })
+      if (listError) throw listError
+      const user = listData?.users?.find((u) => u.app_metadata?.stripeCustomerId === sub.customer)
+      if (user) {
+        const { error: updateError } = await supabase.auth.admin.updateUserById(user.id, {
+          app_metadata: { isPro: false, stripeCustomerId: sub.customer },
+        })
+        if (updateError) throw updateError
+      } else {
+        console.error('[stripe] subscription.deleted: no user found for customer', sub.customer)
+      }
+    } catch (err) {
+      console.error('[stripe] subscription.deleted handler failed:', err.message)
+      // Still return 200 so Stripe doesn't retry — log is sufficient for manual recovery
     }
   }
 

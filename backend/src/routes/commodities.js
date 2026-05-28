@@ -41,7 +41,7 @@ async function getMacroContext(commodity) {
     contextCache.set(cacheKey, result);
     return result;
   } catch (err) {
-    console.log(`Macro context error for ${commodity}:`, err.message);
+    if (process.env.NODE_ENV !== 'production') console.error(`Macro context error for ${commodity}:`, err.message);
     return null;
   }
 }

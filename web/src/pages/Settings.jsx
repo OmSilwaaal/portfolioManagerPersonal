@@ -406,7 +406,7 @@ function WatchlistView({ onBack }) {
   const persistWatchlist = async (watchlist) => {
     setSaving(true)
     const { error } = await supabase.auth.updateUser({ data: { watchlist } })
-    if (error) console.log('Watchlist persist error:', error.message)
+    if (error) console.error('Watchlist persist error:', error.message)
     setSaving(false)
   }
 

@@ -553,7 +553,11 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
       await supabase
         .from('paper_transactions')
         .insert({ user_id: userId, type: 'deposit', total: paperCashCredited })
-    } catch (_) {}
+    } catch (err) {
+      console.error('[paper-trading] webhook failed to credit cash for user', userId, err.message)
+      // Return 500 so Stripe retries — cash must not be silently lost
+      return res.status(500).json({ error: 'Failed to credit paper cash' })
+    }
   }
 
   res.json({ received: true })

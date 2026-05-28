@@ -1261,7 +1261,7 @@ function Footer() {
           {[
             { col: 'Product', links: [{ label: 'Features', href: null }, { label: 'Pricing', href: null }, { label: 'Changelog', href: null }] },
             { col: 'Archive', links: [{ label: 'Today', href: null }, { label: 'This week', href: null }, { label: 'Vol. 01', href: null }] },
-            { col: 'Legal',   links: [{ label: 'Disclaimer', href: null }, { label: 'Terms', href: null }, { label: 'Privacy', href: '/privacy' }] },
+            { col: 'Legal',   links: [{ label: 'Disclaimer', href: '/disclaimer' }, { label: 'Terms', href: '/terms' }, { label: 'Privacy', href: '/privacy' }] },
           ].map(({ col, links }) => (
             <div key={col}>
               <Tag style={{ display: 'block', marginBottom: 12 }}>{col}</Tag>
