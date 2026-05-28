@@ -89,6 +89,39 @@ const QUESTIONS = [
   },
 ]
 
+// ─── Design tokens (match Landing.jsx) ───────────────────────────────────────
+const INK   = '#0b0b0b'
+const CREAM = 'var(--paper)'
+const MUTED = 'rgba(240,235,224,0.36)'
+const BORDER_COLOR = 'rgba(240,235,224,0.10)'
+
+const inputStyle = (focused) => ({
+  width: '100%', boxSizing: 'border-box',
+  background: 'rgba(240,235,224,0.04)',
+  border: `1px solid ${focused ? 'rgba(240,235,224,0.40)' : BORDER_COLOR}`,
+  padding: '12px 14px',
+  fontFamily: 'var(--font-sans)', fontSize: 14,
+  color: CREAM, outline: 'none',
+  transition: 'border-color 150ms',
+})
+
+function AuthInput({ label, ...props }) {
+  const [focused, setFocused] = useState(false)
+  return (
+    <div>
+      <label style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: MUTED, marginBottom: 8 }}>
+        {label}
+      </label>
+      <input
+        {...props}
+        style={inputStyle(focused)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+      />
+    </div>
+  )
+}
+
 // ─── Sign-up screen ───────────────────────────────────────────────────────────
 
 function SignUpScreen({ onNameStored }) {
@@ -114,7 +147,6 @@ function SignUpScreen({ onNameStored }) {
       setError(sbError.message)
       setGoogleLoading(false)
     }
-    // on success the page redirects — no need to reset loading
   }
 
   const handleSubmit = async (e) => {
@@ -144,113 +176,139 @@ function SignUpScreen({ onNameStored }) {
 
   if (sent) {
     return (
-      <div className="min-h-screen bg-[#0a0a0a] flex flex-col items-center justify-center px-6 text-center">
-        <div className="w-14 h-14 rounded-full bg-[#3b82f6]/10 border border-[#3b82f6]/30 flex items-center justify-center mb-6">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-            <polyline points="22,6 12,13 2,6"/>
-          </svg>
-        </div>
-        <h2 className="text-2xl font-bold text-white mb-2">Check your email</h2>
-        <p className="text-[#6b7280] text-sm max-w-xs">
-          We sent a magic link to <span className="text-[#a1a1aa]">{email}</span>.
+      <div style={{ minHeight: '100vh', background: INK, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 24px', textAlign: 'center' }}>
+        {/* Diamond icon */}
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" style={{ marginBottom: 28, opacity: 0.7 }}>
+          <path d="M12 2L22 12L12 22L2 12Z" stroke={CREAM} strokeWidth="0.8" strokeLinejoin="round" />
+          <path d="M12 6.5L17.5 12L12 17.5L6.5 12Z" stroke={CREAM} strokeWidth="0.8" strokeLinejoin="round" />
+        </svg>
+        <h2 style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 28, letterSpacing: '-0.04em', color: CREAM, margin: '0 0 12px' }}>
+          Check your email
+        </h2>
+        <p style={{ fontFamily: 'var(--font-sans)', fontSize: 14, lineHeight: 1.8, color: MUTED, maxWidth: 300, margin: '0 0 8px' }}>
+          We sent a magic link to{' '}
+          <span style={{ color: CREAM }}>{email}</span>.{' '}
           Click it to continue — no password needed.
         </p>
-        <p className="text-[#4a4a4a] text-xs mt-6">Didn't get it? Check your spam folder.</p>
+        <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.16em', color: 'rgba(240,235,224,0.22)', marginTop: 20 }}>
+          DIDN'T GET IT? CHECK YOUR SPAM FOLDER.
+        </p>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] flex flex-col items-center justify-center px-6">
+    <div style={{ minHeight: '100vh', background: INK, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 24px 40px', position: 'relative' }}>
+      {/* Back link */}
       <a
         href="/"
-        style={{ position: 'absolute', top: 24, left: 32, fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.10em', color: 'var(--on-ink-text-3)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6, transition: 'color 150ms' }}
-        onMouseEnter={e => e.currentTarget.style.color = 'var(--paper)'}
-        onMouseLeave={e => e.currentTarget.style.color = 'var(--on-ink-text-3)'}
+        style={{ position: 'absolute', top: 24, left: 32, fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.10em', color: MUTED, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6, transition: 'color 150ms' }}
+        onMouseEnter={e => e.currentTarget.style.color = CREAM}
+        onMouseLeave={e => e.currentTarget.style.color = MUTED}
       >
         ← Back
       </a>
-      <div className="mb-12">
+
+      {/* Logo */}
+      <div style={{ marginBottom: 48 }}>
         <Logo size="lg" />
       </div>
 
-      <div className="w-full max-w-sm">
-        <h1 className="text-3xl font-bold text-white text-center mb-2">Create your account</h1>
-        <p className="text-[#6b7280] text-center mb-8 text-sm">
+      <div style={{ width: '100%', maxWidth: 360 }}>
+        {/* Heading */}
+        <h1 style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(28px,5vw,36px)', letterSpacing: '-0.04em', lineHeight: 0.95, color: CREAM, textAlign: 'center', margin: '0 0 10px' }}>
+          Create your account
+        </h1>
+        <p style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: MUTED, textAlign: 'center', margin: '0 0 36px' }}>
           No password. No credit card. Free forever.
         </p>
 
-        {/* Google OAuth — primary */}
+        {/* Google OAuth */}
         <button
           onClick={handleGoogle}
           disabled={anyLoading}
-          className="w-full flex items-center justify-center gap-3 bg-white hover:bg-gray-100 disabled:bg-gray-200 text-gray-900 font-semibold py-3 px-4 rounded-lg text-sm transition-colors"
+          style={{
+            width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
+            background: anyLoading ? 'rgba(240,235,224,0.06)' : 'rgba(240,235,224,0.08)',
+            border: `1px solid ${BORDER_COLOR}`,
+            padding: '13px 16px',
+            fontFamily: 'var(--font-sans)', fontSize: 14, fontWeight: 500,
+            color: anyLoading ? MUTED : CREAM,
+            cursor: anyLoading ? 'not-allowed' : 'pointer',
+            transition: 'background 150ms, border-color 150ms',
+            letterSpacing: '-0.01em',
+          }}
+          onMouseEnter={e => { if (!anyLoading) e.currentTarget.style.background = 'rgba(240,235,224,0.12)'; e.currentTarget.style.borderColor = 'rgba(240,235,224,0.22)' }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(240,235,224,0.08)'; e.currentTarget.style.borderColor = BORDER_COLOR }}
         >
-          <svg width="18" height="18" viewBox="0 0 24 24">
+          <svg width="17" height="17" viewBox="0 0 24 24">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
             <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
             <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
             <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
           </svg>
-          {googleLoading ? 'Redirecting...' : 'Continue with Google'}
+          {googleLoading ? 'Redirecting…' : 'Continue with Google'}
         </button>
 
         {/* Divider */}
-        <div className="flex items-center gap-3 my-5">
-          <div className="flex-1 h-px bg-[#2a2a2a]" />
-          <span className="text-[#4b5563] text-xs">or continue with email</span>
-          <div className="flex-1 h-px bg-[#2a2a2a]" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, margin: '24px 0' }}>
+          <div style={{ flex: 1, height: 1, background: BORDER_COLOR }} />
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'rgba(240,235,224,0.22)' }}>or email</span>
+          <div style={{ flex: 1, height: 1, background: BORDER_COLOR }} />
         </div>
 
-        {/* Magic link — fallback */}
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <div>
-            <label className="block text-sm font-medium text-[#a1a1aa] mb-1.5">Your name</label>
-            <input
-              type="text"
-              placeholder="Jane Smith"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              disabled={anyLoading}
-              className="w-full bg-[#0f0f0f] border border-[#2a2a2a] rounded-lg px-4 py-3 text-white placeholder-[#3a3a3a] focus:outline-none focus:border-[#3b82f6] transition-colors text-sm disabled:opacity-50"
-            />
-          </div>
+        {/* Magic link form */}
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <AuthInput
+            label="Your name"
+            type="text"
+            placeholder="Jane Smith"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            disabled={anyLoading}
+            autoComplete="name"
+          />
+          <AuthInput
+            label="Email address"
+            type="email"
+            placeholder="jane@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            disabled={anyLoading}
+            autoComplete="email"
+          />
 
-          <div>
-            <label className="block text-sm font-medium text-[#a1a1aa] mb-1.5">Email address</label>
-            <input
-              type="email"
-              placeholder="jane@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={anyLoading}
-              className="w-full bg-[#0f0f0f] border border-[#2a2a2a] rounded-lg px-4 py-3 text-white placeholder-[#3a3a3a] focus:outline-none focus:border-[#3b82f6] transition-colors text-sm disabled:opacity-50"
-            />
-          </div>
-
-          {error && <p className="text-red-400 text-xs">{error}</p>}
+          {error && (
+            <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#f87171', letterSpacing: '0.06em', margin: 0 }}>
+              {error}
+            </p>
+          )}
 
           <button
             type="submit"
             disabled={!canSubmit || anyLoading}
-            className={`w-full py-3 rounded-lg font-semibold text-sm transition-all ${
-              canSubmit && !anyLoading
-                ? 'bg-[#3b82f6] text-white hover:bg-[#2563eb]'
-                : 'bg-[#1a1a1a] text-[#3a3a3a] cursor-not-allowed'
-            }`}
+            style={{
+              width: '100%', padding: '13px 16px',
+              background: canSubmit && !anyLoading ? CREAM : 'rgba(240,235,224,0.06)',
+              color: canSubmit && !anyLoading ? INK : 'rgba(240,235,224,0.22)',
+              border: 'none', cursor: canSubmit && !anyLoading ? 'pointer' : 'not-allowed',
+              fontFamily: 'var(--font-sans)', fontSize: 14, fontWeight: 600,
+              letterSpacing: '-0.01em', transition: 'background 150ms, opacity 150ms',
+            }}
+            onMouseEnter={e => { if (canSubmit && !anyLoading) e.currentTarget.style.opacity = '0.88' }}
+            onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
           >
-            {submitting ? 'Sending...' : 'Send magic link →'}
+            {submitting ? 'Sending…' : 'Send magic link →'}
           </button>
         </form>
 
-        <p className="text-[#4a4a4a] text-xs text-center mt-6">
-          By continuing you agree to our{' '}
-          <span className="text-[#6b7280] underline cursor-pointer">Terms</span>{' '}
-          and{' '}
-          <span className="text-[#6b7280] underline cursor-pointer">Privacy Policy</span>.
-          <br />
-          Not financial advice. For educational use only.
+        {/* Legal footer */}
+        <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'rgba(240,235,224,0.22)', textAlign: 'center', marginTop: 28, lineHeight: 1.9 }}>
+          BY CONTINUING YOU AGREE TO OUR{' '}
+          <a href="/privacy" style={{ color: MUTED, textDecoration: 'underline', textUnderlineOffset: 3 }}>
+            PRIVACY POLICY
+          </a>
+          .{' '}NOT FINANCIAL ADVICE.
         </p>
       </div>
     </div>

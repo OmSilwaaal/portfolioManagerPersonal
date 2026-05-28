@@ -1259,13 +1259,16 @@ function Footer() {
           <Logo size="sm" />
           <p style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: 'rgba(240,235,224,0.22)', maxWidth: 220, lineHeight: 1.8, margin: 0 }}>AI news feed, stock watchlist, gov trades, price alerts, and paper trading — in plain English.</p>
           {[
-            { col: 'Product', links: ['Features', 'Pricing', 'Changelog'] },
-            { col: 'Archive', links: ['Today', 'This week', 'Vol. 01'] },
-            { col: 'Legal',   links: ['Disclaimer', 'Terms', 'Privacy'] },
+            { col: 'Product', links: [{ label: 'Features', href: null }, { label: 'Pricing', href: null }, { label: 'Changelog', href: null }] },
+            { col: 'Archive', links: [{ label: 'Today', href: null }, { label: 'This week', href: null }, { label: 'Vol. 01', href: null }] },
+            { col: 'Legal',   links: [{ label: 'Disclaimer', href: null }, { label: 'Terms', href: null }, { label: 'Privacy', href: '/privacy' }] },
           ].map(({ col, links }) => (
             <div key={col}>
               <Tag style={{ display: 'block', marginBottom: 12 }}>{col}</Tag>
-              {links.map(l => <div key={l} style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: 'rgba(240,235,224,0.32)', marginBottom: 8 }}>{l}</div>)}
+              {links.map(({ label, href }) => href
+                ? <a key={label} href={href} style={{ display: 'block', fontFamily: 'var(--font-sans)', fontSize: 13, color: 'rgba(240,235,224,0.32)', marginBottom: 8, textDecoration: 'none', transition: 'color 150ms' }} onMouseEnter={e => e.currentTarget.style.color = 'rgba(240,235,224,0.72)'} onMouseLeave={e => e.currentTarget.style.color = 'rgba(240,235,224,0.32)'}>{label}</a>
+                : <div key={label} style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: 'rgba(240,235,224,0.32)', marginBottom: 8 }}>{label}</div>
+              )}
             </div>
           ))}
           <div style={{ paddingTop: 20, borderTop: '1px solid rgba(240,235,224,0.06)', display: 'flex', flexDirection: 'column', gap: 8 }}>
