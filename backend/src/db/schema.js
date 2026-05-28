@@ -136,6 +136,20 @@ function initSchema() {
   `);
 
   db.exec(`
+    CREATE TABLE IF NOT EXISTS csv_positions (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id     TEXT    NOT NULL,
+      account     TEXT    NOT NULL DEFAULT 'Imported',
+      ticker      TEXT    NOT NULL,
+      quantity    REAL,
+      avg_cost    REAL,
+      price       REAL,
+      market_value REAL,
+      imported_at TEXT    NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
+  db.exec(`
     CREATE TABLE IF NOT EXISTS snaptrade_connections (
       id              INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id         TEXT    NOT NULL UNIQUE,

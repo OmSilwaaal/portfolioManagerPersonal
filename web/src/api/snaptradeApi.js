@@ -24,6 +24,23 @@ export const snaptradeApi = baseApi.injectEndpoints({
       query: () => ({ url: '/snaptrade/disconnect', method: 'DELETE' }),
       invalidatesTags: ['Snaptrade'],
     }),
+    // CSV import
+    getCsvPositions: builder.query({
+      query: () => '/portfolio-import/positions',
+      providesTags: ['CsvPortfolio'],
+      keepUnusedDataFor: 120,
+    }),
+    saveCsvPositions: builder.mutation({
+      query: (body) => ({ url: '/portfolio-import/positions', method: 'POST', body }),
+      invalidatesTags: ['CsvPortfolio'],
+    }),
+    deleteCsvPositions: builder.mutation({
+      query: (account) => ({
+        url: account ? `/portfolio-import/positions?account=${encodeURIComponent(account)}` : '/portfolio-import/positions',
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['CsvPortfolio'],
+    }),
   }),
   overrideExisting: false,
 })
@@ -34,4 +51,7 @@ export const {
   useGetSnaptradeHoldingsQuery,
   useRegisterSnaptradeMutation,
   useDisconnectSnaptradeMutation,
+  useGetCsvPositionsQuery,
+  useSaveCsvPositionsMutation,
+  useDeleteCsvPositionsMutation,
 } = snaptradeApi
