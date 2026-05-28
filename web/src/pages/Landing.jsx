@@ -829,8 +829,8 @@ function PhysicsConvergence() {
   )
 }
 
-/* ── Pixel-block dissolve overlay ────────────────────────────────────────── */
-function PixelRevealOverlay({ trigger }) {
+/* ── Radial reveal overlay ────────────────────────────────────────────────── */
+function RadialRevealOverlay({ trigger }) {
   const canvasRef = useRef(null)
   useEffect(() => {
     const canvas = canvasRef.current
@@ -838,66 +838,47 @@ function PixelRevealOverlay({ trigger }) {
     const parent = canvas.parentElement
     if (!parent) return
     const W = parent.offsetWidth || 340
-    const H = parent.offsetHeight || 240
+    const H = parent.offsetHeight || 260
     canvas.width = W
     canvas.height = H
     const ctx = canvas.getContext('2d')
-    const SZ = 10
-    const cols = Math.ceil(W / SZ)
-    const rows = Math.ceil(H / SZ)
-    const blocks = []
-    for (let r = 0; r < rows; r++)
-      for (let c = 0; c < cols; c++)
-        blocks.push([c, r])
-    for (let i = blocks.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [blocks[i], blocks[j]] = [blocks[j], blocks[i]]
+    const cx = W / 2
+    const cy = H / 2
+    const maxR = Math.hypot(W, H) / 2 + 4
+    let rafId = null
+    let start = null
+    const DURATION = 520
+
+    const tick = (ts) => {
+      if (!start) start = ts
+      const t = Math.min((ts - start) / DURATION, 1)
+      const eased = 1 - Math.pow(1 - t, 2.6)
+      const r = eased * maxR
+
+      ctx.clearRect(0, 0, W, H)
+      ctx.globalCompositeOperation = 'source-over'
+      ctx.fillStyle = 'rgb(11,11,11)'
+      ctx.fillRect(0, 0, W, H)
+
+      ctx.globalCompositeOperation = 'destination-out'
+      const grad = ctx.createRadialGradient(cx, cy, Math.max(0, r - 28), cx, cy, r)
+      grad.addColorStop(0, 'rgba(0,0,0,1)')
+      grad.addColorStop(1, 'rgba(0,0,0,0)')
+      ctx.fillStyle = grad
+      ctx.fillRect(0, 0, W, H)
+
+      if (t < 1) rafId = requestAnimationFrame(tick)
+      else ctx.clearRect(0, 0, W, H)
     }
-    ctx.fillStyle = 'rgb(11,11,11)'
-    ctx.fillRect(0, 0, W, H)
-    let idx = 0
-    let stopped = false
-    const BATCH = Math.max(1, Math.ceil(blocks.length / 22))
-    const step = () => {
-      if (stopped) return
-      for (let i = 0; i < BATCH && idx < blocks.length; i++, idx++) {
-        const [c, r] = blocks[idx]
-        ctx.clearRect(c * SZ, r * SZ, SZ, SZ)
-      }
-      if (idx < blocks.length) setTimeout(step, 18)
-      else { ctx.clearRect(0, 0, W, H) }
-    }
-    const t = setTimeout(step, 0)
-    return () => { stopped = true; clearTimeout(t) }
+
+    rafId = requestAnimationFrame(tick)
+    return () => { if (rafId) cancelAnimationFrame(rafId) }
   }, [trigger])
   return (
     <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, zIndex: 2, pointerEvents: 'none' }} />
   )
 }
 
-/* ── Scramble reveal ─────────────────────────────────────────────────────── */
-function ScrambleText({ text }) {
-  const [display, setDisplay] = useState(text)
-  const CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789·—×+!%$#'
-  useEffect(() => {
-    if (!text) return
-    let revealed = 0
-    let rafId = null
-    let lastTs = 0
-    const STEP_MS = 16
-    const tick = (ts) => {
-      if (ts - lastTs >= STEP_MS) { lastTs = ts; revealed = Math.min(text.length, revealed + 1) }
-      const scrambled = text.slice(0, revealed) + text.slice(revealed).replace(/[^ ]/g, () => CHARS[Math.floor(Math.random() * CHARS.length)])
-      setDisplay(scrambled)
-      if (revealed < text.length) rafId = requestAnimationFrame(tick)
-      else setDisplay(text)
-    }
-    setDisplay(text.replace(/[^ ]/g, () => CHARS[Math.floor(Math.random() * CHARS.length)]))
-    rafId = requestAnimationFrame(tick)
-    return () => { if (rafId) cancelAnimationFrame(rafId) }
-  }, [text])
-  return <>{display}</>
-}
 
 /* ── Features data ───────────────────────────────────────────────────────── */
 const FEATURES = [
@@ -1104,8 +1085,8 @@ function FeaturesSection() {
           }}
         >
           {activeFeature && (
-            <div key={activeFeature.id} style={{ background: CREAM, border: `1px solid rgba(11,11,11,0.13)`, padding: '26px 28px 28px', position: 'relative', overflow: 'hidden' }}>
-              <PixelRevealOverlay trigger={activeFeature.id} />
+            <div key={activeFeature.id} style={{ background: CREAM, border: `1px solid rgba(11,11,11,0.13)`, padding: '26px 28px 28px', position: 'relative', overflow: 'hidden', animation: 'tooltipReveal 0.52s cubic-bezier(0.16,1,0.3,1) forwards' }}>
+              <RadialRevealOverlay trigger={activeFeature.id} />
               {/* Number + title row */}
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 14 }}>
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.28em', color: 'rgba(11,11,11,0.26)', textTransform: 'uppercase' }}>{activeFeature.n}</span>
@@ -1118,10 +1099,7 @@ function FeaturesSection() {
                 ))}
               </div>
               <div style={{ height: 1, background: 'rgba(11,11,11,0.08)', marginBottom: 18 }} />
-              {/* Body text with scramble animation — keyed on id so it re-runs per card */}
-              <p style={{ fontFamily: 'var(--font-sans)', fontSize: 14, color: 'rgba(11,11,11,0.82)', lineHeight: 1.88, margin: 0, fontWeight: 400 }}>
-                <ScrambleText key={activeFeature.id} text={activeFeature.body} />
-              </p>
+              <p style={{ fontFamily: 'var(--font-sans)', fontSize: 14, color: 'rgba(11,11,11,0.82)', lineHeight: 1.88, margin: 0, fontWeight: 400 }}>{activeFeature.body}</p>
             </div>
           )}
         </div>
@@ -1255,6 +1233,10 @@ export default function Landing() {
         }
         @media (hover: hover) and (pointer: fine) { .trx-cursor-hidden, .trx-cursor-hidden * { cursor: none !important; } }
         @media (max-width: 640px) { .trx-nav-links { display: none !important; } }
+        @keyframes tooltipReveal {
+          0%   { filter: blur(10px); }
+          100% { filter: blur(0px); }
+        }
         @media (prefers-reduced-motion: reduce) {
           *, *::before, *::after {
             animation-duration: 0.01ms !important;
