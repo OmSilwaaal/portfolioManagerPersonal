@@ -33,6 +33,33 @@ router.post('/pro-checkout', requireAuth, async (req, res) => {
   }
 })
 
+// POST /api/stripe/redeem-code — validate a promo code server-side and grant Pro
+router.post('/redeem-code', requireAuth, async (req, res) => {
+  const { code } = req.body
+  if (!code || typeof code !== 'string') {
+    return res.status(400).json({ error: true, message: 'No code provided.' })
+  }
+
+  const validCode = process.env.PROMO_CODE
+  if (!validCode) {
+    return res.status(503).json({ error: true, message: 'Promo codes not configured.' })
+  }
+
+  if (code.trim().toUpperCase() !== validCode.trim().toUpperCase()) {
+    return res.status(400).json({ error: true, message: 'Invalid code. Please check and try again.' })
+  }
+
+  const { error } = await supabase.auth.admin.updateUserById(req.user.id, {
+    app_metadata: { isPro: true },
+  })
+  if (error) {
+    console.error('[stripe] redeem-code failed to set isPro', req.user.id, error)
+    return res.status(500).json({ error: true, message: 'Something went wrong. Please try again.' })
+  }
+
+  res.json({ success: true })
+})
+
 // GET /api/stripe/status — sanity check (no auth needed)
 router.get('/status', (req, res) => {
   res.json({
@@ -76,7 +103,7 @@ router.post('/pro-webhook', async (req, res) => {
     console.log('[stripe] checkout completed, userId:', userId)
     if (userId) {
       const { error } = await supabase.auth.admin.updateUserById(userId, {
-        user_metadata: { isPro: true },
+        app_metadata: { isPro: true, stripeCustomerId: session.customer },
       })
       if (error) {
         console.error('[stripe] failed to set isPro on user', userId, error)
@@ -91,11 +118,15 @@ router.post('/pro-webhook', async (req, res) => {
   if (event.type === 'customer.subscription.deleted') {
     const sub = event.data.object
     console.log('[stripe] subscription cancelled, customer:', sub.customer)
-    const { data: sessions } = await supabase.auth.admin.listUsers()
-    const user = sessions?.users?.find((u) => u.user_metadata?.stripeCustomerId === sub.customer)
+    const { data: listData } = await supabase.auth.admin.listUsers({ perPage: 1000 })
+    const user = listData?.users?.find((u) => u.app_metadata?.stripeCustomerId === sub.customer)
     if (user) {
-      await supabase.auth.admin.updateUserById(user.id, { user_metadata: { isPro: false } })
+      await supabase.auth.admin.updateUserById(user.id, {
+        app_metadata: { isPro: false, stripeCustomerId: sub.customer },
+      })
       console.log('[stripe] user', user.id, 'downgraded from Pro')
+    } else {
+      console.warn('[stripe] could not find user for cancelled customer:', sub.customer)
     }
   }
 

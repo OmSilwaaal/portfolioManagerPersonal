@@ -92,7 +92,7 @@ function AppInner() {
     document.documentElement.classList.toggle('dark', isDark)
   }, [isDark])
 
-  // Hydrate preferences from Supabase user_metadata on every login
+  // Hydrate preferences from Supabase metadata on every login
   useEffect(() => {
     if (!user) return
     const meta = user.user_metadata ?? {}
@@ -106,9 +106,8 @@ function AppInner() {
         priorityAlerts: meta.priorityAlerts ?? [],
         watchlist: meta.watchlist ?? [],
         onboardingComplete: true,
-        isPro: meta.isPro ?? false,
+        isPro: user.app_metadata?.isPro ?? false,
       }))
-
     }
   }, [user, dispatch])
 

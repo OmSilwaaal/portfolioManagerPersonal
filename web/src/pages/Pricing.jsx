@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom'
 import { setIsPro } from '../store/preferencesSlice'
 import { supabase } from '../utils/supabase/client'
 
-const PROMO_CODE = 'ADMIN12'
 const PRO_PRICE = '$12'
 
 const FREE_FEATURES = [
@@ -79,20 +78,32 @@ export default function Pricing() {
   const handleApplyCode = async (e) => {
     e.preventDefault()
     setCodeError('')
-    if (code.trim().toUpperCase() !== PROMO_CODE) {
-      setCodeError('Invalid code. Please check and try again.')
-      return
-    }
     setApplying(true)
-    const { error } = await supabase.auth.updateUser({ data: { isPro: true } })
-    if (error) {
-      setCodeError('Something went wrong. Please try again.')
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const apiBase = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api'
+      const res = await fetch(`${apiBase}/stripe/redeem-code`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session?.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ code: code.trim() }),
+      })
+      const body = await res.json()
+      if (!res.ok) {
+        setCodeError(body.message || 'Something went wrong. Please try again.')
+        setApplying(false)
+        return
+      }
+      await supabase.auth.refreshSession()
+      dispatch(setIsPro(true))
+      setCodeSuccess(true)
+    } catch {
+      setCodeError('Could not connect to server. Please try again.')
+    } finally {
       setApplying(false)
-      return
     }
-    dispatch(setIsPro(true))
-    setCodeSuccess(true)
-    setApplying(false)
   }
 
   return (
