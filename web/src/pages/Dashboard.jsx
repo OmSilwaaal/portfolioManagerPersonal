@@ -484,7 +484,7 @@ export default function Dashboard() {
 
   return (
     <div style={{
-      flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0,
+      height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden',
       background: `radial-gradient(ellipse 120% 55% at 50% 0%, rgba(240,235,224,0.024) 0%, transparent 65%), ${INK}`,
     }}>
 
