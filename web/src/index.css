@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..125,200..800&family=Space+Grotesk:wght@300;400;500;600;700&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400;1,500;1,600&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Space+Grotesk:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -78,10 +78,9 @@
   --on-paper-text-4: rgba(11,11,11,0.20);
 
   /* Typography */
-  --font-sans:         'Resist Sans', 'Space Grotesk', 'Inter', Helvetica, Arial, sans-serif;
-  --font-display:      'Bricolage Grotesque', 'Resist Sans', 'Space Grotesk', sans-serif;
-  --font-mono:         'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
-  --font-accent-serif: 'Cormorant Garamond', 'EB Garamond', Georgia, serif;
+  --font-sans:         'Space Grotesk', Helvetica, Arial, sans-serif;
+  --font-display:      'Syne', 'Space Grotesk', sans-serif;
+  --font-mono:         'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 
   /* Radii — brutalist: sharp by default */
   --r-0:   0;

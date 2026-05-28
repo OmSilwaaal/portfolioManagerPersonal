@@ -3,145 +3,237 @@ import { useGetStockQuery } from '../api/stocksApi'
 import NewsCard from '../components/NewsCard'
 import MacroCalendar from '../components/MacroCalendar'
 
-const INK  = 'var(--ink-900)'
-const INK8 = 'var(--ink-800)'
+const INK   = 'var(--ink-900)'
+const INK8  = 'var(--ink-800)'
 const CREAM = 'var(--paper)'
 const BORDER = 'var(--on-ink-border)'
-const MUTED = 'var(--on-ink-text-3)'
-const DIM   = 'var(--on-ink-text-4)'
+const MUTED  = 'var(--on-ink-text-3)'
+const DIM    = 'var(--on-ink-text-4)'
 
-const WATCHLIST_TICKERS = ['AAPL', 'MSFT', 'BTC']
+const MARKET_TICKERS = ['SPY', 'QQQ', 'BTC']
+const WATCHLIST_TICKERS = ['AAPL', 'MSFT', 'NVDA', 'TSLA', 'AMZN', 'BTC']
 
-function WatchlistItem({ ticker }) {
-  const { data, isLoading, isError } = useGetStockQuery(ticker)
+function useMarketTime() {
+  const now = new Date()
+  const day = now.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()
+  const date = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase()
+  const hour = now.getHours()
+  const isOpen = hour >= 9 && hour < 16 && ![0, 6].includes(now.getDay())
+  return { day, date, isOpen }
+}
+
+// ── Market stat strip ────────────────────────────────────────────────────────
+
+function MarketStat({ ticker }) {
+  const { data, isLoading } = useGetStockQuery(ticker)
 
   if (isLoading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '11px 0', borderBottom: `1px solid ${BORDER}` }}>
-        <div style={{ width: 36, height: 11, background: 'var(--on-ink-2)', borderRadius: 1 }} />
-        <div style={{ width: 56, height: 11, background: 'var(--on-ink-2)', borderRadius: 1 }} />
-        <div style={{ width: 44, height: 11, background: 'var(--on-ink-2)', borderRadius: 1 }} />
+      <div style={{ flex: 1, padding: '20px 24px', borderRight: `1px solid ${BORDER}` }}>
+        <div style={{ height: 10, width: 32, background: 'var(--on-ink-2)', marginBottom: 10 }} />
+        <div style={{ height: 28, width: 90, background: 'var(--on-ink-2)', marginBottom: 8 }} />
+        <div style={{ height: 10, width: 50, background: 'var(--on-ink-1)' }} />
       </div>
     )
   }
 
-  if (isError || !data) {
-    return (
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '11px 0', borderBottom: `1px solid ${BORDER}` }}>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: MUTED }}>{ticker}</span>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: DIM }}>—</span>
-      </div>
-    )
-  }
-
-  const changeValue = data.changePercent ?? data.changePercent24h ?? data.change24h ?? 0
-  const positive = changeValue >= 0
+  const price = data?.price ?? 0
+  const change = data?.changePercent ?? data?.changePercent24h ?? 0
+  const positive = change >= 0
 
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '11px 0', borderBottom: `1px solid ${BORDER}` }}>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600, color: CREAM, letterSpacing: '0.04em', width: 44 }}>{ticker}</span>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--on-ink-text-2)' }}>
-        ${(data.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+    <div style={{ flex: 1, padding: '20px 24px', borderRight: `1px solid ${BORDER}` }}>
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.22em', textTransform: 'uppercase', color: MUTED, marginBottom: 8 }}>
+        {ticker}
+      </div>
+      <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 'clamp(20px,2.4vw,30px)', letterSpacing: '-0.03em', color: CREAM, lineHeight: 1, marginBottom: 8 }}>
+        ${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+      </div>
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: positive ? 'var(--positive)' : 'var(--negative)', letterSpacing: '0.04em' }}>
+        {positive ? '▲' : '▼'} {Math.abs(change).toFixed(2)}%
+      </div>
+    </div>
+  )
+}
+
+// ── Watchlist row ────────────────────────────────────────────────────────────
+
+function WatchlistRow({ ticker }) {
+  const { data, isLoading } = useGetStockQuery(ticker)
+
+  if (isLoading) {
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: '60px 1fr 80px', alignItems: 'center', padding: '10px 0', borderBottom: `1px solid ${BORDER}` }}>
+        <div style={{ height: 11, width: 36, background: 'var(--on-ink-2)' }} />
+        <div style={{ height: 11, width: 64, background: 'var(--on-ink-1)' }} />
+        <div style={{ height: 11, width: 44, background: 'var(--on-ink-1)', marginLeft: 'auto' }} />
+      </div>
+    )
+  }
+
+  const price = data?.price ?? 0
+  const change = data?.changePercent ?? data?.changePercent24h ?? 0
+  const positive = change >= 0
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '60px 1fr 80px', alignItems: 'center', padding: '10px 0', borderBottom: `1px solid ${BORDER}` }}>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, letterSpacing: '0.10em', color: CREAM }}>
+        {ticker}
       </span>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: positive ? 'var(--positive)' : 'var(--negative)', minWidth: 52, textAlign: 'right' }}>
-        {positive ? '+' : ''}{changeValue.toFixed(2)}%
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--on-ink-text-2)' }}>
+        ${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+      </span>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: positive ? 'var(--positive)' : 'var(--negative)', textAlign: 'right', letterSpacing: '0.04em' }}>
+        {positive ? '+' : ''}{change.toFixed(2)}%
       </span>
     </div>
   )
 }
 
+// ── Feed skeleton ────────────────────────────────────────────────────────────
+
 function FeedSkeleton() {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {[1, 2, 3, 4].map((i) => (
-        <div key={i} style={{ background: INK8, border: `1px solid ${BORDER}`, borderRadius: 'var(--r-md)', padding: '18px 20px' }}>
-          <div style={{ height: 10, background: 'var(--on-ink-2)', borderRadius: 1, width: '60%', marginBottom: 10 }} />
-          <div style={{ height: 14, background: 'var(--on-ink-2)', borderRadius: 1, width: '85%', marginBottom: 6 }} />
-          <div style={{ height: 14, background: 'var(--on-ink-1)', borderRadius: 1, width: '70%', marginBottom: 14 }} />
-          <div style={{ height: 10, background: 'var(--on-ink-1)', borderRadius: 1, width: '30%' }} />
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      {[1, 2, 3, 4, 5].map((i) => (
+        <div key={i} style={{ borderTop: `1px solid ${BORDER}`, padding: '20px 0' }}>
+          <div style={{ display: 'flex', gap: 10, marginBottom: 12, alignItems: 'center' }}>
+            <div style={{ height: 8, width: 40, background: 'var(--on-ink-2)' }} />
+            <div style={{ height: 8, width: 24, background: 'var(--on-ink-1)' }} />
+          </div>
+          <div style={{ height: 16, width: '78%', background: 'var(--on-ink-2)', marginBottom: 8 }} />
+          <div style={{ height: 16, width: '55%', background: 'var(--on-ink-1)' }} />
         </div>
       ))}
     </div>
   )
 }
 
+// ── Main dashboard ───────────────────────────────────────────────────────────
+
 export default function Dashboard() {
   const { data: feedData, isLoading: feedLoading, isError: feedError } = useGetFeedQuery()
   const items = feedData?.items || []
+  const { day, date, isOpen } = useMarketTime()
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, background: INK }}>
 
-      {/* Header */}
-      <header className="flex items-center justify-between px-5 py-4 sm:px-10 sm:py-5 flex-shrink-0" style={{ borderBottom: `1px solid ${BORDER}` }}>
-        <div>
-          <h1 style={{ fontFamily: 'var(--font-sans)', fontSize: 18, fontWeight: 600, letterSpacing: '-0.022em', color: CREAM, margin: 0 }}>Dashboard</h1>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.24em', textTransform: 'uppercase', color: MUTED, marginTop: 4, display: 'block' }}>Market overview · latest news</span>
-        </div>
-        <div className="hidden sm:flex items-center gap-3">
-          <div style={{ position: 'relative', background: INK8, border: `1px solid ${BORDER}`, borderRadius: 'var(--r-sm)', padding: '7px 12px 7px 32px', width: 220 }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ position: 'absolute', left: 10, top: 9, color: MUTED }}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-            <input placeholder="Search tickers, news…" style={{ background: 'transparent', border: 0, outline: 'none', width: '100%', fontFamily: 'var(--font-sans)', fontSize: 12, color: CREAM }} />
+      {/* ── Header ── */}
+      <header style={{ borderBottom: `1px solid ${BORDER}`, padding: '0 clamp(20px,3vw,40px)', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 52 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.24em', textTransform: 'uppercase', color: DIM }}>
+              § 01
+            </span>
+            <span style={{ width: 1, height: 14, background: BORDER, display: 'inline-block' }} />
+            <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 15, letterSpacing: '-0.02em', color: CREAM, margin: 0 }}>
+              Market Overview
+            </h1>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.16em', color: DIM }}>
+              {day} · {date}
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: isOpen ? 'var(--positive)' : 'var(--on-ink-text-4)', display: 'inline-block' }} />
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.14em', color: isOpen ? 'var(--positive)' : DIM }}>
+                {isOpen ? 'OPEN' : 'CLOSED'}
+              </span>
+            </div>
           </div>
         </div>
       </header>
 
-      {/* Body */}
-      <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-10 sm:py-8">
-        <div className="max-w-[1200px] mx-auto grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 lg:gap-8 items-start">
+      {/* ── Market stat strip ── */}
+      <div style={{ display: 'flex', borderBottom: `1px solid ${BORDER}`, flexShrink: 0, overflowX: 'auto' }}>
+        {MARKET_TICKERS.map((t, i) => (
+          <div key={t} style={{ flex: 1, minWidth: 120, borderRight: i < MARKET_TICKERS.length - 1 ? `1px solid ${BORDER}` : 'none' }}>
+            <MarketStat ticker={t} />
+          </div>
+        ))}
+        {/* Vol. tag */}
+        <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', gap: 4, minWidth: 100 }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.22em', textTransform: 'uppercase', color: DIM }}>Vol.</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.14em', color: DIM }}>01 · 2026</span>
+        </div>
+      </div>
 
-          {/* Left: News Feed */}
-          <section>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 500, letterSpacing: '0.24em', textTransform: 'uppercase', color: MUTED }}>Latest News</span>
-              {items.length > 0 && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: DIM, letterSpacing: '0.1em' }}>{Math.min(items.length, 10)} items</span>}
+      {/* ── Body grid ── */}
+      <main style={{ flex: 1, overflowY: 'auto', padding: 'clamp(20px,3vw,40px)' }}>
+        <div style={{ maxWidth: 1280, margin: '0 auto', display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 300px', gap: 0 }}>
+
+          {/* ── Left: News feed ── */}
+          <section style={{ borderRight: `1px solid ${BORDER}`, paddingRight: 'clamp(20px,3vw,40px)' }}>
+
+            {/* Section label */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 16, borderBottom: `1px solid ${BORDER}`, marginBottom: 0 }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.24em', textTransform: 'uppercase', color: MUTED }}>
+                Latest Intelligence
+              </span>
+              {items.length > 0 && (
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: DIM, letterSpacing: '0.12em' }}>
+                  {Math.min(items.length, 12)} ITEMS
+                </span>
+              )}
             </div>
 
             {feedLoading && <FeedSkeleton />}
 
             {feedError && (
-              <div style={{ background: INK8, border: `1px solid ${BORDER}`, borderRadius: 'var(--r-md)', padding: '22px 24px' }}>
-                <p style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: MUTED, margin: 0 }}>
-                  Unable to load news feed. Make sure the backend is running on port 3001.
+              <div style={{ borderTop: `1px solid ${BORDER}`, padding: '24px 0' }}>
+                <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: MUTED, letterSpacing: '0.06em', margin: 0 }}>
+                  — FEED UNAVAILABLE. CHECK BACKEND CONNECTION.
                 </p>
               </div>
             )}
 
             {!feedLoading && !feedError && items.length === 0 && (
-              <div style={{ background: INK8, border: `1px solid ${BORDER}`, borderRadius: 'var(--r-md)', padding: '22px 24px' }}>
-                <p style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: MUTED, margin: 0 }}>No news items available.</p>
+              <div style={{ borderTop: `1px solid ${BORDER}`, padding: '24px 0' }}>
+                <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: MUTED, letterSpacing: '0.06em', margin: 0 }}>
+                  — NO ITEMS AVAILABLE.
+                </p>
               </div>
             )}
 
             {!feedLoading && !feedError && items.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {items.slice(0, 10).map((item) => (
+              <div>
+                {items.slice(0, 12).map((item) => (
                   <NewsCard key={item.id} item={item} />
                 ))}
               </div>
             )}
           </section>
 
-          {/* Right: Watchlist + Calendar */}
-          <aside style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          {/* ── Right sidebar ── */}
+          <aside style={{ paddingLeft: 'clamp(20px,3vw,32px)', display: 'flex', flexDirection: 'column', gap: 0 }}>
 
             {/* Watchlist */}
-            <div style={{ background: INK8, border: `1px solid ${BORDER}`, borderRadius: 'var(--r-md)', padding: '20px 22px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 500, letterSpacing: '0.24em', textTransform: 'uppercase', color: MUTED }}>Watchlist</span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: DIM, letterSpacing: '0.1em' }}>Live</span>
+            <div style={{ paddingBottom: 32, borderBottom: `1px solid ${BORDER}`, marginBottom: 32 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 14, borderBottom: `1px solid ${BORDER}`, marginBottom: 4 }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.24em', textTransform: 'uppercase', color: MUTED }}>
+                  Watchlist
+                </span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--positive)', letterSpacing: '0.14em' }}>
+                  ● LIVE
+                </span>
               </div>
-              <div>
-                {WATCHLIST_TICKERS.map((ticker) => (
-                  <WatchlistItem key={ticker} ticker={ticker} />
-                ))}
-              </div>
+              {WATCHLIST_TICKERS.map((t) => (
+                <WatchlistRow key={t} ticker={t} />
+              ))}
             </div>
 
-            {/* Macro Calendar */}
-            <MacroCalendar />
-          </aside>
+            {/* Macro calendar */}
+            <div>
+              <div style={{ paddingBottom: 14, borderBottom: `1px solid ${BORDER}`, marginBottom: 4 }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.24em', textTransform: 'uppercase', color: MUTED }}>
+                  Upcoming Events
+                </span>
+              </div>
+              <MacroCalendar compact />
+            </div>
 
+          </aside>
         </div>
       </main>
     </div>

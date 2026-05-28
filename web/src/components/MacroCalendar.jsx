@@ -1,6 +1,5 @@
 import { useGetCalendarQuery } from '../api/feedApi'
 
-const INK8   = 'var(--ink-800)'
 const BORDER = 'var(--on-ink-border)'
 const CREAM  = 'var(--paper)'
 const MUTED  = 'var(--on-ink-text-3)'
@@ -14,68 +13,67 @@ const IMPORTANCE_COLOR = {
 
 function formatDate(dateStr) {
   const date = new Date(dateStr)
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()
 }
 
-export default function MacroCalendar() {
+export default function MacroCalendar({ compact = false }) {
   const { data, isLoading, isError } = useGetCalendarQuery()
 
   if (isLoading) {
     return (
-      <div style={{ background: INK8, border: `1px solid ${BORDER}`, borderRadius: 'var(--r-md)', padding: '20px 22px' }}>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 500, letterSpacing: '0.24em', textTransform: 'uppercase', color: MUTED, marginBottom: 14 }}>Macro Calendar</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {[1, 2, 3].map((i) => (
-            <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <div style={{ height: 10, background: 'var(--on-ink-2)', borderRadius: 1, width: '33%' }} />
-              <div style={{ height: 10, background: 'var(--on-ink-1)', borderRadius: 1, width: '66%' }} />
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        {[1, 2, 3].map((i) => (
+          <div key={i} style={{ borderTop: `1px solid ${BORDER}`, padding: '14px 0', display: 'flex', gap: 12 }}>
+            <div style={{ height: 9, width: 38, background: 'var(--on-ink-2)', flexShrink: 0, marginTop: 2 }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ height: 11, width: '70%', background: 'var(--on-ink-2)', marginBottom: 6 }} />
+              <div style={{ height: 9, width: '50%', background: 'var(--on-ink-1)' }} />
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
       </div>
     )
   }
 
   if (isError) {
     return (
-      <div style={{ background: INK8, border: `1px solid ${BORDER}`, borderRadius: 'var(--r-md)', padding: '20px 22px' }}>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 500, letterSpacing: '0.24em', textTransform: 'uppercase', color: MUTED, marginBottom: 8 }}>Macro Calendar</div>
-        <p style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: MUTED }}>Unable to load calendar events.</p>
-      </div>
+      <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.10em', textTransform: 'uppercase', color: MUTED, paddingTop: 14, borderTop: `1px solid ${BORDER}` }}>
+        — Unavailable
+      </p>
     )
   }
 
-  const events = data?.events || []
+  const events = (data?.events || []).slice(0, compact ? 5 : 8)
 
   return (
-    <div style={{ background: INK8, border: `1px solid ${BORDER}`, borderRadius: 'var(--r-md)', padding: '20px 22px' }}>
-      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 500, letterSpacing: '0.24em', textTransform: 'uppercase', color: MUTED, marginBottom: 16 }}>
-        Upcoming Events
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        {events.slice(0, 6).map((event) => (
-          <div key={event.id} style={{ display: 'flex', gap: 14 }}>
-            <div style={{ flexShrink: 0, width: 38, textAlign: 'center' }}>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, color: 'var(--party-dem)', letterSpacing: '0.04em' }}>
-                {formatDate(event.date)}
+    <div>
+      {events.map((event) => (
+        <div key={event.id} style={{ borderTop: `1px solid ${BORDER}`, padding: '13px 0', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 600, letterSpacing: '0.14em', color: DIM, flexShrink: 0, paddingTop: 2, minWidth: 44 }}>
+            {formatDate(event.date)}
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
+              <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12, fontWeight: 600, color: CREAM, letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {event.event}
+              </span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: IMPORTANCE_COLOR[event.importance] || MUTED, flexShrink: 0 }}>
+                {event.importance}
               </span>
             </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
-                <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12, fontWeight: 500, color: CREAM, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {event.event}
-                </span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, flexShrink: 0, letterSpacing: '0.12em', color: IMPORTANCE_COLOR[event.importance] || MUTED }}>
-                  {event.importance}
-                </span>
-              </div>
-              <p style={{ fontFamily: 'var(--font-sans)', fontSize: 11, color: MUTED, lineHeight: 1.55, margin: 0 }}>
+            {event.aiBlurb && (
+              <p style={{ fontFamily: 'var(--font-sans)', fontSize: 11, color: MUTED, lineHeight: 1.6, margin: 0 }}>
                 {event.aiBlurb}
               </p>
-            </div>
+            )}
           </div>
-        ))}
-      </div>
+        </div>
+      ))}
+      {events.length === 0 && (
+        <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.10em', textTransform: 'uppercase', color: DIM, paddingTop: 14, borderTop: `1px solid ${BORDER}`, margin: 0 }}>
+          — No upcoming events
+        </p>
+      )}
     </div>
   )
 }
