@@ -226,47 +226,136 @@ function Cursor() {
 }
 
 function Preloader({ onDone }) {
-  const [stage, setStage] = useState(0)
+  const [phase, setPhase] = useState(0)
+  const maskPolyRef = useRef(null)
+  const logoRef     = useRef(null)
+  const rafRef      = useRef(null)
+  const cbRef       = useRef(onDone)
+  useEffect(() => { cbRef.current = onDone }, [onDone])
+
+  // ── Timeline ──────────────────────────────────────────────────────────────
   useEffect(() => {
-    const t1 = setTimeout(() => setStage(1), 250)
-    const t2 = setTimeout(() => setStage(2), 1400)
-    const t3 = setTimeout(() => setStage(3), 2000)
-    const t4 = setTimeout(onDone, 2700)
-    return () => { [t1, t2, t3, t4].forEach(clearTimeout) }
-  }, [onDone])
-  const [n, setN] = useState(0)
+    const t1 = setTimeout(() => setPhase(1), 180)   // logo fades in
+    const t2 = setTimeout(() => setPhase(2), 1200)  // hold
+    const t3 = setTimeout(() => setPhase(3), 1850)  // zoom through
+    return () => [t1, t2, t3].forEach(clearTimeout)
+  }, [])
+
+  // ── Phase 1: logo appears (CSS transition via direct ref) ─────────────────
   useEffect(() => {
-    if (stage < 1) return
-    let raf, start = null
+    if (phase !== 1 || !logoRef.current) return
+    const el = logoRef.current
+    requestAnimationFrame(() => {
+      el.style.transition = 'opacity 0.95s cubic-bezier(0.16,1,0.3,1), transform 1.05s cubic-bezier(0.16,1,0.3,1)'
+      el.style.opacity    = '1'
+      el.style.transform  = 'translate(-50%,-50%) scale(1)'
+    })
+  }, [phase])
+
+  // ── Phase 3: zoom through the logo hole (RAF) ─────────────────────────────
+  useEffect(() => {
+    if (phase !== 3) return
+    const el   = logoRef.current
+    const poly = maskPolyRef.current
+    if (!el || !poly) return
+
+    const cx = window.innerWidth  / 2
+    const cy = window.innerHeight / 2
+    // Diamond (45°-rotated square) covers all viewport corners when
+    // its L1 radius exceeds half-width + half-height.
+    const maxR    = cx + cy + 360
+    const DURATION = 1020
+    let t0 = null
+
+    el.style.transition = 'none'
+
     const tick = (ts) => {
-      if (!start) start = ts
-      const p = Math.min((ts - start) / 1100, 1)
-      setN(Math.round((1 - Math.pow(1 - p, 3)) * 100))
-      if (p < 1) raf = requestAnimationFrame(tick)
+      if (!t0) t0 = ts
+      const raw  = Math.min((ts - t0) / DURATION, 1)
+      // Ease-in-quad: starts gently (hole peeks open), then accelerates
+      const ease = raw * raw
+
+      // Expand the diamond cutout in the dark overlay
+      const r = maxR * ease
+      poly.setAttribute('points',
+        `${cx},${cy - r} ${cx + r},${cy} ${cx},${cy + r} ${cx - r},${cy}`)
+
+      // Logo rushes toward camera and fades
+      const scale = 1 + ease * 24
+      const alpha = Math.max(0, 1 - ease * 2.6)
+      el.style.transform = `translate(-50%,-50%) scale(${scale})`
+      el.style.opacity   = String(alpha)
+
+      if (raw < 1) {
+        rafRef.current = requestAnimationFrame(tick)
+      } else {
+        cbRef.current?.()
+      }
     }
-    raf = requestAnimationFrame(tick)
-    return () => raf && cancelAnimationFrame(raf)
-  }, [stage])
+
+    rafRef.current = requestAnimationFrame(tick)
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
+  }, [phase])
+
+  // Stable center coords for initial SVG render (before RAF takes over)
+  const cx0 = typeof window !== 'undefined' ? window.innerWidth  / 2 : 960
+  const cy0 = typeof window !== 'undefined' ? window.innerHeight / 2 : 540
+
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 10000, background: INK, transform: stage >= 3 ? 'translateY(-100%)' : 'translateY(0)', transition: 'transform .9s cubic-bezier(0.76,0,0.24,1)', pointerEvents: stage >= 3 ? 'none' : 'auto', overflow: 'hidden' }}>
-      <div style={{ position: 'absolute', top: 24, left: 32 }}><Tag>Travauxus / Vol. 01</Tag></div>
-      <div style={{ position: 'absolute', top: 24, right: 32 }}><Tag>An archive of the present</Tag></div>
-      <div style={{ position: 'absolute', bottom: 24, left: 32 }}><Tag>Est. 2026 · New York</Tag></div>
-      <div style={{ position: 'absolute', bottom: 24, right: 32 }}><Tag>{String(n).padStart(3, '0')}%</Tag></div>
-      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 14 }}>
-        <div style={{ overflow: 'hidden', lineHeight: 0.86 }}>
-          <div style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(72px, 14vw, 220px)', letterSpacing: '-0.05em', color: CREAM, transform: stage >= 2 ? 'translateY(0)' : 'translateY(110%)', transition: 'transform 1.1s cubic-bezier(0.16,1,0.3,1)' }}>TRAVAUXUS</div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, opacity: stage >= 2 ? 1 : 0, transition: 'opacity .6s ease .2s' }}>
-          <span style={{ width: 32, height: 1, background: MUTED }} />
-          <Tag>The Market, Explained.</Tag>
-          <span style={{ width: 32, height: 1, background: MUTED }} />
-        </div>
-      </div>
-      <div style={{ position: 'absolute', bottom: 80, left: 32, right: 32 }}>
-        <div style={{ height: 1, background: 'rgba(240,235,224,0.08)' }}>
-          <div style={{ height: 1, background: CREAM, width: `${n}%`, transition: 'width .1s linear' }} />
-        </div>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 10000, overflow: 'hidden', pointerEvents: phase >= 3 ? 'none' : 'auto' }}>
+
+      {/* Dark overlay — the diamond hole in the mask grows during zoom */}
+      <svg
+        width="100%" height="100%"
+        style={{ position: 'absolute', inset: 0, display: 'block' }}
+      >
+        <defs>
+          <mask id="logo-hole-mask">
+            {/* White = overlay visible (dark); black = hole (transparent) */}
+            <rect width="100%" height="100%" fill="white" />
+            <polygon
+              ref={maskPolyRef}
+              fill="black"
+              points={`${cx0},${cy0} ${cx0},${cy0} ${cx0},${cy0} ${cx0},${cy0}`}
+            />
+          </mask>
+        </defs>
+        <rect width="100%" height="100%" fill={INK} mask="url(#logo-hole-mask)" />
+      </svg>
+
+      {/* Logo — cream strokes, slight multi-layer bloom, fades in then rockets out */}
+      <div
+        ref={logoRef}
+        style={{
+          position: 'absolute',
+          top: '50%', left: '50%',
+          transform: 'translate(-50%,-50%) scale(0.86)',
+          opacity: 0,
+          willChange: 'transform, opacity',
+          // Three-layer bloom: tight inner glow + soft mid + wide diffuse halo
+          filter: [
+            'drop-shadow(0 0 3px rgba(240,235,224,0.52))',
+            'drop-shadow(0 0 14px rgba(240,235,224,0.18))',
+            'drop-shadow(0 0 44px rgba(240,235,224,0.07))',
+          ].join(' '),
+        }}
+      >
+        <svg width="210" height="210" viewBox="0 0 24 24" fill="none">
+          {/* Outer diamond */}
+          <path
+            d="M12 2L22 12L12 22L2 12Z"
+            stroke={CREAM}
+            strokeWidth="0.62"
+            strokeLinejoin="round"
+          />
+          {/* Inner diamond — the hole the camera flies through */}
+          <path
+            d="M12 6.5L17.5 12L12 17.5L6.5 12Z"
+            stroke={CREAM}
+            strokeWidth="0.62"
+            strokeLinejoin="round"
+          />
+        </svg>
       </div>
     </div>
   )
