@@ -829,6 +829,52 @@ function PhysicsConvergence() {
   )
 }
 
+/* ── Pixel-block dissolve overlay ────────────────────────────────────────── */
+function PixelRevealOverlay({ trigger }) {
+  const canvasRef = useRef(null)
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const parent = canvas.parentElement
+    if (!parent) return
+    const W = parent.offsetWidth || 340
+    const H = parent.offsetHeight || 240
+    canvas.width = W
+    canvas.height = H
+    const ctx = canvas.getContext('2d')
+    const SZ = 10
+    const cols = Math.ceil(W / SZ)
+    const rows = Math.ceil(H / SZ)
+    const blocks = []
+    for (let r = 0; r < rows; r++)
+      for (let c = 0; c < cols; c++)
+        blocks.push([c, r])
+    for (let i = blocks.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [blocks[i], blocks[j]] = [blocks[j], blocks[i]]
+    }
+    ctx.fillStyle = 'rgb(11,11,11)'
+    ctx.fillRect(0, 0, W, H)
+    let idx = 0
+    let stopped = false
+    const BATCH = Math.max(1, Math.ceil(blocks.length / 22))
+    const step = () => {
+      if (stopped) return
+      for (let i = 0; i < BATCH && idx < blocks.length; i++, idx++) {
+        const [c, r] = blocks[idx]
+        ctx.clearRect(c * SZ, r * SZ, SZ, SZ)
+      }
+      if (idx < blocks.length) setTimeout(step, 18)
+      else { ctx.clearRect(0, 0, W, H) }
+    }
+    const t = setTimeout(step, 0)
+    return () => { stopped = true; clearTimeout(t) }
+  }, [trigger])
+  return (
+    <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, zIndex: 2, pointerEvents: 'none' }} />
+  )
+}
+
 /* ── Scramble reveal ─────────────────────────────────────────────────────── */
 function ScrambleText({ text }) {
   const [display, setDisplay] = useState(text)
@@ -1054,11 +1100,12 @@ function FeaturesSection() {
             zIndex: 9000, pointerEvents: 'none',
             width: 340,
             opacity: activeFeature ? 1 : 0,
-            transition: 'opacity 0.18s ease',
+            transition: 'opacity 0.05s ease',
           }}
         >
           {activeFeature && (
-            <div style={{ background: CREAM, border: `1px solid rgba(11,11,11,0.13)`, padding: '26px 28px 28px' }}>
+            <div key={activeFeature.id} style={{ background: CREAM, border: `1px solid rgba(11,11,11,0.13)`, padding: '26px 28px 28px', position: 'relative', overflow: 'hidden' }}>
+              <PixelRevealOverlay trigger={activeFeature.id} />
               {/* Number + title row */}
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 14 }}>
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.28em', color: 'rgba(11,11,11,0.26)', textTransform: 'uppercase' }}>{activeFeature.n}</span>
