@@ -41,12 +41,26 @@ const allowedOrigins = [
   'http://localhost:3000',
   process.env.FRONTEND_URL,
   process.env.FRONTEND_URL_WWW,
-  // Always allow both www and non-www variants of travauxus.com
   'https://travauxus.com',
   'https://www.travauxus.com',
 ].filter(Boolean);
 
-app.use(cors({ origin: allowedOrigins, credentials: true }));
+// Also allow any Railway or Vercel preview deployment
+const allowedPatterns = [
+  /^https:\/\/.*\.railway\.app$/,
+  /^https:\/\/.*\.vercel\.app$/,
+];
+
+app.use(cors({
+  credentials: true,
+  origin: (origin, callback) => {
+    // Allow requests with no origin (curl, Postman, server-to-server)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    if (allowedPatterns.some(re => re.test(origin))) return callback(null, true);
+    callback(new Error(`CORS: origin ${origin} not allowed`));
+  },
+}));
 // Raw body for webhook signature verification — MUST come before express.json()
 app.use('/api/paper-trading/webhook', express.raw({ type: 'application/json' }))
 app.use('/api/stripe/pro-webhook', express.raw({ type: 'application/json' }))
