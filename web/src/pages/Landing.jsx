@@ -445,159 +445,51 @@ function DualMarquee() {
   )
 }
 
-/* ── Crowd transition items ───────────────────────────────────────────────── */
-// x/y = resting position as % of viewport; edge = which side it enters from
-const CROWD = [
-  // Large display type
-  { text: 'INTELLIGENCE', font: 'display', sz: 'clamp(52px,8.5vw,122px)', wt: 700, st: 125, op: 0.82, x: 48, y: 38, edge: 'left',   dl: 0.00 },
-  { text: 'MARCHÉ LIBRE', font: 'display', sz: 'clamp(38px,6vw,88px)',    wt: 700, st: 125, op: 0.70, x: 12, y: 14, edge: 'top',    dl: 0.04 },
-  { text: 'SIGNAL',       font: 'display', sz: 'clamp(62px,10vw,148px)',  wt: 700, st: 125, op: 0.60, x: 58, y: 66, edge: 'bottom', dl: 0.02 },
-  { text: '市場',          font: 'display', sz: 'clamp(56px,9vw,130px)',   wt: 700, st: 100, op: 0.65, x: 3,  y: 56, edge: 'left',   dl: 0.08 },
-  { text: 'MARKET',       font: 'display', sz: 'clamp(44px,7vw,104px)',   wt: 700, st: 125, op: 0.48, x: 74, y: 10, edge: 'right',  dl: 0.06 },
-  // Multilingual phrases
-  { text: 'Le marché est en mouvement',          font: 'sans', sz: 14, wt: 400, op: 0.64, x: 28, y: 22, edge: 'top',    dl: 0.10 },
-  { text: '市場が動いている — シグナルが速すぎる',     font: 'sans', sz: 13, wt: 400, op: 0.60, x: 8,  y: 74, edge: 'bottom', dl: 0.14 },
-  { text: 'Der Markt bewegt sich zu schnell',    font: 'sans', sz: 14, wt: 400, op: 0.62, x: 2,  y: 40, edge: 'left',   dl: 0.18 },
-  { text: 'El mercado se mueve — Las señales',   font: 'sans', sz: 14, wt: 400, op: 0.60, x: 70, y: 28, edge: 'right',  dl: 0.16 },
-  { text: '시장이 움직이고 있습니다',                font: 'sans', sz: 13, wt: 400, op: 0.58, x: 64, y: 80, edge: 'bottom', dl: 0.12 },
-  { text: 'Il mercato si muove velocemente',     font: 'sans', sz: 14, wt: 400, op: 0.62, x: 60, y: 48, edge: 'right',  dl: 0.20 },
-  { text: 'О рынке в реальном времени',          font: 'sans', sz: 13, wt: 400, op: 0.58, x: 18, y: 50, edge: 'left',   dl: 0.22 },
-  { text: '市场正在运动 — 实时分析',                font: 'sans', sz: 13, wt: 400, op: 0.60, x: 76, y: 60, edge: 'bottom', dl: 0.09 },
-  { text: 'Every signal — Every trade — Every move', font: 'sans', sz: 14, wt: 400, op: 0.62, x: 36, y: 86, edge: 'bottom', dl: 0.17 },
-  { text: 'Keine Daten entgehen dir',            font: 'sans', sz: 13, wt: 400, op: 0.56, x: 44, y: 6,  edge: 'top',    dl: 0.13 },
-  // Ticker data
-  { text: 'AAPL  +2.40%', font: 'mono', sz: 17, wt: 500, op: 0.75, x: 20, y: 32, edge: 'top',    dl: 0.05 },
-  { text: 'NVDA  −3.18%', font: 'mono', sz: 17, wt: 500, op: 0.75, x: 78, y: 40, edge: 'right',  dl: 0.07 },
-  { text: 'BTC  $42,180', font: 'mono', sz: 15, wt: 500, op: 0.68, x: 46, y: 78, edge: 'bottom', dl: 0.11 },
-  { text: 'GOLD  +1.20%', font: 'mono', sz: 14, wt: 500, op: 0.62, x: 84, y: 72, edge: 'right',  dl: 0.15 },
-  { text: 'TSLA  −1.05%', font: 'mono', sz: 14, wt: 500, op: 0.60, x: 6,  y: 24, edge: 'left',   dl: 0.19 },
-  { text: 'SPY   +0.18%', font: 'mono', sz: 13, wt: 500, op: 0.58, x: 54, y: 12, edge: 'top',    dl: 0.21 },
-  // Urgency / macro tags
-  { text: 'ACT NOW', font: 'mono', sz: 11, wt: 500, op: 0.90, x: 32, y: 56, edge: 'top',   dl: 0.03, tag: true },
-  { text: 'FOMC',    font: 'mono', sz: 11, wt: 500, op: 0.74, x: 68, y: 18, edge: 'right', dl: 0.16, tag: true },
-  { text: 'CPI 3.4%',font: 'mono', sz: 11, wt: 500, op: 0.70, x: 48, y: 92, edge: 'bottom',dl: 0.08, tag: true },
+const LANG_ROWS = [
+  { text: 'Le marché est en mouvement — Les signaux arrivent trop vite — Aucune donnée ne vous échappe — Intelligence du marché — Analyse en temps réel — ', dir: 1,  dur: 42, sz: 13,  wt: 400, font: 'sans', op: 0.48 },
+  { text: '市場が動いている — シグナルが速すぎる — リアルタイム分析 — 市場情報 — 人工知能 — 投資家向けの分析 — ', dir: -1, dur: 34, sz: 13,  wt: 400, font: 'sans', op: 0.44 },
+  { text: 'MARCHÉ LIBRE — ', dir: 1, dur: 60, sz: 185, wt: 700, font: 'display', stretch: 125, op: 0.10 },
+  { text: 'AAPL +2.40% — NVDA −3.18% — BTC $42,180 — GOLD +1.20% — TSLA −1.05% — QQQ +0.42% — META +1.73% — SPY +0.18% — AMZN +0.98% — MSFT +0.61% — ', dir: -1, dur: 24, sz: 11, wt: 500, font: 'mono', op: 0.36 },
+  { text: 'Der Markt bewegt sich zu schnell — Keine Daten entgehen dir — Echtzeit-Analyse — Künstliche Intelligenz — Marktintelligenz — ', dir: 1,  dur: 40, sz: 13,  wt: 400, font: 'sans', op: 0.48 },
+  { text: '市场正在运动 — 信号来得太快了 — 实时分析 — 人工智能 — 市场情报 — 投资者数据分析 — ', dir: -1, dur: 36, sz: 13,  wt: 400, font: 'sans', op: 0.44 },
+  { text: 'El mercado se mueve — Las señales llegan demasiado rápido — Ningún dato se te escapa — La inteligencia del mercado — ', dir: 1,  dur: 44, sz: 13,  wt: 400, font: 'sans', op: 0.48 },
+  { text: 'INTELLIGENCE — ', dir: -1, dur: 72, sz: 225, wt: 700, font: 'display', stretch: 125, op: 0.085 },
+  { text: '시장이 움직이고 있습니다 — 신호가 너무 빠르게 옵니다 — 실시간 분석 — 인공 지능 — 시장 정보 — ', dir: 1,  dur: 48, sz: 13,  wt: 400, font: 'sans', op: 0.44 },
+  { text: 'Il mercato si muove velocemente — I segnali arrivano troppo presto — Nessun dato ti sfugge — Intelligenza artificiale — ', dir: -1, dur: 38, sz: 13,  wt: 400, font: 'sans', op: 0.48 },
+  { text: 'О рынке в реальном времени — Искусственный интеллект — Никакие данные не ускользнут — Финансовая аналитика — ', dir: 1,  dur: 43, sz: 13,  wt: 400, font: 'sans', op: 0.44 },
+  { text: '市場 — MARCHÉ — MARKT — 시장 — MERCADO — MARKET — РЫНОК — ', dir: -1, dur: 30, sz: 36,  wt: 600, font: 'display', stretch: 105, op: 0.20 },
+  { text: 'Every signal — Every trade — Every move — Every market — Plain English — No jargon — Act with confidence — Real-time intelligence — ', dir: 1,  dur: 36, sz: 13,  wt: 400, font: 'sans', op: 0.48 },
+  { text: 'SIGNAL — ', dir: 1, dur: 88, sz: 275, wt: 700, font: 'display', stretch: 125, op: 0.065 },
+  { text: 'Marché libre — Données en direct — Cours en temps réel — Portfolio intelligence — Signaux du marché — Investisseurs avisés — ', dir: -1, dur: 45, sz: 13,  wt: 400, font: 'sans', op: 0.48 },
 ]
 
-function CrowdTransition() {
-  const sectionRef = useRef(null)
-  const itemRefs   = useRef([])
-
+function LanguageWall() {
+  const ref = useRef(null)
+  const [vis, setVis] = useState(false)
   useEffect(() => {
-    let raf = null
-    const update = () => {
-      if (raf) return
-      raf = requestAnimationFrame(() => {
-        raf = null
-        const el = sectionRef.current
-        if (!el) return
-        const r  = el.getBoundingClientRect()
-        const vh = window.innerHeight
-        const vw = window.innerWidth
-        // p: 0 when section top enters viewport bottom, 1 when section bottom leaves viewport top
-        const p  = Math.max(0, Math.min(1, (vh - r.top) / (el.offsetHeight + vh)))
-
-        CROWD.forEach((item, i) => {
-          const node = itemRefs.current[i]
-          if (!node) return
-
-          // Each item has its own staggered entry keyed by dl
-          const enter  = 0.42
-          const exitS  = 0.58
-          const lp     = Math.max(0, p - item.dl * 0.28)
-
-          let phase
-          if      (lp < enter)  phase = Math.min(1, lp / enter)
-          else if (p  < exitS)  phase = 1
-          else                  phase = Math.max(0, 1 - (p - exitS) / (1 - exitS))
-
-          // Ease: cubic-out entering, cubic-in exiting
-          const eased = p < exitS
-            ? 1 - Math.pow(1 - phase, 3)     // ease-out (decelerate in)
-            : Math.pow(1 - phase, 3)          // reversed for exit ease-in
-
-          const finalEased = p < exitS ? eased : 1 - eased * 1     // always 0→1 progress
-          const actualEased = p < exitS
-            ? 1 - Math.pow(1 - phase, 3)
-            : Math.pow(phase, 3)
-
-          // Compute off-screen offset based on edge
-          const mag = vw * 0.9
-          const magh = vh * 0.9
-          let ox = 0, oy = 0
-          if      (item.edge === 'left')   ox = -mag
-          else if (item.edge === 'right')  ox =  mag
-          else if (item.edge === 'top')    oy = -magh
-          else if (item.edge === 'bottom') oy =  magh
-
-          let prog
-          if (p < exitS) {
-            // entering: phase 0→1
-            const ep = Math.min(1, lp / enter)
-            prog = 1 - Math.pow(1 - ep, 2.8)
-          } else {
-            // exiting: reverse
-            const ep = (p - exitS) / (1 - exitS)
-            prog = 1 - Math.pow(ep, 2.0)
-          }
-
-          const tx = ox * (1 - prog)
-          const ty = oy * (1 - prog)
-          node.style.transform = `translate(${tx}px,${ty}px)`
-          node.style.opacity   = String(item.op * prog)
-        })
-      })
-    }
-
-    update()
-    window.addEventListener('scroll', update, { passive: true })
-    window.addEventListener('resize', update, { passive: true })
-    return () => {
-      window.removeEventListener('scroll', update)
-      window.removeEventListener('resize', update)
-      if (raf) cancelAnimationFrame(raf)
-    }
+    const o = new IntersectionObserver(([e]) => { if (e.isIntersecting) setVis(true) }, { threshold: 0.02 })
+    if (ref.current) o.observe(ref.current)
+    return () => o.disconnect()
   }, [])
-
   return (
-    <section ref={sectionRef} style={{ background: INK, height: '280vh', position: 'relative' }}>
-      <div style={{ position: 'sticky', top: 0, height: '100vh', overflow: 'hidden' }}>
-        <div style={{ position: 'absolute', top: 24, left: 'clamp(20px,4vw,48px)', zIndex: 10 }}>
-          <Tag style={{ letterSpacing: '0.32em' }}>§ 02 — The signal</Tag>
-        </div>
-        <div style={{ position: 'absolute', top: 24, right: 'clamp(20px,4vw,48px)', zIndex: 10 }}>
-          <Tag>Scroll ↓</Tag>
-        </div>
-
-        {CROWD.map((item, i) => {
-          const ff = item.font === 'display' ? 'var(--font-display)' : item.font === 'mono' ? 'var(--font-mono)' : 'var(--font-sans)'
-          const vs = item.font === 'display' ? `'wdth' ${item.st}, 'wght' ${item.wt}` : undefined
-          const ls = item.font === 'display' ? '-0.045em' : item.font === 'mono' ? (item.tag ? '0.24em' : '0.06em') : '-0.01em'
+    <section ref={ref} style={{ background: CREAM, overflow: 'hidden', position: 'relative', padding: '0', contain: 'layout paint' }}>
+      <div style={{ position: 'absolute', top: 14, left: 'clamp(20px,4vw,48px)', zIndex: 10 }}>
+        <Tag tone="dark" style={{ letterSpacing: '0.32em' }}>§ 02 — The signal</Tag>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        {LANG_ROWS.map((row, i) => {
+          const fontFamily = row.font === 'display' ? 'var(--font-display)' : row.font === 'mono' ? 'var(--font-mono)' : 'var(--font-sans)'
+          const varSettings = row.font === 'display' && row.stretch ? { fontVariationSettings: `'wdth' ${row.stretch}, 'wght' ${row.wt}`, fontStretch: `${row.stretch}%` } : {}
+          const anim = row.dir === 1 ? 'marquee' : 'marqueeRev'
+          const lh = row.sz >= 100 ? 0.84 : 1.0
+          const ls = row.font === 'mono' ? '0.06em' : row.sz >= 100 ? '-0.045em' : '-0.01em'
           return (
-            <div
-              key={i}
-              ref={el => { itemRefs.current[i] = el }}
-              style={{
-                position: 'absolute',
-                left: `${item.x}%`,
-                top: `${item.y}%`,
-                opacity: 0,
-                pointerEvents: 'none',
-                whiteSpace: 'nowrap',
-                fontFamily: ff,
-                fontSize: item.sz,
-                fontWeight: item.wt,
-                fontVariationSettings: vs,
-                fontStretch: item.font === 'display' ? `${item.st}%` : undefined,
-                letterSpacing: ls,
-                lineHeight: item.font === 'display' ? 0.86 : 1.2,
-                color: item.tag ? INK : CREAM,
-                background: item.tag ? CREAM : 'transparent',
-                padding: item.tag ? '5px 12px' : 0,
-                userSelect: 'none',
-                willChange: 'transform, opacity',
-              }}
-            >
-              {item.text}
+            <div key={i} style={{ overflow: 'hidden', lineHeight: lh }}>
+              <div style={{ display: 'flex', animation: vis ? `${anim} ${row.dur}s linear infinite` : 'none', width: 'max-content', opacity: row.op, willChange: 'transform' }}>
+                {[...Array(3)].map((_, k) => (
+                  <span key={k} style={{ fontFamily, fontSize: row.sz, fontWeight: row.wt, color: INK, whiteSpace: 'nowrap', letterSpacing: ls, paddingRight: row.sz >= 100 ? '0.4em' : '2.5em', ...varSettings }}>{row.text}</span>
+                ))}
+              </div>
             </div>
           )
         })}
@@ -1360,7 +1252,7 @@ export default function Landing() {
 
       <Hero onEnter={onEnter} />
       <DualMarquee />
-      <CrowdTransition />
+      <LanguageWall />
       <FeaturesSection />
       <Manifesto />
       <PhysicsConvergence />
