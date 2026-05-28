@@ -499,84 +499,6 @@ function LanguageWall() {
 }
 
 
-function Manifesto() {
-  const ref = useRef(null)
-  const line1Ref = useRef(null)
-  const line2Ref = useRef(null)
-  const line3Ref = useRef(null)
-  const counterRef = useRef(null)
-  const featuresRef = useRef(null)
-
-  useEffect(() => {
-    let raf = null
-    const update = () => {
-      if (raf) return
-      raf = requestAnimationFrame(() => {
-        raf = null
-        const el = ref.current
-        if (!el) return
-        const r = el.getBoundingClientRect()
-        const vh = window.innerHeight
-        const p = Math.max(0, Math.min(1, (vh - r.top) / (r.height + vh)))
-        const lp = Math.max(0, Math.min(1, (p - 0.02) / 0.70))
-        const skewBase = (lp - 0.5) * 10
-        const evTY = Math.max(0, (1 - Math.min(1, lp / 0.30)) * 120)
-        const ynTY = Math.max(0, (1 - Math.min(1, Math.max(0, lp - 0.22) / 0.30)) * 120)
-        const ntTY = Math.max(0, (1 - Math.min(1, Math.max(0, lp - 0.46) / 0.34)) * 120)
-        if (line1Ref.current) line1Ref.current.style.transform = `translateY(${evTY}%) skewY(${skewBase * 0.4}deg)`
-        if (line2Ref.current) line2Ref.current.style.transform = `translateY(${ynTY}%) skewY(${skewBase * -0.4}deg)`
-        if (line3Ref.current) line3Ref.current.style.transform = `translateY(${ntTY}%)`
-        if (counterRef.current) counterRef.current.textContent = `${String(Math.round(lp * 100)).padStart(3, '0')} / 100`
-        if (featuresRef.current) featuresRef.current.style.opacity = String(Math.min(1, lp * 3))
-      })
-    }
-    update()
-    window.addEventListener('scroll', update, { passive: true })
-    window.addEventListener('resize', update, { passive: true })
-    return () => {
-      window.removeEventListener('scroll', update)
-      window.removeEventListener('resize', update)
-      if (raf) cancelAnimationFrame(raf)
-    }
-  }, [])
-
-  return (
-    <section ref={ref} id="manifesto" style={{ background: INK, height: '180vh', position: 'relative' }}>
-      <div style={{ position: 'sticky', top: 0, height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 clamp(20px,4vw,48px)' }}>
-        <div style={{ position: 'absolute', top: 48, left: 'clamp(20px,4vw,48px)' }}><Tag style={{ letterSpacing: '0.32em' }}>§ 05 — What we built</Tag></div>
-        <div ref={counterRef} style={{ position: 'absolute', top: 48, right: 'clamp(20px,4vw,48px)', fontFamily: 'var(--font-mono)', fontSize: 11, color: MUTED, letterSpacing: '0.18em' }}>000 / 100</div>
-
-        <div style={{ maxWidth: 1700, margin: '0 auto', width: '100%' }}>
-          <div style={{ overflow: 'hidden', lineHeight: 0.86 }}>
-            <div ref={line1Ref} style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(60px, 14vw, 240px)', color: CREAM, letterSpacing: '-0.05em', willChange: 'transform', transform: 'translateY(120%)' }}>EVERYTHING</div>
-          </div>
-          <div style={{ overflow: 'hidden', lineHeight: 0.86 }}>
-            <div ref={line2Ref} style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(60px, 14vw, 240px)', color: CREAM, letterSpacing: '-0.05em', willChange: 'transform', transform: 'translateY(120%)' }}>YOU NEED.</div>
-          </div>
-          <div style={{ overflow: 'hidden', lineHeight: 0.86, marginLeft: '8vw', marginTop: 4 }}>
-            <div ref={line3Ref} style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(60px, 14vw, 240px)', color: 'transparent', WebkitTextStroke: `1.2px ${CREAM}`, letterSpacing: '-0.05em', willChange: 'transform', transform: 'translateY(120%)' }}>{"NOTHING YOU DON'T."}</div>
-          </div>
-        </div>
-
-        <div ref={featuresRef} style={{ position: 'absolute', bottom: 32, left: 'clamp(20px,4vw,48px)', right: 'clamp(20px,4vw,48px)', display: 'flex', gap: 24, flexWrap: 'wrap', justifyContent: 'space-between', opacity: 0 }}>
-          {[
-            { n: '01', l: 'AI feed — urgency scored' },
-            { n: '02', l: 'Stocks & crypto watchlist' },
-            { n: '03', l: 'Congressional trades tracker' },
-            { n: '04', l: 'Commodities with AI context' },
-            { n: '05', l: 'Real-time price alerts' },
-            { n: '06', l: 'Paper trading leaderboard' },
-          ].map(f => (
-            <div key={f.n} style={{ flex: '1 1 120px', borderTop: `1px solid ${BORDER}`, paddingTop: 12 }}>
-              <Tag style={{ display: 'block', marginBottom: 6 }}>{f.n}</Tag>
-              <div style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: MUTED, lineHeight: 1.5 }}>{f.l}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  )
-}
 
 const PHYS_ITEMS = [
   // ── ghosted big words ──────────────────────────────────────────────────────
@@ -1356,8 +1278,7 @@ export default function Landing() {
       <DualMarquee />
       <LanguageWall />
       <FeaturesSection />
-      <Manifesto />
-      <PhysicsConvergence />
+<PhysicsConvergence />
       <CtaSection onEnter={onEnter} />
       <Footer />
     </div>
