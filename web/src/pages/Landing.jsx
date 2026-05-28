@@ -226,113 +226,103 @@ function Cursor() {
 }
 
 function Preloader({ onDone }) {
-  const [phase, setPhase] = useState(0)
-  const maskPolyRef = useRef(null)
-  const logoRef     = useRef(null)
-  const rafRef      = useRef(null)
-  const cbRef       = useRef(onDone)
+  const canvasRef = useRef(null)
+  const logoRef   = useRef(null)
+  const rafRef    = useRef(null)
+  const cbRef     = useRef(onDone)
   useEffect(() => { cbRef.current = onDone }, [onDone])
 
-  // ── Timeline ──────────────────────────────────────────────────────────────
   useEffect(() => {
-    const t1 = setTimeout(() => setPhase(1), 180)   // logo fades in
-    const t2 = setTimeout(() => setPhase(2), 1200)  // hold
-    const t3 = setTimeout(() => setPhase(3), 1850)  // zoom through
-    return () => [t1, t2, t3].forEach(clearTimeout)
+    const canvas = canvasRef.current
+    const logo   = logoRef.current
+    if (!canvas) return
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2)
+    const W = window.innerWidth, H = window.innerHeight
+    canvas.width  = W * dpr
+    canvas.height = H * dpr
+    canvas.style.width  = W + 'px'
+    canvas.style.height = H + 'px'
+    const ctx = canvas.getContext('2d')
+    ctx.scale(dpr, dpr)
+    ctx.fillStyle = INK
+    ctx.fillRect(0, 0, W, H)
+
+    // t=180ms: logo fades in via CSS transition
+    const t1 = setTimeout(() => {
+      if (!logo) return
+      logo.style.transition = 'opacity 0.9s cubic-bezier(0.16,1,0.3,1), transform 1s cubic-bezier(0.16,1,0.3,1)'
+      logo.style.opacity    = '1'
+      logo.style.transform  = 'translate(-50%,-50%) scale(1)'
+    }, 180)
+
+    // t=1820ms: canvas zoom — diamond hole expands, logo flies out
+    const t2 = setTimeout(() => {
+      const cx = W / 2, cy = H / 2
+      const maxR = cx + cy + 360
+      const DUR  = 980
+      let t0 = null
+      if (logo) { logo.style.transition = 'none'; logo.style.filter = 'none' }
+
+      const tick = (ts) => {
+        if (!t0) t0 = ts
+        const raw  = Math.min((ts - t0) / DUR, 1)
+        const ease = raw * raw  // ease-in-quad
+
+        // Refill dark background
+        ctx.globalCompositeOperation = 'source-over'
+        ctx.fillStyle = INK
+        ctx.fillRect(0, 0, W, H)
+
+        // Punch transparent diamond hole — GPU compositing, no DOM mutations
+        const r = maxR * ease
+        ctx.globalCompositeOperation = 'destination-out'
+        ctx.fillStyle = 'rgba(0,0,0,1)'
+        ctx.beginPath()
+        ctx.moveTo(cx,     cy - r)
+        ctx.lineTo(cx + r, cy    )
+        ctx.lineTo(cx,     cy + r)
+        ctx.lineTo(cx - r, cy    )
+        ctx.closePath()
+        ctx.fill()
+        ctx.globalCompositeOperation = 'source-over'
+
+        // Logo scales up gently and fades
+        if (logo) {
+          const scale = 1 + ease * 2.5
+          const alpha = Math.max(0, 1 - ease * 3)
+          logo.style.transform = `translate(-50%,-50%) scale(${scale})`
+          logo.style.opacity   = String(alpha)
+        }
+
+        if (raw < 1) { rafRef.current = requestAnimationFrame(tick) }
+        else         { cbRef.current?.() }
+      }
+      rafRef.current = requestAnimationFrame(tick)
+    }, 1820)
+
+    return () => {
+      clearTimeout(t1); clearTimeout(t2)
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    }
   }, [])
 
-  // ── Phase 1: logo appears (CSS transition via direct ref) ─────────────────
-  useEffect(() => {
-    if (phase !== 1 || !logoRef.current) return
-    const el = logoRef.current
-    requestAnimationFrame(() => {
-      el.style.transition = 'opacity 0.95s cubic-bezier(0.16,1,0.3,1), transform 1.05s cubic-bezier(0.16,1,0.3,1)'
-      el.style.opacity    = '1'
-      el.style.transform  = 'translate(-50%,-50%) scale(1)'
-    })
-  }, [phase])
-
-  // ── Phase 3: zoom through the logo hole (RAF) ─────────────────────────────
-  useEffect(() => {
-    if (phase !== 3) return
-    const el   = logoRef.current
-    const poly = maskPolyRef.current
-    if (!el || !poly) return
-
-    const cx = window.innerWidth  / 2
-    const cy = window.innerHeight / 2
-    // Diamond (45°-rotated square) covers all viewport corners when
-    // its L1 radius exceeds half-width + half-height.
-    const maxR    = cx + cy + 360
-    const DURATION = 1020
-    let t0 = null
-
-    el.style.transition = 'none'
-
-    const tick = (ts) => {
-      if (!t0) t0 = ts
-      const raw  = Math.min((ts - t0) / DURATION, 1)
-      // Ease-in-quad: starts gently (hole peeks open), then accelerates
-      const ease = raw * raw
-
-      // Expand the diamond cutout in the dark overlay
-      const r = maxR * ease
-      poly.setAttribute('points',
-        `${cx},${cy - r} ${cx + r},${cy} ${cx},${cy + r} ${cx - r},${cy}`)
-
-      // Logo rushes toward camera and fades
-      const scale = 1 + ease * 24
-      const alpha = Math.max(0, 1 - ease * 2.6)
-      el.style.transform = `translate(-50%,-50%) scale(${scale})`
-      el.style.opacity   = String(alpha)
-
-      if (raw < 1) {
-        rafRef.current = requestAnimationFrame(tick)
-      } else {
-        cbRef.current?.()
-      }
-    }
-
-    rafRef.current = requestAnimationFrame(tick)
-    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
-  }, [phase])
-
-  // Stable center coords for initial SVG render (before RAF takes over)
-  const cx0 = typeof window !== 'undefined' ? window.innerWidth  / 2 : 960
-  const cy0 = typeof window !== 'undefined' ? window.innerHeight / 2 : 540
-
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 10000, overflow: 'hidden', pointerEvents: phase >= 3 ? 'none' : 'auto' }}>
-
-      {/* Dark overlay — the diamond hole in the mask grows during zoom */}
-      <svg
-        width="100%" height="100%"
-        style={{ position: 'absolute', inset: 0, display: 'block' }}
-      >
-        <defs>
-          <mask id="logo-hole-mask">
-            {/* White = overlay visible (dark); black = hole (transparent) */}
-            <rect width="100%" height="100%" fill="white" />
-            <polygon
-              ref={maskPolyRef}
-              fill="black"
-              points={`${cx0},${cy0} ${cx0},${cy0} ${cx0},${cy0} ${cx0},${cy0}`}
-            />
-          </mask>
-        </defs>
-        <rect width="100%" height="100%" fill={INK} mask="url(#logo-hole-mask)" />
-      </svg>
-
-      {/* Logo — cream strokes, slight multi-layer bloom, fades in then rockets out */}
+    <>
+      <canvas
+        ref={canvasRef}
+        style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'block', pointerEvents: 'none' }}
+      />
       <div
         ref={logoRef}
         style={{
-          position: 'absolute',
+          position: 'fixed',
           top: '50%', left: '50%',
           transform: 'translate(-50%,-50%) scale(0.86)',
           opacity: 0,
+          zIndex: 10001,
           willChange: 'transform, opacity',
-          // Three-layer bloom: tight inner glow + soft mid + wide diffuse halo
+          pointerEvents: 'none',
           filter: [
             'drop-shadow(0 0 3px rgba(240,235,224,0.52))',
             'drop-shadow(0 0 14px rgba(240,235,224,0.18))',
@@ -341,23 +331,11 @@ function Preloader({ onDone }) {
         }}
       >
         <svg width="210" height="210" viewBox="0 0 24 24" fill="none">
-          {/* Outer diamond */}
-          <path
-            d="M12 2L22 12L12 22L2 12Z"
-            stroke={CREAM}
-            strokeWidth="0.62"
-            strokeLinejoin="round"
-          />
-          {/* Inner diamond — the hole the camera flies through */}
-          <path
-            d="M12 6.5L17.5 12L12 17.5L6.5 12Z"
-            stroke={CREAM}
-            strokeWidth="0.62"
-            strokeLinejoin="round"
-          />
+          <path d="M12 2L22 12L12 22L2 12Z"       stroke={CREAM} strokeWidth="0.62" strokeLinejoin="round" />
+          <path d="M12 6.5L17.5 12L12 17.5L6.5 12Z" stroke={CREAM} strokeWidth="0.62" strokeLinejoin="round" />
         </svg>
       </div>
-    </div>
+    </>
   )
 }
 
@@ -1327,7 +1305,7 @@ function ScrollIndex() {
 
 export default function Landing() {
   const navigate = useNavigate()
-  const [loaded, setLoaded] = useState(false)
+  const [loaded, setLoaded] = useState(() => sessionStorage.getItem('tvx_intro') === '1')
   const [showCursor, setShowCursor] = useState(false)
   const onEnter = () => navigate('/onboarding')
 
@@ -1359,7 +1337,7 @@ export default function Landing() {
         }
       `}</style>
 
-      {!loaded && <Preloader onDone={() => setLoaded(true)} />}
+      {!loaded && <Preloader onDone={() => { sessionStorage.setItem('tvx_intro', '1'); setLoaded(true) }} />}
       {loaded && showCursor && <Cursor />}
       <ScrollIndex />
 
