@@ -579,12 +579,17 @@ function Manifesto() {
 }
 
 const PHYS_ITEMS = [
+  // ── ghosted big words ──────────────────────────────────────────────────────
   { type: 'big',   v: 'NVIDIA',      col: 'rgba(11,11,11,0.07)', sz: 92,  wt: 700 },
   { type: 'big',   v: 'APPLE',       col: 'rgba(11,11,11,0.07)', sz: 76,  wt: 700 },
   { type: 'big',   v: 'SIGNAL',      col: 'rgba(11,11,11,0.05)', sz: 64,  wt: 700 },
   { type: 'big',   v: 'TESLA',       col: 'rgba(11,11,11,0.06)', sz: 70,  wt: 700 },
   { type: 'big',   v: 'META',        col: 'rgba(11,11,11,0.05)', sz: 58,  wt: 700 },
   { type: 'big',   v: 'MARKET',      col: 'rgba(11,11,11,0.04)', sz: 52,  wt: 700 },
+  { type: 'big',   v: 'BITCOIN',     col: 'rgba(11,11,11,0.06)', sz: 80,  wt: 700 },
+  { type: 'big',   v: 'GOOGLE',      col: 'rgba(11,11,11,0.05)', sz: 66,  wt: 700 },
+  { type: 'big',   v: 'AMAZON',      col: 'rgba(11,11,11,0.04)', sz: 54,  wt: 700 },
+  // ── price changes ──────────────────────────────────────────────────────────
   { type: 'price', v: '+2.40%',      col: 'var(--moss-500)'                       },
   { type: 'price', v: '−3.18%',      col: 'var(--clay-500)'                       },
   { type: 'price', v: '$192.40',     col: 'rgba(11,11,11,0.55)'                   },
@@ -595,6 +600,14 @@ const PHYS_ITEMS = [
   { type: 'price', v: '$408.20',     col: 'rgba(11,11,11,0.55)'                   },
   { type: 'price', v: '+4.21%',      col: 'var(--moss-500)'                       },
   { type: 'price', v: '−2.07%',      col: 'var(--clay-500)'                       },
+  { type: 'price', v: '+5.32%',      col: 'var(--moss-500)'                       },
+  { type: 'price', v: '−4.71%',      col: 'var(--clay-500)'                       },
+  { type: 'price', v: '+0.29%',      col: 'var(--moss-500)'                       },
+  { type: 'price', v: '−2.44%',      col: 'var(--clay-500)'                       },
+  { type: 'price', v: '$284.50',     col: 'rgba(11,11,11,0.55)'                   },
+  { type: 'price', v: '+3.15%',      col: 'var(--moss-500)'                       },
+  { type: 'price', v: '−1.88%',      col: 'var(--clay-500)'                       },
+  // ── action / signal tags ──────────────────────────────────────────────────
   { type: 'tag',   v: 'ACT NOW'                                                   },
   { type: 'tag',   v: 'WATCH'                                                     },
   { type: 'tag',   v: 'FOMC'                                                      },
@@ -603,6 +616,15 @@ const PHYS_ITEMS = [
   { type: 'tag',   v: 'BEARISH'                                                   },
   { type: 'tag',   v: 'BULLISH'                                                   },
   { type: 'tag',   v: 'IPO'                                                       },
+  { type: 'tag',   v: 'BUY'                                                       },
+  { type: 'tag',   v: 'SELL'                                                      },
+  { type: 'tag',   v: 'HOLD'                                                      },
+  { type: 'tag',   v: 'SHORT'                                                     },
+  { type: 'tag',   v: 'LONG'                                                      },
+  { type: 'tag',   v: 'RALLY'                                                     },
+  { type: 'tag',   v: 'RATE HIKE'                                                 },
+  { type: 'tag',   v: 'SPLIT'                                                     },
+  // ── data labels ────────────────────────────────────────────────────────────
   { type: 'label', v: 'NOV·22'                                                    },
   { type: 'label', v: 'BTC $42,180'                                               },
   { type: 'label', v: 'QQQ +0.42%'                                                },
@@ -625,6 +647,41 @@ const PHYS_ITEMS = [
   { type: 'label', v: 'UNH −1.12%'                                                },
   { type: 'label', v: 'NFLX +2.88%'                                               },
   { type: 'label', v: 'AMD +3.14%'                                                },
+  { type: 'label', v: 'EUR/USD 1.08'                                              },
+  { type: 'label', v: 'GBP/USD 1.27'                                              },
+  { type: 'label', v: 'USD/JPY 149.2'                                             },
+  { type: 'label', v: '2Y 5.01%'                                                  },
+  { type: 'label', v: '30Y 4.45%'                                                 },
+  { type: 'label', v: 'SILVER $23.4'                                              },
+  { type: 'label', v: 'CRUDE +0.82%'                                              },
+  { type: 'label', v: 'WHEAT 580'                                                 },
+  { type: 'label', v: 'CORN 445'                                                  },
+  { type: 'label', v: 'RUSSELL +0.33%'                                            },
+  { type: 'label', v: 'DAX +1.20%'                                                },
+  { type: 'label', v: 'NIKKEI −0.80%'                                             },
+  { type: 'label', v: 'FTSE +0.55%'                                               },
+  { type: 'label', v: 'CAC −0.34%'                                                },
+  { type: 'label', v: 'PLTR +7.44%'                                               },
+  { type: 'label', v: 'INTC −2.30%'                                               },
+  { type: 'label', v: 'BA −1.50%'                                                 },
+  { type: 'label', v: 'GS +0.90%'                                                 },
+  { type: 'label', v: 'V +1.11%'                                                  },
+  { type: 'label', v: 'MA +0.88%'                                                 },
+  { type: 'label', v: 'PYPL −3.20%'                                               },
+  { type: 'label', v: 'COIN +8.15%'                                               },
+  { type: 'label', v: 'DOGE $0.12'                                                },
+  { type: 'label', v: 'XRP $0.63'                                                 },
+  { type: 'label', v: 'CRM +1.22%'                                                },
+  { type: 'label', v: 'SNOW −2.10%'                                               },
+  { type: 'label', v: 'UBER +3.44%'                                               },
+  { type: 'label', v: 'MCD +0.72%'                                                },
+  { type: 'label', v: 'KO +0.44%'                                                 },
+  { type: 'label', v: 'PEP +0.38%'                                                },
+  { type: 'label', v: 'CVX −0.91%'                                                },
+  { type: 'label', v: 'WMT +1.02%'                                                },
+  { type: 'label', v: 'DIS −0.65%'                                                },
+  { type: 'label', v: 'SBUX +1.55%'                                               },
+  { type: 'label', v: 'ABNB +2.30%'                                               },
 ]
 
 function PhysicsConvergence() {
@@ -632,6 +689,7 @@ function PhysicsConvergence() {
   const sectionRef = useRef(null)
   const p = useElementProgress(sectionRef)
   const containerRef = useRef(null)
+  const titleRef = useRef(null)
   const itemRefs = useRef([])
   const [triggered, setTriggered] = useState(false)
   const cursorRef = useRef({ x: 0, y: 0 })
@@ -688,6 +746,25 @@ function PhysicsConvergence() {
       const wallL = Bodies.rectangle(-25, H / 2, 50, H * 4, { isStatic: true })
       const wallR = Bodies.rectangle(W + 25, H / 2, 50, H * 4, { isStatic: true })
       Composite.add(engine.world, [...mBodies, floor, wallL, wallR])
+
+      // Static body matching the centered title — items bounce/slide off it
+      requestAnimationFrame(() => {
+        const titleEl = titleRef.current
+        if (!titleEl) return
+        const cRect = container.getBoundingClientRect()
+        const tRect = titleEl.getBoundingClientRect()
+        if (tRect.width === 0) return
+        const tx = tRect.left - cRect.left + tRect.width / 2
+        const ty = tRect.top - cRect.top + tRect.height / 2
+        const titleBody = Bodies.rectangle(tx, ty, tRect.width + 48, tRect.height + 20, {
+          isStatic: true,
+          friction: 0.02,
+          frictionStatic: 0.04,
+          restitution: 0.3,
+          label: 'title',
+        })
+        Composite.add(engine.world, titleBody)
+      })
 
       // Mouse constraint — elastic, not stiff
       const mouse = Mouse.create(container)
@@ -824,6 +901,33 @@ function PhysicsConvergence() {
 
       <div ref={containerRef} style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
         {PHYS_ITEMS.map((f, i) => renderItem(f, i))}
+      </div>
+
+      {/* Centered title — physics items bounce off this */}
+      <div ref={titleRef} style={{
+        position: 'absolute', top: '50%', left: '50%',
+        transform: 'translate(-50%, -50%)',
+        zIndex: 5, pointerEvents: 'none',
+        textAlign: 'center', lineHeight: 0.86,
+      }}>
+        <div style={{
+          fontFamily: 'var(--font-display)',
+          fontVariationSettings: "'wdth' 125, 'wght' 700",
+          fontStretch: '125%', fontWeight: 700,
+          fontSize: 'clamp(52px, 8.5vw, 140px)',
+          color: INK, letterSpacing: '-0.048em',
+          opacity: 0.82, whiteSpace: 'nowrap',
+        }}>SIGNAL FROM</div>
+        <div style={{
+          fontFamily: 'var(--font-display)',
+          fontVariationSettings: "'wdth' 125, 'wght' 700",
+          fontStretch: '125%', fontWeight: 700,
+          fontSize: 'clamp(52px, 8.5vw, 140px)',
+          color: 'transparent',
+          WebkitTextStroke: `1.5px ${INK}`,
+          letterSpacing: '-0.048em',
+          opacity: 0.55, whiteSpace: 'nowrap',
+        }}>THE NOISE.</div>
       </div>
     </section>
   )
