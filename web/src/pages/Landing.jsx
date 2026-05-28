@@ -421,7 +421,18 @@ function Hero({ onEnter }) {
   return (
     <section ref={sectionRef} style={{ position: 'relative', minHeight: '100vh', background: INK, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: '0 clamp(20px,4vw,48px) 60px', overflow: 'hidden' }}>
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 60, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 clamp(20px,4vw,48px)', zIndex: 10 }}>
-        <Logo size="sm" />
+        <div style={{
+          opacity: rdy ? 1 : 0,
+          transform: rdy ? 'translateY(0) scale(1)' : 'translateY(-6px) scale(0.92)',
+          transition: 'opacity 0.9s cubic-bezier(0.16,1,0.3,1), transform 1s cubic-bezier(0.16,1,0.3,1)',
+          filter: [
+            'drop-shadow(0 0 3px rgba(240,235,224,0.52))',
+            'drop-shadow(0 0 14px rgba(240,235,224,0.18))',
+            'drop-shadow(0 0 44px rgba(240,235,224,0.07))',
+          ].join(' '),
+        }}>
+          <Logo size="sm" />
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 26 }}>
           <Button variant="primary" tone="paper" onClick={onEnter}>Get started</Button>
         </div>
