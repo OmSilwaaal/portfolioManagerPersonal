@@ -695,8 +695,8 @@ function PhysicsConvergence() {
       const W = container.offsetWidth || window.innerWidth
       const H = container.offsetHeight || window.innerHeight
 
-      const engine = Engine.create({ positionIterations: 3, velocityIterations: 3, constraintIterations: 2 })
-      engine.gravity.y = 3.2
+      const engine = Engine.create({ positionIterations: 10, velocityIterations: 10, constraintIterations: 4 })
+      engine.gravity.y = 0.9
 
       // Create a body per item using element dimensions
       const mBodies = PHYS_ITEMS.map((item, i) => {
@@ -707,10 +707,10 @@ function PhysicsConvergence() {
         const spawnX = W * 0.08 + (i / PHYS_ITEMS.length) * W * 0.84 + (Math.random() - 0.5) * 80
         const spawnY = -80 - Math.random() * H * 0.9
         return Bodies.rectangle(spawnX, spawnY, bw, bh, {
-          restitution: 0.08,
-          friction: 0.6,
-          frictionAir: 0.012,
-          density: 0.004,
+          restitution: 0.35,
+          friction: 0.15,
+          frictionAir: 0.045,
+          density: 0.002,
           angle: (Math.random() - 0.5) * 0.45,
         })
       })
