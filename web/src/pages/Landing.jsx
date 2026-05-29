@@ -1138,23 +1138,23 @@ function FeaturesSection() {
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--moss-200)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{f.tag}</span>
                 </div>
 
-                {/* Center: title wraps, circle wraps tightly around the text itself */}
+                {/* Center: vertical text + tight circle on last card */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, padding: '8px 4px' }}>
-                  <div style={{ position: 'relative', display: 'inline-block', maxWidth: '100%' }}>
+                  <div style={{ position: 'relative', display: 'inline-block' }}>
                     <span style={{
                       fontFamily: 'var(--font-display)',
                       fontVariationSettings: "'wdth' 125, 'wght' 700",
                       fontStretch: '125%', fontWeight: 700,
-                      fontSize: 'clamp(13px, 2.8vw, 52px)',
+                      fontSize: 'clamp(11px, 1.6vw, 32px)',
                       color: CREAM,
-                      letterSpacing: '-0.04em',
-                      lineHeight: 1.05,
-                      textAlign: 'center',
-                      wordBreak: 'break-word',
+                      letterSpacing: '0.06em',
+                      lineHeight: 1.0,
+                      writingMode: 'vertical-rl',
+                      textOrientation: 'mixed',
+                      textTransform: 'uppercase',
                       display: 'block',
                     }}>{f.title}</span>
 
-                    {/* Hand-drawn circle sits tightly around the text, not the whole center area */}
                     {isLast && (
                       <svg
                         aria-hidden="true"
@@ -1167,7 +1167,6 @@ function FeaturesSection() {
                           pointerEvents: 'none', overflow: 'visible',
                         }}
                       >
-                        {/* Irregular hand-drawn path — slightly wobbly, doesn't close perfectly */}
                         <path
                           ref={circleRef}
                           d="M 54,4 C 74,1 97,14 98,36 C 99,58 87,85 65,94 C 43,103 12,96 4,74 C -4,52 6,22 23,11 C 36,3 46,3 54,4"
