@@ -1138,50 +1138,50 @@ function FeaturesSection() {
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--moss-200)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{f.tag}</span>
                 </div>
 
-                {/* Center: title wraps to 2 lines max, scales to fill card */}
-                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, padding: '8px 0' }}>
-                  <span style={{
-                    fontFamily: 'var(--font-display)',
-                    fontVariationSettings: "'wdth' 125, 'wght' 700",
-                    fontStretch: '125%', fontWeight: 700,
-                    fontSize: 'clamp(13px, 2.8vw, 52px)',
-                    color: CREAM,
-                    letterSpacing: '-0.04em',
-                    lineHeight: 1.0,
-                    textAlign: 'center',
-                    wordBreak: 'break-word',
-                    overflowWrap: 'break-word',
-                    hyphens: 'auto',
-                    overflow: 'hidden',
-                    display: '-webkit-box',
-                    WebkitLineClamp: 3,
-                    WebkitBoxOrient: 'vertical',
-                    width: '100%',
-                  }}>{f.title}</span>
+                {/* Center: title wraps, circle wraps tightly around the text itself */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, padding: '8px 4px' }}>
+                  <div style={{ position: 'relative', display: 'inline-block', maxWidth: '100%' }}>
+                    <span style={{
+                      fontFamily: 'var(--font-display)',
+                      fontVariationSettings: "'wdth' 125, 'wght' 700",
+                      fontStretch: '125%', fontWeight: 700,
+                      fontSize: 'clamp(13px, 2.8vw, 52px)',
+                      color: CREAM,
+                      letterSpacing: '-0.04em',
+                      lineHeight: 1.05,
+                      textAlign: 'center',
+                      wordBreak: 'break-word',
+                      display: 'block',
+                    }}>{f.title}</span>
 
-                  {/* Hand-drawn circle on last card — draws via ref, not React state */}
-                  {isLast && (
-                    <svg
-                      aria-hidden="true"
-                      style={{ position: 'absolute', inset: '-12px -10px', width: 'calc(100% + 20px)', height: 'calc(100% + 24px)', pointerEvents: 'none', overflow: 'visible' }}
-                    >
-                      <ellipse
-                        ref={circleRef}
-                        cx="50%" cy="50%"
-                        rx="48%" ry="46%"
-                        fill="none"
-                        stroke="rgba(240,235,224,0.75)"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        pathLength="1"
-                        strokeDasharray="0.93 0.07"
+                    {/* Hand-drawn circle sits tightly around the text, not the whole center area */}
+                    {isLast && (
+                      <svg
+                        aria-hidden="true"
+                        viewBox="0 0 100 100"
+                        preserveAspectRatio="none"
                         style={{
-                          strokeDashoffset: 1,
-                          transition: 'stroke-dashoffset 680ms cubic-bezier(0.77,0,0.175,1)',
+                          position: 'absolute',
+                          top: '-14px', left: '-16px',
+                          width: 'calc(100% + 32px)', height: 'calc(100% + 28px)',
+                          pointerEvents: 'none', overflow: 'visible',
                         }}
-                      />
-                    </svg>
-                  )}
+                      >
+                        {/* Irregular hand-drawn path — slightly wobbly, doesn't close perfectly */}
+                        <path
+                          ref={circleRef}
+                          d="M 54,4 C 74,1 97,14 98,36 C 99,58 87,85 65,94 C 43,103 12,96 4,74 C -4,52 6,22 23,11 C 36,3 46,3 54,4"
+                          fill="none"
+                          stroke="rgba(240,235,224,0.82)"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                          pathLength="1"
+                          strokeDasharray="0.94 0.06"
+                          style={{ strokeDashoffset: 1, transition: 'stroke-dashoffset 700ms cubic-bezier(0.77,0,0.175,1)' }}
+                        />
+                      </svg>
+                    )}
+                  </div>
                 </div>
 
                 {/* Bottom: first hint only — always fits */}
