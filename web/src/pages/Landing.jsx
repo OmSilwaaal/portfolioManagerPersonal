@@ -721,24 +721,6 @@ function PhysicsConvergence() {
       const wallR = Bodies.rectangle(W + 25, H / 2, 50, H * 4, { isStatic: true })
       Composite.add(engine.world, [...mBodies, floor, wallL, wallR])
 
-      // Static body matching the centered title — items bounce/slide off it
-      requestAnimationFrame(() => {
-        const titleEl = titleRef.current
-        if (!titleEl) return
-        const cRect = container.getBoundingClientRect()
-        const tRect = titleEl.getBoundingClientRect()
-        if (tRect.width === 0) return
-        const tx = tRect.left - cRect.left + tRect.width / 2
-        const ty = tRect.top - cRect.top + tRect.height / 2
-        const titleBody = Bodies.rectangle(tx, ty, tRect.width + 48, tRect.height + 20, {
-          isStatic: true,
-          friction: 0.02,
-          frictionStatic: 0.04,
-          restitution: 0.3,
-          label: 'title',
-        })
-        Composite.add(engine.world, titleBody)
-      })
 
       // Mouse constraint — elastic, not stiff
       const mouse = Mouse.create(container)
