@@ -433,32 +433,9 @@ function Hero({ onEnter }) {
         }}>
           <Logo size="sm" />
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 26 }}>
-          <Button variant="primary" tone="paper" onClick={onEnter}>Get started</Button>
-        </div>
+        <div />
       </div>
 
-      {/* Founder quote — upper right, shifted toward center */}
-      <div style={{
-        position: 'absolute', top: '18%', right: 'clamp(60px,10vw,160px)',
-        textAlign: 'right', pointerEvents: 'none', zIndex: 2,
-        opacity: rdy ? 1 : 0, transition: 'opacity .8s ease 1.0s',
-        maxWidth: 420,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 14, marginBottom: 18 }}>
-          <Tag>Market Intelligence</Tag>
-          <div style={{ width: 28, height: 1, background: BORDER }} />
-          <Tag>Vol. 01 · Est. 2026</Tag>
-        </div>
-        <blockquote style={{ margin: 0 }}>
-          <p style={{ fontFamily: 'var(--font-accent-serif)', fontStyle: 'italic', fontWeight: 400, fontSize: 'clamp(20px, 2.2vw, 32px)', lineHeight: 1.35, color: CREAM, margin: 0, letterSpacing: '0.01em' }}>
-            "We believe markets should be legible. That every investor — not just the ones in glass towers — deserves the same fluency."
-          </p>
-          <footer style={{ marginTop: 16, fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.28em', textTransform: 'uppercase', color: MUTED }}>
-            — Om Poper, Co-Founder
-          </footer>
-        </blockquote>
-      </div>
 
       <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
         {TICKER_POOL.map((t, i) => (
@@ -479,9 +456,6 @@ function Hero({ onEnter }) {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 48, flexWrap: 'wrap', gap: 24, position: 'relative', zIndex: 2 }}>
         <p style={{ fontFamily: 'var(--font-sans)', fontSize: 14, lineHeight: 1.9, color: MUTED, maxWidth: 300, margin: 0, opacity: rdy ? 1 : 0, transform: rdy ? 'none' : 'translateY(16px)', transition: 'opacity .9s ease .7s, transform .9s ease .7s' }}>AI news feed · stock watchlist · government<br />trades · price alerts · paper trading.<br />All in plain English.</p>
-        <div style={{ opacity: rdy ? 1 : 0, transition: 'opacity .9s ease .8s' }}>
-          <Button variant="primary" tone="paper" icon="arrow" onClick={onEnter}>Get started free</Button>
-        </div>
       </div>
 
       <div ref={scrollIndRef} style={{ position: 'absolute', bottom: 24, right: 56, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, opacity: rdy ? 1 : 0, transition: 'opacity .6s' }}>
