@@ -1085,10 +1085,125 @@ const FEATURES = [
   },
 ]
 
-/* ── Features section — editorial row layout ─────────────────────────────── */
+/* ── Features section — animated card grid ───────────────────────────────── */
+function useInViewOnce(ref, threshold = 0.08) {
+  const [inView, setInView] = useState(false)
+  useEffect(() => {
+    if (!ref.current) return
+    const obs = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setInView(true); obs.disconnect() } },
+      { threshold }
+    )
+    obs.observe(ref.current)
+    return () => obs.disconnect()
+  }, [])
+  return inView
+}
+
+function FeatureCard({ feature, delay, hasCircle, inView, onEnter, onLeave, isActive }) {
+  const DRAW_DUR = 520
+
+  return (
+    <div
+      onMouseEnter={onEnter}
+      onMouseLeave={onLeave}
+      style={{
+        position: 'relative',
+        padding: '30px 28px 32px',
+        background: isActive ? 'rgba(240,235,224,0.038)' : 'rgba(240,235,224,0.014)',
+        opacity: inView ? 1 : 0,
+        transform: inView ? 'translateY(0)' : 'translateY(30px)',
+        transition: `opacity 0.52s ease ${delay}ms, transform 0.52s cubic-bezier(0.16,1,0.3,1) ${delay}ms, background 0.35s`,
+        cursor: 'crosshair',
+        overflow: 'visible',
+      }}
+    >
+      {/* SVG border draw — rect */}
+      <svg
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', overflow: 'visible' }}
+        aria-hidden="true"
+      >
+        <rect
+          x="0.75" y="0.75"
+          width="calc(100% - 1.5px)" height="calc(100% - 1.5px)"
+          fill="none"
+          stroke={isActive ? 'rgba(240,235,224,0.42)' : 'rgba(240,235,224,0.14)'}
+          strokeWidth="1"
+          pathLength="1"
+          strokeDasharray="1"
+          strokeDashoffset={inView ? 0 : 1}
+          style={{
+            transition: `stroke-dashoffset ${DRAW_DUR}ms cubic-bezier(0.77,0,0.175,1) ${delay + 40}ms, stroke 0.35s`,
+          }}
+        />
+      </svg>
+
+      {/* Circle draw — only on hasCircle card */}
+      {hasCircle && (
+        <svg
+          style={{ position: 'absolute', inset: '-18px', width: 'calc(100% + 36px)', height: 'calc(100% + 36px)', pointerEvents: 'none', overflow: 'visible' }}
+          aria-hidden="true"
+        >
+          <ellipse
+            cx="50%" cy="50%"
+            rx="49%" ry="49%"
+            fill="none"
+            stroke="rgba(59,130,246,0.5)"
+            strokeWidth="1.5"
+            pathLength="1"
+            strokeDasharray="0.92 0.08"
+            strokeDashoffset={inView ? 0 : 1}
+            style={{
+              transition: `stroke-dashoffset ${DRAW_DUR * 1.5}ms cubic-bezier(0.77,0,0.175,1) ${delay + 120}ms`,
+            }}
+          />
+          {/* Small arrow-head tick at end of circle */}
+          <line
+            x1="50%" y1="1%"
+            x2="53%" y2="4%"
+            stroke="rgba(59,130,246,0.5)"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            opacity={inView ? 1 : 0}
+            style={{ transition: `opacity 0.2s ease ${delay + DRAW_DUR * 1.5}ms` }}
+          />
+        </svg>
+      )}
+
+      {/* Card content */}
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 18 }}>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.28em', color: 'rgba(240,235,224,0.3)', flexShrink: 0 }}>{feature.n}</span>
+        <span style={{
+          fontFamily: 'var(--font-display)',
+          fontVariationSettings: "'wdth' 125, 'wght' 700",
+          fontStretch: '125%', fontWeight: 700,
+          fontSize: 'clamp(18px, 2.2vw, 28px)',
+          color: CREAM,
+          letterSpacing: '-0.04em', lineHeight: 0.95,
+        }}>{feature.title}</span>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+        <Tag style={{ color: 'var(--moss-200)', letterSpacing: '0.16em' }}>{feature.tag}</Tag>
+        <div style={{ flex: 1, height: '1px', background: BORDER }} />
+      </div>
+
+      <p style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: MUTED, lineHeight: 1.78, margin: '0 0 22px', fontWeight: 400 }}>{feature.body}</p>
+
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+        {feature.hint.map((h, i) => (
+          <span key={i} style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: h.color }}>{h.text}</span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function FeaturesSection() {
   const [active, setActive] = useState(null)
   const tooltipRef = useRef(null)
+  const gridRef = useRef(null)
+  const inView = useInViewOnce(gridRef, 0.06)
   const isMobile = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
 
   useEffect(() => {
@@ -1127,94 +1242,35 @@ function FeaturesSection() {
           </div>
         </div>
         {!isMobile && (
-          <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.18em', color: MUTED, margin: 0 }}>Hover a row →</p>
+          <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.18em', color: MUTED, margin: 0 }}>Hover a card →</p>
         )}
       </div>
 
-      {/* Editorial rows */}
-      <div style={{ marginTop: 48, borderTop: `1px solid ${BORDER}` }}>
-        {FEATURES.map((f) => {
-          const isActive = active === f.id
-          return (
-            <article
-              key={f.id}
-              onMouseEnter={() => !isMobile && setActive(f.id)}
-              onMouseLeave={() => !isMobile && setActive(null)}
-              style={{
-                display: 'flex', alignItems: 'center', flexWrap: 'wrap',
-                gap: '2vw',
-                padding: '26px clamp(20px,4vw,48px)',
-                borderBottom: `1px solid ${BORDER}`,
-                background: isActive ? 'rgba(240,235,224,0.022)' : 'transparent',
-                transition: 'background 0.4s cubic-bezier(0.16,1,0.3,1)',
-                cursor: 'crosshair',
-              }}
-            >
-              {/* Index number */}
-              <span style={{
-                fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 500,
-                letterSpacing: '0.28em',
-                color: isActive ? MUTED : 'rgba(240,235,224,0.22)',
-                flexShrink: 0, minWidth: 22,
-                transition: 'color 0.3s',
-              }}>{f.n}</span>
-
-              {/* Feature name — large editorial display type */}
-              <span style={{
-                fontFamily: 'var(--font-display)',
-                fontVariationSettings: "'wdth' 125, 'wght' 700",
-                fontStretch: '125%', fontWeight: 700,
-                fontSize: 'clamp(22px, 3.6vw, 58px)',
-                color: isActive ? CREAM : 'rgba(240,235,224,0.58)',
-                letterSpacing: '-0.04em', lineHeight: 0.92,
-                flex: '0 0 auto',
-                transition: 'color 0.35s cubic-bezier(0.16,1,0.3,1)',
-              }}>{f.title}</span>
-
-              {/* Expanding rule */}
-              <div style={{
-                flex: 1, height: 1, minWidth: 16,
-                background: isActive ? 'rgba(240,235,224,0.14)' : BORDER,
-                transition: 'background 0.4s',
-              }} />
-
-              {/* Raw typographic data hint */}
-              <div style={{
-                display: 'flex', gap: 18, alignItems: 'center', flexShrink: 0,
-                opacity: isActive ? 1 : 0.42,
-                transition: 'opacity 0.35s',
-              }}>
-                {f.hint.map((h, i) => (
-                  <span key={i} style={{
-                    fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 500,
-                    letterSpacing: '0.18em', textTransform: 'uppercase',
-                    color: h.color, whiteSpace: 'nowrap',
-                  }}>{h.text}</span>
-                ))}
-              </div>
-
-              {/* Tag + directional arrow */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-                <Tag style={{
-                  color: isActive ? 'var(--moss-200)' : 'var(--on-ink-text-4)',
-                  transition: 'color 0.3s', letterSpacing: '0.16em',
-                }}>{f.tag}</Tag>
-                <span style={{
-                  fontFamily: 'var(--font-mono)', fontSize: 12,
-                  color: isActive ? CREAM : 'rgba(240,235,224,0.16)',
-                  transition: 'color 0.3s, transform 0.3s',
-                  display: 'inline-block',
-                  transform: isActive ? 'translate(3px,-2px)' : 'none',
-                }}>↘</span>
-              </div>
-
-              {/* Mobile: description inline */}
-              {isMobile && (
-                <p style={{ width: '100%', fontFamily: 'var(--font-sans)', fontSize: 13, color: MUTED, lineHeight: 1.75, margin: '10px 0 0 30px' }}>{f.body}</p>
-              )}
-            </article>
-          )
-        })}
+      {/* Animated card grid */}
+      <div
+        ref={gridRef}
+        style={{
+          marginTop: 48,
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 320px), 1fr))',
+          gap: 0,
+          borderTop: `1px solid ${BORDER}`,
+          borderLeft: `1px solid ${BORDER}`,
+        }}
+      >
+        {FEATURES.map((f, i) => (
+          <div key={f.id} style={{ borderRight: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}` }}>
+            <FeatureCard
+              feature={f}
+              delay={i * 75}
+              hasCircle={i === 0}
+              inView={inView}
+              isActive={active === f.id}
+              onEnter={() => !isMobile && setActive(f.id)}
+              onLeave={() => !isMobile && setActive(null)}
+            />
+          </div>
+        ))}
       </div>
 
       {/* Bottom strip */}
@@ -1223,7 +1279,7 @@ function FeaturesSection() {
         <Tag style={{ color: 'var(--moss-200)' }}>No credit card required →</Tag>
       </div>
 
-      {/* Cursor-following tooltip with scramble reveal (desktop only) */}
+      {/* Cursor-following tooltip (desktop only) */}
       {!isMobile && (
         <div
           ref={tooltipRef}
@@ -1232,16 +1288,15 @@ function FeaturesSection() {
             zIndex: 9000, pointerEvents: 'none',
             width: 340,
             opacity: activeFeature ? 1 : 0,
+            transition: 'opacity 0.18s ease',
           }}
         >
           {activeFeature && (
             <div key={activeFeature.id} style={{ background: CREAM, border: `1px solid rgba(11,11,11,0.13)`, padding: '26px 28px 28px', position: 'relative' }}>
-              {/* Number + title row */}
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 14 }}>
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.28em', color: 'rgba(11,11,11,0.26)', textTransform: 'uppercase' }}>{activeFeature.n}</span>
                 <span style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 110, 'wght' 700", fontWeight: 700, fontSize: 22, color: INK, letterSpacing: '-0.025em', lineHeight: 1 }}>{activeFeature.title}</span>
               </div>
-              {/* Data hint chips */}
               <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 16 }}>
                 {activeFeature.hint.map((h, i) => (
                   <span key={i} style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: h.color }}>{h.text}</span>
