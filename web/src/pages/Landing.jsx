@@ -1016,7 +1016,8 @@ function useInViewOnce(ref, threshold = 0.08) {
 }
 
 function FeatureCard({ feature, delay, hasCircle, inView, onEnter, onLeave, isActive }) {
-  const DRAW_DUR = 520
+  // Circle draws after the card has fully slid in
+  const CIRCLE_DELAY = delay + 420
 
   return (
     <div
@@ -1027,75 +1028,49 @@ function FeatureCard({ feature, delay, hasCircle, inView, onEnter, onLeave, isAc
         padding: '30px 28px 32px',
         background: isActive ? 'rgba(240,235,224,0.038)' : 'rgba(240,235,224,0.014)',
         opacity: inView ? 1 : 0,
-        transform: inView ? 'translateY(0)' : 'translateY(30px)',
-        transition: `opacity 0.52s ease ${delay}ms, transform 0.52s cubic-bezier(0.16,1,0.3,1) ${delay}ms, background 0.35s`,
+        transform: inView ? 'translateX(0)' : 'translateX(44px)',
+        transition: `opacity 0.44s ease ${delay}ms, transform 0.44s cubic-bezier(0.16,1,0.3,1) ${delay}ms, background 0.35s`,
         cursor: 'crosshair',
         overflow: 'visible',
       }}
     >
-      {/* SVG border draw — rect */}
-      <svg
-        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', overflow: 'visible' }}
-        aria-hidden="true"
-      >
-        <rect
-          x="0.75" y="0.75"
-          width="calc(100% - 1.5px)" height="calc(100% - 1.5px)"
-          fill="none"
-          stroke={isActive ? 'rgba(240,235,224,0.42)' : 'rgba(240,235,224,0.14)'}
-          strokeWidth="1"
-          pathLength="1"
-          strokeDasharray="1"
-          strokeDashoffset={inView ? 0 : 1}
-          style={{
-            transition: `stroke-dashoffset ${DRAW_DUR}ms cubic-bezier(0.77,0,0.175,1) ${delay + 40}ms, stroke 0.35s`,
-          }}
-        />
-      </svg>
-
-      {/* Circle draw — only on hasCircle card */}
-      {hasCircle && (
-        <svg
-          style={{ position: 'absolute', inset: '-18px', width: 'calc(100% + 36px)', height: 'calc(100% + 36px)', pointerEvents: 'none', overflow: 'visible' }}
-          aria-hidden="true"
-        >
-          <ellipse
-            cx="50%" cy="50%"
-            rx="49%" ry="49%"
-            fill="none"
-            stroke="rgba(59,130,246,0.5)"
-            strokeWidth="1.5"
-            pathLength="1"
-            strokeDasharray="0.92 0.08"
-            strokeDashoffset={inView ? 0 : 1}
-            style={{
-              transition: `stroke-dashoffset ${DRAW_DUR * 1.5}ms cubic-bezier(0.77,0,0.175,1) ${delay + 120}ms`,
-            }}
-          />
-          {/* Small arrow-head tick at end of circle */}
-          <line
-            x1="50%" y1="1%"
-            x2="53%" y2="4%"
-            stroke="rgba(59,130,246,0.5)"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            opacity={inView ? 1 : 0}
-            style={{ transition: `opacity 0.2s ease ${delay + DRAW_DUR * 1.5}ms` }}
-          />
-        </svg>
-      )}
-
       {/* Card content */}
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 18 }}>
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.28em', color: 'rgba(240,235,224,0.3)', flexShrink: 0 }}>{feature.n}</span>
-        <span style={{
-          fontFamily: 'var(--font-display)',
-          fontVariationSettings: "'wdth' 125, 'wght' 700",
-          fontStretch: '125%', fontWeight: 700,
-          fontSize: 'clamp(18px, 2.2vw, 28px)',
-          color: CREAM,
-          letterSpacing: '-0.04em', lineHeight: 0.95,
-        }}>{feature.title}</span>
+
+        {/* Title — circle wraps this on the hasCircle card */}
+        <span style={{ position: 'relative', display: 'inline-block' }}>
+          <span style={{
+            fontFamily: 'var(--font-display)',
+            fontVariationSettings: "'wdth' 125, 'wght' 700",
+            fontStretch: '125%', fontWeight: 700,
+            fontSize: 'clamp(18px, 2.2vw, 28px)',
+            color: CREAM,
+            letterSpacing: '-0.04em', lineHeight: 0.95,
+            display: 'block',
+          }}>{feature.title}</span>
+
+          {hasCircle && (
+            <svg
+              aria-hidden="true"
+              style={{ position: 'absolute', top: '-10px', left: '-14px', width: 'calc(100% + 28px)', height: 'calc(100% + 20px)', pointerEvents: 'none', overflow: 'visible' }}
+            >
+              {/* Hand-drawn-style ellipse using a slightly imperfect path */}
+              <ellipse
+                cx="50%" cy="50%"
+                rx="50%" ry="70%"
+                fill="none"
+                stroke="rgba(240,235,224,0.7)"
+                strokeWidth="1.2"
+                strokeLinecap="round"
+                pathLength="1"
+                strokeDasharray="0.94 0.06"
+                strokeDashoffset={inView ? 0 : 1}
+                style={{ transition: `stroke-dashoffset 580ms cubic-bezier(0.77,0,0.175,1) ${CIRCLE_DELAY}ms` }}
+              />
+            </svg>
+          )}
+        </span>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
