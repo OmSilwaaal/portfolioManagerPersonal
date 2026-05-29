@@ -14,15 +14,6 @@ const tabs = [
     ),
   },
   {
-    path: '/stocks',
-    label: 'Markets',
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>
-      </svg>
-    ),
-  },
-  {
     path: '/portfolio',
     label: 'Portfolio',
     icon: (
@@ -31,15 +22,6 @@ const tabs = [
         <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
         <line x1="12" y1="12" x2="12" y2="16"/>
         <line x1="10" y1="14" x2="14" y2="14"/>
-      </svg>
-    ),
-  },
-  {
-    path: '/paper-trading',
-    label: 'Trade',
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
       </svg>
     ),
   },

@@ -470,7 +470,7 @@ function Hero({ onEnter }) {
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 48, flexWrap: 'wrap', gap: 24, position: 'relative', zIndex: 2 }}>
-        <p style={{ fontFamily: 'var(--font-sans)', fontSize: 14, lineHeight: 1.9, color: MUTED, maxWidth: 300, margin: 0, opacity: rdy ? 1 : 0, transform: rdy ? 'none' : 'translateY(16px)', transition: 'opacity .9s ease .7s, transform .9s ease .7s' }}>AI news feed · stock watchlist · government<br />trades · price alerts · paper trading.<br />All in plain English.</p>
+        <p style={{ fontFamily: 'var(--font-sans)', fontSize: 14, lineHeight: 1.9, color: MUTED, maxWidth: 300, margin: 0, opacity: rdy ? 1 : 0, transform: rdy ? 'none' : 'translateY(16px)', transition: 'opacity .9s ease .7s, transform .9s ease .7s' }}>AI news · portfolio impact · upside picks<br />gov trades · commodities · crypto intel.<br />All in plain English.</p>
       </div>
 
       <div ref={scrollIndRef} style={{ position: 'absolute', bottom: 24, right: 56, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, opacity: rdy ? 1 : 0, transition: 'opacity .6s' }}>
@@ -489,9 +489,9 @@ const DIVIDER_ROWS = [
   { words: ['AAPL +2.40%', 'NVDA −3.18%', 'MSFT +0.45%', 'BTC $42,180', 'GOLD +1.20%', 'TSLA −1.05%', 'CPI 3.4%', 'SPY +0.18%', 'QQQ +0.42%', 'META +1.73%', 'ETH $2,840', 'AMZN +0.91%'], dir: 1,  dur: 22, font: 'var(--font-mono)', sz: 11, wt: 500, ls: '0.06em', upper: false, sep: '·', opacity: 0.5 },
   { words: ['INTELLIGENCE', 'ДАННЫЕ', 'インサイト', 'INTELLIGENCE', 'DATEN', 'DONNÉES', '데이터', 'INTELLIGENZA'], dir: -1, dur: 50, font: 'var(--font-display)', sz: 72, wt: 900, ls: '-0.03em', upper: true,  sep: '/', opacity: 0.05 },
   { words: ['Know before the crowd', 'Smarter than the headlines', 'Markets never sleep', 'Your edge, every morning', 'Signal over noise', 'Stay ahead, stay calm', 'Money never sleeps', 'Trade with clarity'], dir: -1, dur: 32, font: 'var(--font-sans)', sz: 12, wt: 400, ls: '0.01em', upper: false, sep: '·', opacity: 0.28 },
-  { words: ['Gov trades tracked', 'Insider moves surfaced', 'Earnings decoded', 'Fed minutes summarized', 'Commodity flows mapped', 'Crypto flows analyzed', 'Paper trading included', 'Watchlist alerts live'], dir: 1,  dur: 26, font: 'var(--font-mono)', sz: 10, wt: 500, ls: '0.12em', upper: true,  sep: '—', opacity: 0.4 },
+  { words: ['Gov trades tracked', 'Insider moves surfaced', 'Earnings decoded', 'Fed minutes summarized', 'Commodity flows mapped', 'Crypto flows analyzed', 'Upside picks daily', 'Portfolio impact scored'], dir: 1,  dur: 26, font: 'var(--font-mono)', sz: 10, wt: 500, ls: '0.12em', upper: true,  sep: '—', opacity: 0.4 },
   { words: ['портфель', 'ポートフォリオ', 'portfolio', 'Portefeuille', '포트폴리오', '投资组合', 'portafoglio', 'cartera'], dir: 1,  dur: 48, font: 'var(--font-display)', sz: 52, wt: 700, ls: '0.04em', upper: false, sep: '/', opacity: 0.07 },
-  { words: ['AI News Feed', 'Price Alerts', 'Copy Trading', 'Paper Trading', 'Gov Trades', 'Commodities', 'Crypto', 'Stocks'], dir: -1, dur: 20, font: 'var(--font-sans)', sz: 11, wt: 600, ls: '0.14em', upper: true,  sep: '×', opacity: 0.42 },
+  { words: ['AI News Feed', 'Portfolio Impact', 'Upside Picks', 'Gov Trades', 'Commodities', 'Crypto Intel', 'Plain English', 'No Jargon'], dir: -1, dur: 20, font: 'var(--font-sans)', sz: 11, wt: 600, ls: '0.14em', upper: true,  sep: '×', opacity: 0.42 },
 ]
 
 function SectionDivider() {
@@ -939,29 +939,29 @@ const FEATURES = [
     body: 'Every story scored Act Now, Watch, or Low. Know which news actually moves your holdings before the market reacts.',
   },
   {
-    id: 'watch', n: '02', title: 'STOCK WATCHLIST', tag: 'Live data',
+    id: 'impact', n: '02', title: 'PORTFOLIO IMPACT', tag: 'Plain English',
     hint: [
-      { text: 'AAPL +2.40%', color: 'var(--positive)' },
-      { text: 'NVDA −3.18%', color: 'var(--negative)' },
+      { text: 'AAPL −$340', color: 'var(--negative)' },
+      { text: 'NVDA +$210', color: 'var(--positive)' },
     ],
-    body: "Track any ticker with real-time prices, TradingView charts, and one-tap AI context on why it's moving.",
+    body: 'Every headline translated into real dollars for your portfolio. No jargon — just what it means for what you own.',
   },
   {
-    id: 'gov', n: '03', title: 'GOV TRADES', tag: 'STOCK Act',
+    id: 'upside', n: '03', title: 'UPSIDE PICKS', tag: 'Opportunity',
+    hint: [
+      { text: 'NEWS CATALYST', color: 'var(--moss-200)' },
+      { text: '+18% UPSIDE',   color: 'var(--positive)' },
+    ],
+    body: 'Stocks with near-term catalysts surfaced daily. News-driven upside you can act on before the crowd catches up.',
+  },
+  {
+    id: 'gov', n: '04', title: 'GOV TRADES', tag: 'STOCK Act',
     hint: [
       { text: 'PELOSI',     color: MUTED },
       { text: 'NVDA · BUY', color: 'var(--positive)' },
       { text: '$500K',      color: MUTED },
     ],
     body: "Congressional stock trades the moment they're disclosed — see what senators and representatives are actually buying.",
-  },
-  {
-    id: 'alerts', n: '04', title: 'PRICE ALERTS', tag: 'Instant',
-    hint: [
-      { text: '◉ AAPL > $200', color: 'var(--moss-200)' },
-      { text: 'TRIGGERED',     color: 'var(--positive)' },
-    ],
-    body: 'Set a target price on any stock or crypto. Checked every five minutes — marked triggered the instant conditions are met.',
   },
   {
     id: 'comm', n: '05', title: 'COMMODITIES', tag: 'Macro',
@@ -972,12 +972,12 @@ const FEATURES = [
     body: 'Gold, crude oil, gas, wheat — with AI-generated context on why prices are moving today, not just the number.',
   },
   {
-    id: 'paper', n: '06', title: 'PAPER TRADING', tag: 'Risk-free',
+    id: 'crypto', n: '06', title: 'CRYPTO INTEL', tag: 'On-chain',
     hint: [
-      { text: '#1 LEADERBOARD', color: 'var(--ochre-300)' },
-      { text: 'P&L +$117',      color: 'var(--positive)' },
+      { text: 'BTC $62,400', color: 'var(--positive)' },
+      { text: 'ETH +4.1%',   color: 'var(--positive)' },
     ],
-    body: 'Start with $500 virtual cash. Buy, sell, set stop-losses and take-profit orders. Compete on the live global leaderboard.',
+    body: 'Crypto news decoded with the same plain-English scoring as stocks. Know when on-chain moves are signal, not noise.',
   },
 ]
 
@@ -1274,7 +1274,7 @@ function Footer() {
         {/* Right: all content stacked vertically */}
         <div style={{ borderLeft: `1px solid ${BORDER}`, padding: '60px clamp(20px,4vw,48px)', display: 'flex', flexDirection: 'column', gap: 36, minWidth: 'min(300px,100%)', alignSelf: 'stretch', justifyContent: 'flex-end' }}>
           <Logo size="sm" />
-          <p style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: 'rgba(240,235,224,0.22)', maxWidth: 220, lineHeight: 1.8, margin: 0 }}>AI news feed, stock watchlist, gov trades, price alerts, and paper trading — in plain English.</p>
+          <p style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: 'rgba(240,235,224,0.22)', maxWidth: 220, lineHeight: 1.8, margin: 0 }}>AI news, portfolio impact, upside picks, gov trades, and crypto intel — in plain English.</p>
           {[
             { col: 'Product', links: [{ label: 'Features', href: null }, { label: 'Pricing', href: null }, { label: 'Changelog', href: null }] },
             { col: 'Archive', links: [{ label: 'Today', href: null }, { label: 'This week', href: null }, { label: 'Vol. 01', href: null }] },
