@@ -1128,42 +1128,47 @@ function FeaturesSection() {
                   display: 'flex',
                   flexDirection: 'column',
                   justifyContent: 'space-between',
-                  padding: '20px 20px 24px',
+                  padding: '16px 14px 18px',
+                  boxSizing: 'border-box',
                 }}
               >
-                {/* Top-left: index + tag */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.28em', color: 'rgba(240,235,224,0.28)', flexShrink: 0 }}>{f.n}</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--moss-200)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.tag}</span>
+                {/* Top-left: index + tag — always single line, clips silently */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.24em', color: 'rgba(240,235,224,0.28)', flexShrink: 0 }}>{f.n}</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--moss-200)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{f.tag}</span>
                 </div>
 
-                {/* Center: large title — fixed size, gets clipped as card squishes */}
-                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
+                {/* Center: title wraps to 2 lines max, scales to fill card */}
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, padding: '8px 0' }}>
                   <span style={{
                     fontFamily: 'var(--font-display)',
                     fontVariationSettings: "'wdth' 125, 'wght' 700",
                     fontStretch: '125%', fontWeight: 700,
-                    fontSize: 'clamp(22px, 4vw, 64px)',
+                    fontSize: 'clamp(13px, 2.8vw, 52px)',
                     color: CREAM,
-                    letterSpacing: '-0.045em',
-                    lineHeight: 0.92,
+                    letterSpacing: '-0.04em',
+                    lineHeight: 1.0,
                     textAlign: 'center',
-                    whiteSpace: 'nowrap',
+                    wordBreak: 'break-word',
+                    overflowWrap: 'break-word',
+                    hyphens: 'auto',
                     overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    maxWidth: '100%',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 3,
+                    WebkitBoxOrient: 'vertical',
+                    width: '100%',
                   }}>{f.title}</span>
 
                   {/* Hand-drawn circle on last card — draws via ref, not React state */}
                   {isLast && (
                     <svg
                       aria-hidden="true"
-                      style={{ position: 'absolute', inset: '-18px -24px', width: 'calc(100% + 48px)', height: 'calc(100% + 36px)', pointerEvents: 'none', overflow: 'visible' }}
+                      style={{ position: 'absolute', inset: '-12px -10px', width: 'calc(100% + 20px)', height: 'calc(100% + 24px)', pointerEvents: 'none', overflow: 'visible' }}
                     >
                       <ellipse
                         ref={circleRef}
                         cx="50%" cy="50%"
-                        rx="47%" ry="44%"
+                        rx="48%" ry="46%"
                         fill="none"
                         stroke="rgba(240,235,224,0.75)"
                         strokeWidth="1.5"
@@ -1179,12 +1184,8 @@ function FeaturesSection() {
                   )}
                 </div>
 
-                {/* Bottom: stat hints */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 3, overflow: 'hidden' }}>
-                  {f.hint.map((h, hi) => (
-                    <span key={hi} style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: h.color, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{h.text}</span>
-                  ))}
-                </div>
+                {/* Bottom: first hint only — always fits */}
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.12em', textTransform: 'uppercase', color: f.hint[0].color, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{f.hint[0].text}</span>
               </div>
             )
           })}
