@@ -1121,17 +1121,12 @@ function FeaturesSection() {
                 transition: 'background 0.3s',
                 cursor: 'crosshair',
                 display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-                padding: '16px 14px 18px',
+                alignItems: 'center',
+                justifyContent: 'center',
                 boxSizing: 'border-box',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.24em', color: 'rgba(240,235,224,0.28)', flexShrink: 0 }}>{card.n}</span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--moss-200)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{card.tag}</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, padding: '8px 0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
                 <span style={{
                   fontFamily: 'var(--font-display)',
                   fontVariationSettings: "'wdth' 125, 'wght' 700",
@@ -1147,7 +1142,6 @@ function FeaturesSection() {
                   maxHeight: '80%',
                 }}>{card.title}</span>
               </div>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.12em', textTransform: 'uppercase', color: card.hint[0].color, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{card.hint[0].text}</span>
             </div>
           ))}
 
