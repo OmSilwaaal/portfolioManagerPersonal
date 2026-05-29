@@ -1343,7 +1343,7 @@ export default function Landing() {
   }, [])
 
   return (
-    <div style={{ background: INK, overflowX: 'hidden' }}>
+    <div style={{ background: INK, overflowX: 'clip' }}>
       <style>{`
         .trx-body-grain::before {
           content: ''; position: fixed; inset: 0; z-index: 9997; pointer-events: none;
