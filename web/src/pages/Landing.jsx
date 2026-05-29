@@ -433,7 +433,22 @@ function Hero({ onEnter }) {
         }}>
           <Logo size="sm" />
         </div>
-        <div />
+        <button
+          onClick={onEnter}
+          style={{
+            opacity: rdy ? 1 : 0,
+            transform: rdy ? 'translateY(0)' : 'translateY(-6px)',
+            transition: 'opacity 0.9s cubic-bezier(0.16,1,0.3,1) 0.2s, transform 1s cubic-bezier(0.16,1,0.3,1) 0.2s, background 0.2s',
+            fontFamily: 'var(--font-sans)', fontSize: 11, fontWeight: 700,
+            letterSpacing: '0.09em', textTransform: 'uppercase',
+            padding: '9px 22px', border: `1px solid rgba(240,235,224,0.28)`,
+            background: 'transparent', color: CREAM, cursor: 'pointer', borderRadius: 2,
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = 'rgba(240,235,224,0.1)'}
+          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+        >
+          Sign in →
+        </button>
       </div>
 
 
@@ -1001,6 +1016,9 @@ const FEATURES = [
 ]
 
 /* ── Features section — sticky scroll squish (Odin's Crow style) ─────────── */
+const LOGO_CARD = { id: 'logo', isLogo: true }
+const ALL_CARDS = [...FEATURES, LOGO_CARD]
+
 function FeaturesSection() {
   const outerRef = useRef(null)
   const tooltipRef = useRef(null)
@@ -1009,7 +1027,7 @@ function FeaturesSection() {
   const [active, setActive] = useState(null)
   const isMobile = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
 
-  const N = FEATURES.length // 6
+  const N = ALL_CARDS.length // 7 (6 features + logo)
   // 100vh of scroll per new card entering = (N-1)*100vh total scroll distance
   const SCROLL_PER_CARD_VH = 100
 
@@ -1104,16 +1122,16 @@ function FeaturesSection() {
           overflow: 'hidden',
           borderTop: `1px solid ${BORDER}`,
         }}>
-          {FEATURES.map((f, i) => {
-            const isLast = i === N - 1
-            // Initial width: card 0 = 100%, rest = 0% — scroll handler takes over immediately
+          {ALL_CARDS.map((card, i) => {
+            const isLogoCard = card.isLogo
+            const f = isLogoCard ? null : card
             const initWidth = i === 0 ? '100%' : '0%'
 
             return (
               <div
-                key={f.id}
+                key={card.id}
                 ref={el => { cardRefs.current[i] = el }}
-                onMouseEnter={() => !isMobile && setActive(f.id)}
+                onMouseEnter={() => !isMobile && !isLogoCard && setActive(card.id)}
                 onMouseLeave={() => !isMobile && setActive(null)}
                 style={{
                   width: initWidth,
@@ -1122,9 +1140,9 @@ function FeaturesSection() {
                   borderRight: i < N - 1 ? `1px solid ${BORDER}` : 'none',
                   overflow: 'hidden',
                   position: 'relative',
-                  background: active === f.id ? 'rgba(240,235,224,0.04)' : 'transparent',
+                  background: isLogoCard ? 'rgba(240,235,224,0.03)' : active === card.id ? 'rgba(240,235,224,0.04)' : 'transparent',
                   transition: 'background 0.3s',
-                  cursor: 'crosshair',
+                  cursor: isLogoCard ? 'default' : 'crosshair',
                   display: 'flex',
                   flexDirection: 'column',
                   justifyContent: 'space-between',
@@ -1132,59 +1150,69 @@ function FeaturesSection() {
                   boxSizing: 'border-box',
                 }}
               >
-                {/* Top-left: index + tag — always single line, clips silently */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.24em', color: 'rgba(240,235,224,0.28)', flexShrink: 0 }}>{f.n}</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--moss-200)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{f.tag}</span>
-                </div>
-
-                {/* Center: vertical text + tight circle on last card */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, padding: '8px 4px' }}>
-                  <div style={{ position: 'relative', display: 'inline-block' }}>
-                    <span style={{
-                      fontFamily: 'var(--font-display)',
-                      fontVariationSettings: "'wdth' 125, 'wght' 700",
-                      fontStretch: '125%', fontWeight: 700,
-                      fontSize: 'clamp(11px, 1.6vw, 32px)',
-                      color: CREAM,
-                      letterSpacing: '0.06em',
-                      lineHeight: 1.0,
-                      writingMode: 'vertical-rl',
-                      textOrientation: 'mixed',
-                      textTransform: 'uppercase',
-                      display: 'block',
-                    }}>{f.title}</span>
-
-                    {isLast && (
+                {isLogoCard ? (
+                  /* ── Logo finale card ──────────────────────────────────── */
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 16, position: 'relative' }}>
+                    <div style={{ position: 'relative', display: 'inline-block' }}>
+                      <svg width="44" height="44" viewBox="0 0 24 24" fill="none">
+                        <path d="M12 2L22 12L12 22L2 12Z" stroke={CREAM} strokeWidth="1.5" strokeLinejoin="round" />
+                        <path d="M12 6.5L17.5 12L12 17.5L6.5 12Z" stroke={CREAM} strokeWidth="1.5" strokeLinejoin="round" />
+                      </svg>
+                      {/* Circle draws tightly around the diamond icon */}
                       <svg
                         aria-hidden="true"
                         viewBox="0 0 100 100"
                         preserveAspectRatio="none"
-                        style={{
-                          position: 'absolute',
-                          top: '-14px', left: '-16px',
-                          width: 'calc(100% + 32px)', height: 'calc(100% + 28px)',
-                          pointerEvents: 'none', overflow: 'visible',
-                        }}
+                        style={{ position: 'absolute', top: '-16px', left: '-16px', width: 'calc(100% + 32px)', height: 'calc(100% + 32px)', pointerEvents: 'none', overflow: 'visible' }}
                       >
                         <path
                           ref={circleRef}
-                          d="M 54,4 C 74,1 97,14 98,36 C 99,58 87,85 65,94 C 43,103 12,96 4,74 C -4,52 6,22 23,11 C 36,3 46,3 54,4"
+                          d="M 54,4 C 76,1 98,16 98,38 C 98,60 84,88 60,96 C 36,104 8,94 2,72 C -4,50 8,18 26,8 C 38,2 46,3 54,4"
                           fill="none"
-                          stroke="rgba(240,235,224,0.82)"
-                          strokeWidth="1.8"
+                          stroke="rgba(240,235,224,0.85)"
+                          strokeWidth="2"
                           strokeLinecap="round"
                           pathLength="1"
                           strokeDasharray="0.94 0.06"
-                          style={{ strokeDashoffset: 1, transition: 'stroke-dashoffset 700ms cubic-bezier(0.77,0,0.175,1)' }}
+                          style={{ strokeDashoffset: 1, transition: 'stroke-dashoffset 750ms cubic-bezier(0.77,0,0.175,1)' }}
                         />
                       </svg>
-                    )}
+                    </div>
+                    <span style={{
+                      fontFamily: 'var(--font-display)',
+                      fontVariationSettings: "'wdth' 125, 'wght' 700",
+                      fontStretch: '125%', fontWeight: 700,
+                      fontSize: 'clamp(8px, 1vw, 16px)',
+                      color: CREAM, letterSpacing: '0.22em', textTransform: 'uppercase',
+                      writingMode: 'vertical-rl', textOrientation: 'mixed',
+                    }}>Travauxus</span>
                   </div>
-                </div>
-
-                {/* Bottom: first hint only — always fits */}
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.12em', textTransform: 'uppercase', color: f.hint[0].color, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{f.hint[0].text}</span>
+                ) : (
+                  /* ── Feature card ──────────────────────────────────────── */
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.24em', color: 'rgba(240,235,224,0.28)', flexShrink: 0 }}>{f.n}</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--moss-200)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{f.tag}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, padding: '8px 0' }}>
+                      <span style={{
+                        fontFamily: 'var(--font-display)',
+                        fontVariationSettings: "'wdth' 125, 'wght' 700",
+                        fontStretch: '125%', fontWeight: 700,
+                        fontSize: 'clamp(13px, 2vw, 38px)',
+                        color: CREAM,
+                        letterSpacing: '0.06em',
+                        lineHeight: 1.0,
+                        writingMode: 'vertical-rl',
+                        textOrientation: 'mixed',
+                        textTransform: 'uppercase',
+                        overflow: 'hidden',
+                        maxHeight: '80%',
+                      }}>{f.title}</span>
+                    </div>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.12em', textTransform: 'uppercase', color: f.hint[0].color, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{f.hint[0].text}</span>
+                  </>
+                )}
               </div>
             )
           })}
