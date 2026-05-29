@@ -191,36 +191,6 @@ export default function Sidebar() {
         {/* Markets */}
         <p style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 500, letterSpacing: '0.24em', textTransform: 'uppercase', color: 'var(--on-ink-text-4)', padding: '0 12px', marginBottom: 4, marginTop: 8 }}>Markets</p>
         <div className="space-y-0.5">
-          {/* Dashboard */}
-          <NavLink
-            to="/dashboard"
-            end
-            onClick={() => dispatch(setFeedExpanded(false))}
-            className="relative flex items-center gap-3 px-3 py-2 text-sm font-medium transition-all duration-150"
-            style={({ isActive }) => isActive ? {
-              background: 'var(--on-ink-2)',
-              color: 'var(--paper)',
-              borderRadius: 'var(--r-sm)',
-            } : {
-              color: 'var(--on-ink-text-3)',
-              borderRadius: 'var(--r-sm)',
-            }}
-          >
-            {({ isActive }) => (
-              <>
-                {isActive && (
-                  <span style={{ position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)', width: 2, height: 16, background: 'var(--paper)', borderRadius: 1 }} />
-                )}
-                <span style={{ color: isActive ? 'var(--paper)' : 'var(--on-ink-text-3)' }}>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
-                  </svg>
-                </span>
-                <span>Dashboard</span>
-              </>
-            )}
-          </NavLink>
-
           {/* Feed — expandable */}
           <div>
             <NavLink

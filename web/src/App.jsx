@@ -124,12 +124,12 @@ function AppInner() {
       <Route path="/terms" element={<Terms />} />
       <Route path="/disclaimer" element={<Disclaimer />} />
       <Route path="/onboarding" element={<Onboarding />} />
-      <Route path="/app" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/app" element={<Navigate to="/feed" replace />} />
+      <Route path="/dashboard" element={<Navigate to="/feed" replace />} />
 
       {/* Protected — with sidebar */}
       <Route element={<ProtectedLayout />}>
         <Route path="/feed" element={<Feed />} />
-        <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/stocks" element={<Stocks />} />
         <Route path="/crypto" element={<Crypto />} />
         <Route path="/copy-trading" element={<CopyTrading />} />
