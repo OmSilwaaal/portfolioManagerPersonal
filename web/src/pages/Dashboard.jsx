@@ -421,14 +421,8 @@ function TopBar({ onToggle, activeModules }) {
 
   return (
     <div style={{height:64,flexShrink:0,display:'flex',alignItems:'center',padding:'0 24px',gap:20,borderBottom:`1px solid rgba(255,255,255,0.07)`,background:'rgba(13,13,16,0.95)',backdropFilter:'blur(24px)',WebkitBackdropFilter:'blur(24px)',zIndex:10,position:'relative'}}>
-      {/* Branding */}
-      <div style={{flexShrink:0}}>
-        <div style={{fontFamily:'var(--font-mono)',fontSize:9,letterSpacing:'0.26em',textTransform:'uppercase',color:C28,marginBottom:2}}>SPATIAL TRADING STUDIO</div>
-        <div style={{fontFamily:'var(--font-display)',fontSize:16,fontWeight:700,letterSpacing:'-0.03em',color:C}}>Infinite Workspace</div>
-      </div>
-
       {/* Search */}
-      <div style={{flex:1,maxWidth:480,position:'relative'}}>
+      <div style={{flex:1,maxWidth:600,position:'relative'}}>
         <span style={{position:'absolute',left:14,top:'50%',transform:'translateY(-50%)',fontFamily:'var(--font-sans)',fontSize:16,color:C28,pointerEvents:'none'}}>⌕</span>
         <input
           value={q} onChange={e=>setQ(e.target.value)}
