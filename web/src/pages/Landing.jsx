@@ -481,89 +481,48 @@ function Hero({ onEnter }) {
   )
 }
 
-function DualMarquee() {
+/* ── Section divider — compact multi-language marquee strip ──────────────── */
+const DIVIDER_ROWS = [
+  { words: ['Real-time intelligence', 'AI-powered', 'Portfolio impact', 'Market signals', 'Plain English', 'Act with confidence', 'No jargon', 'Urgency scoring'], dir: 1,  dur: 30, font: 'var(--font-sans)', sz: 10, wt: 600, ls: '0.2em', upper: true,  sep: '×' },
+  { words: ['Le marché est en mouvement', '市場が動いている', 'Der Markt bewegt sich', '시장이 움직이고 있습니다', 'El mercado se mueve', '市场正在运动', 'O рынке в реальном времени', 'Il mercato si muove'], dir: -1, dur: 38, font: 'var(--font-sans)', sz: 10, wt: 400, ls: '0.04em', upper: false, sep: '—' },
+  { words: ['AAPL +2.40%', 'NVDA −3.18%', 'MSFT +0.45%', 'BTC $42,180', 'GOLD +1.20%', 'TSLA −1.05%', 'CPI 3.4%', 'SPY +0.18%', 'QQQ +0.42%', 'META +1.73%'], dir: 1,  dur: 24, font: 'var(--font-mono)', sz: 10, wt: 500, ls: '0.08em', upper: false, sep: '·' },
+]
+
+function SectionDivider() {
   return (
-    <div style={{ background: CREAM, padding: '14px 0 13px', position: 'relative', zIndex: 2 }}>
-      <div style={{ overflow: 'hidden', padding: '4px 0' }}>
-        <div style={{ display: 'flex', animation: 'marquee 32s linear infinite', width: 'max-content', willChange: 'transform' }}>
-          {[...Array(3)].flatMap((_, k) =>
-            ['Real-time intelligence', 'AI-powered', 'Portfolio impact', 'Market signals', 'Plain English', 'Act with confidence', 'No jargon', 'Urgency scoring']
-              .map((w, i) => (
-                <span key={`a${k}-${i}`} style={{ fontFamily: 'var(--font-sans)', fontSize: 11, fontWeight: 600, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'rgba(11,11,11,0.3)', whiteSpace: 'nowrap', padding: '0 26px' }}>
-                  {w}<span style={{ marginLeft: 26, opacity: 0.2 }}>×</span>
+    <div style={{ background: CREAM, borderTop: `1px solid rgba(11,11,11,0.07)`, borderBottom: `1px solid rgba(11,11,11,0.07)`, overflow: 'hidden' }}>
+      {DIVIDER_ROWS.map((row, i) => (
+        <div key={i} style={{ overflow: 'hidden', padding: '5px 0' }}>
+          <div style={{
+            display: 'flex',
+            animation: `${row.dir === 1 ? 'marquee' : 'marqueeRev'} ${row.dur}s linear infinite`,
+            width: 'max-content',
+            willChange: 'transform',
+          }}>
+            {[...Array(4)].flatMap((_, k) =>
+              row.words.map((w, j) => (
+                <span key={`${k}-${j}`} style={{
+                  fontFamily: row.font,
+                  fontSize: row.sz,
+                  fontWeight: row.wt,
+                  letterSpacing: row.ls,
+                  textTransform: row.upper ? 'uppercase' : 'none',
+                  color: 'rgba(11,11,11,0.38)',
+                  whiteSpace: 'nowrap',
+                  padding: '0 22px',
+                }}>
+                  {w}<span style={{ marginLeft: 22, opacity: 0.25 }}>{row.sep}</span>
                 </span>
               ))
-          )}
+            )}
+          </div>
         </div>
-      </div>
-      <div style={{ overflow: 'hidden', padding: '4px 0', marginTop: 6 }}>
-        <div style={{ display: 'flex', animation: 'marqueeRev 38s linear infinite', width: 'max-content', willChange: 'transform' }}>
-          {[...Array(3)].flatMap((_, k) =>
-            ['AAPL  +2.40%', 'NVDA  −3.18%', 'MSFT  +0.45%', 'BTC  $42,180', 'GOLD  +1.20%', 'TSLA  −1.05%', 'CPI  3.4%', 'FOMC NOV 22', 'SPY  +0.18%', 'QQQ  +0.42%']
-              .map((w, i) => (
-                <span key={`b${k}-${i}`} style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 500, letterSpacing: '0.08em', color: 'rgba(11,11,11,0.42)', whiteSpace: 'nowrap', padding: '0 26px' }}>
-                  {w}<span style={{ marginLeft: 26, opacity: 0.18 }}>·</span>
-                </span>
-              ))
-          )}
-        </div>
-      </div>
+      ))}
     </div>
   )
 }
 
-const LANG_ROWS = [
-  { text: 'Le marché est en mouvement — Les signaux arrivent trop vite — Aucune donnée ne vous échappe — Intelligence du marché — Analyse en temps réel — ', dir: 1,  dur: 42, sz: 13,  wt: 400, font: 'sans', op: 0.48 },
-  { text: '市場が動いている — シグナルが速すぎる — リアルタイム分析 — 市場情報 — 人工知能 — 投資家向けの分析 — ', dir: -1, dur: 34, sz: 13,  wt: 400, font: 'sans', op: 0.44 },
-  { text: 'MARCHÉ LIBRE — ', dir: 1, dur: 60, sz: 185, wt: 700, font: 'display', stretch: 125, op: 0.10 },
-  { text: 'AAPL +2.40% — NVDA −3.18% — BTC $42,180 — GOLD +1.20% — TSLA −1.05% — QQQ +0.42% — META +1.73% — SPY +0.18% — AMZN +0.98% — MSFT +0.61% — ', dir: -1, dur: 24, sz: 11, wt: 500, font: 'mono', op: 0.36 },
-  { text: 'Der Markt bewegt sich zu schnell — Keine Daten entgehen dir — Echtzeit-Analyse — Künstliche Intelligenz — Marktintelligenz — ', dir: 1,  dur: 40, sz: 13,  wt: 400, font: 'sans', op: 0.48 },
-  { text: '市场正在运动 — 信号来得太快了 — 实时分析 — 人工智能 — 市场情报 — 投资者数据分析 — ', dir: -1, dur: 36, sz: 13,  wt: 400, font: 'sans', op: 0.44 },
-  { text: 'El mercado se mueve — Las señales llegan demasiado rápido — Ningún dato se te escapa — La inteligencia del mercado — ', dir: 1,  dur: 44, sz: 13,  wt: 400, font: 'sans', op: 0.48 },
-  { text: 'INTELLIGENCE — ', dir: -1, dur: 72, sz: 225, wt: 700, font: 'display', stretch: 125, op: 0.085 },
-  { text: '시장이 움직이고 있습니다 — 신호가 너무 빠르게 옵니다 — 실시간 분석 — 인공 지능 — 시장 정보 — ', dir: 1,  dur: 48, sz: 13,  wt: 400, font: 'sans', op: 0.44 },
-  { text: 'Il mercato si muove velocemente — I segnali arrivano troppo presto — Nessun dato ti sfugge — Intelligenza artificiale — ', dir: -1, dur: 38, sz: 13,  wt: 400, font: 'sans', op: 0.48 },
-  { text: 'О рынке в реальном времени — Искусственный интеллект — Никакие данные не ускользнут — Финансовая аналитика — ', dir: 1,  dur: 43, sz: 13,  wt: 400, font: 'sans', op: 0.44 },
-  { text: '市場 — MARCHÉ — MARKT — 시장 — MERCADO — MARKET — РЫНОК — ', dir: -1, dur: 30, sz: 36,  wt: 600, font: 'display', stretch: 105, op: 0.20 },
-  { text: 'Every signal — Every trade — Every move — Every market — Plain English — No jargon — Act with confidence — Real-time intelligence — ', dir: 1,  dur: 36, sz: 13,  wt: 400, font: 'sans', op: 0.48 },
-  { text: 'SIGNAL — ', dir: 1, dur: 88, sz: 275, wt: 700, font: 'display', stretch: 125, op: 0.065 },
-  { text: 'Marché libre — Données en direct — Cours en temps réel — Portfolio intelligence — Signaux du marché — Investisseurs avisés — ', dir: -1, dur: 45, sz: 13,  wt: 400, font: 'sans', op: 0.48 },
-]
 
-function LanguageWall() {
-  const ref = useRef(null)
-  const [vis, setVis] = useState(false)
-  useEffect(() => {
-    const o = new IntersectionObserver(([e]) => { if (e.isIntersecting) setVis(true) }, { threshold: 0.02 })
-    if (ref.current) o.observe(ref.current)
-    return () => o.disconnect()
-  }, [])
-  return (
-    <section ref={ref} style={{ background: CREAM, overflow: 'hidden', position: 'relative', padding: '0', contain: 'layout paint' }}>
-      <div style={{ position: 'absolute', top: 14, left: 'clamp(20px,4vw,48px)', zIndex: 10 }}>
-        <Tag tone="dark" style={{ letterSpacing: '0.32em' }}>§ 02 — The signal</Tag>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
-        {LANG_ROWS.map((row, i) => {
-          const fontFamily = row.font === 'display' ? 'var(--font-display)' : row.font === 'mono' ? 'var(--font-mono)' : 'var(--font-sans)'
-          const varSettings = row.font === 'display' && row.stretch ? { fontVariationSettings: `'wdth' ${row.stretch}, 'wght' ${row.wt}`, fontStretch: `${row.stretch}%` } : {}
-          const anim = row.dir === 1 ? 'marquee' : 'marqueeRev'
-          const lh = row.sz >= 100 ? 0.84 : 1.0
-          const ls = row.font === 'mono' ? '0.06em' : row.sz >= 100 ? '-0.045em' : '-0.01em'
-          return (
-            <div key={i} style={{ overflow: 'hidden', lineHeight: lh }}>
-              <div style={{ display: 'flex', animation: vis ? `${anim} ${row.dur}s linear infinite` : 'none', width: 'max-content', opacity: row.op, willChange: 'transform' }}>
-                {[...Array(3)].map((_, k) => (
-                  <span key={k} style={{ fontFamily, fontSize: row.sz, fontWeight: row.wt, color: INK, whiteSpace: 'nowrap', letterSpacing: ls, paddingRight: row.sz >= 100 ? '0.4em' : '2.5em', ...varSettings }}>{row.text}</span>
-                ))}
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    </section>
-  )
-}
 
 
 
@@ -1398,10 +1357,11 @@ export default function Landing() {
       <ScrollIndex />
 
       <Hero onEnter={onEnter} />
-      <DualMarquee />
-      <LanguageWall />
+      <SectionDivider />
       <FeaturesSection />
-<PhysicsConvergence />
+      <SectionDivider />
+      <PhysicsConvergence />
+      <SectionDivider />
       <CtaSection onEnter={onEnter} />
       <Footer />
     </div>
