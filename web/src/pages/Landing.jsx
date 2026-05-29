@@ -1000,114 +1000,45 @@ const FEATURES = [
   },
 ]
 
-/* ── Features section — animated card grid ───────────────────────────────── */
-function useInViewOnce(ref, threshold = 0.08) {
-  const [inView, setInView] = useState(false)
-  useEffect(() => {
-    if (!ref.current) return
-    const obs = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) { setInView(true); obs.disconnect() } },
-      { threshold }
-    )
-    obs.observe(ref.current)
-    return () => obs.disconnect()
-  }, [])
-  return inView
-}
-
-function FeatureCard({ feature, delay, hasCircle, inView, onEnter, onLeave, isActive }) {
-  // Circle draws after the card has fully slid in
-  const CIRCLE_DELAY = delay + 420
-
-  return (
-    <div
-      onMouseEnter={onEnter}
-      onMouseLeave={onLeave}
-      style={{
-        position: 'relative',
-        padding: '30px 28px 32px',
-        background: isActive ? 'rgba(240,235,224,0.038)' : 'rgba(240,235,224,0.014)',
-        opacity: inView ? 1 : 0,
-        transform: inView ? 'translateX(0)' : 'translateX(44px)',
-        transition: `opacity 0.44s ease ${delay}ms, transform 0.44s cubic-bezier(0.16,1,0.3,1) ${delay}ms, background 0.35s`,
-        cursor: 'crosshair',
-        overflow: 'visible',
-      }}
-    >
-      {/* Card content */}
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 18 }}>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.28em', color: 'rgba(240,235,224,0.3)', flexShrink: 0 }}>{feature.n}</span>
-
-        {/* Title — circle wraps this on the hasCircle card */}
-        <span style={{ position: 'relative', display: 'inline-block' }}>
-          <span style={{
-            fontFamily: 'var(--font-display)',
-            fontVariationSettings: "'wdth' 125, 'wght' 700",
-            fontStretch: '125%', fontWeight: 700,
-            fontSize: 'clamp(18px, 2.2vw, 28px)',
-            color: CREAM,
-            letterSpacing: '-0.04em', lineHeight: 0.95,
-            display: 'block',
-          }}>{feature.title}</span>
-
-          {hasCircle && (
-            <svg
-              aria-hidden="true"
-              style={{ position: 'absolute', top: '-10px', left: '-14px', width: 'calc(100% + 28px)', height: 'calc(100% + 20px)', pointerEvents: 'none', overflow: 'visible' }}
-            >
-              {/* Hand-drawn-style ellipse using a slightly imperfect path */}
-              <ellipse
-                cx="50%" cy="50%"
-                rx="50%" ry="70%"
-                fill="none"
-                stroke="rgba(240,235,224,0.7)"
-                strokeWidth="1.2"
-                strokeLinecap="round"
-                pathLength="1"
-                strokeDasharray="0.94 0.06"
-                strokeDashoffset={inView ? 0 : 1}
-                style={{ transition: `stroke-dashoffset 580ms cubic-bezier(0.77,0,0.175,1) ${CIRCLE_DELAY}ms` }}
-              />
-            </svg>
-          )}
-        </span>
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-        <Tag style={{ color: 'var(--moss-200)', letterSpacing: '0.16em' }}>{feature.tag}</Tag>
-        <div style={{ flex: 1, height: '1px', background: BORDER }} />
-      </div>
-
-      <p style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: MUTED, lineHeight: 1.78, margin: '0 0 22px', fontWeight: 400 }}>{feature.body}</p>
-
-      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-        {feature.hint.map((h, i) => (
-          <span key={i} style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: h.color }}>{h.text}</span>
-        ))}
-      </div>
-    </div>
-  )
-}
-
+/* ── Features section — sticky scroll squish (Odin's Crow style) ─────────── */
 function FeaturesSection() {
-  const [active, setActive] = useState(null)
+  const outerRef = useRef(null)
   const tooltipRef = useRef(null)
-  const gridRef = useRef(null)
-  const inView = useInViewOnce(gridRef, 0.06)
+  const [progress, setProgress] = useState(0)
+  const [active, setActive] = useState(null)
   const isMobile = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
 
+  const N = FEATURES.length // 6
+
+  // Drive card widths from scroll position
+  useEffect(() => {
+    let raf = null
+    const update = () => {
+      if (raf) return
+      raf = requestAnimationFrame(() => {
+        raf = null
+        if (!outerRef.current) return
+        const rect = outerRef.current.getBoundingClientRect()
+        const scrollable = outerRef.current.offsetHeight - window.innerHeight
+        setProgress(Math.max(0, Math.min(1, -rect.top / scrollable)))
+      })
+    }
+    window.addEventListener('scroll', update, { passive: true })
+    update()
+    return () => { window.removeEventListener('scroll', update); if (raf) cancelAnimationFrame(raf) }
+  }, [])
+
+  // Tooltip mouse tracking
   useEffect(() => {
     let raf = null
     const onMove = (e) => {
-      if (!tooltipRef.current) return
-      if (raf) return
+      if (!tooltipRef.current || raf) return
       raf = requestAnimationFrame(() => {
         raf = null
         if (!tooltipRef.current) return
         const vw = window.innerWidth, vh = window.innerHeight
         const tw = 340, th = 220
-        let x = e.clientX + 32
-        let y = e.clientY - 32
+        let x = e.clientX + 32, y = e.clientY - 32
         if (x + tw > vw - 20) x = e.clientX - tw - 32
         if (y < 20) y = 20
         if (y + th > vh - 20) y = vh - th - 20
@@ -1119,48 +1050,122 @@ function FeaturesSection() {
     return () => { window.removeEventListener('mousemove', onMove); if (raf) cancelAnimationFrame(raf) }
   }, [])
 
+  // v = continuous "number of cards visible", 1 → N
+  const v = 1 + progress * (N - 1)
+
+  // Width of card i: proportional to min(1, v - i), normalized by v
+  // This makes all visible cards share equally, with the entering card partially visible
+  const widths = FEATURES.map((_, i) => Math.max(0, Math.min(1, v - i)) / v)
+
+  // Circle appears on the last card once it's ~85% of its final width
+  const lastCardEntered = v > N - 0.15
+
   const activeFeature = FEATURES.find(f => f.id === active)
 
   return (
-    <section style={{ background: INK, borderTop: `1px solid ${BORDER}`, position: 'relative' }}>
-      {/* Header */}
-      <div style={{ padding: '64px clamp(20px,4vw,48px) 0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 16 }}>
+    <section style={{ background: INK, borderTop: `1px solid ${BORDER}` }}>
+      {/* Header — normal flow above the sticky area */}
+      <div style={{ padding: '64px clamp(20px,4vw,48px) 48px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 16 }}>
         <div>
           <Tag style={{ letterSpacing: '0.32em' }}>§ 03 — What's inside</Tag>
           <div style={{ marginTop: 14, fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(36px,6vw,84px)', color: CREAM, letterSpacing: '-0.045em', lineHeight: 0.9 }}>
             SIX TOOLS.<br />ONE PLATFORM.
           </div>
         </div>
-        {!isMobile && (
-          <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.18em', color: MUTED, margin: 0 }}>Hover a card →</p>
-        )}
+        <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.18em', color: MUTED, margin: 0 }}>Scroll to explore →</p>
       </div>
 
-      {/* Animated card grid */}
-      <div
-        ref={gridRef}
-        style={{
-          marginTop: 48,
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 320px), 1fr))',
-          gap: 0,
+      {/* Tall outer div — gives the scroll distance. Inner is sticky. */}
+      {/* Each of the 5 new cards gets 80vh of scroll space to enter */}
+      <div ref={outerRef} style={{ position: 'relative', height: `calc(100vh + ${(N - 1) * 80}vh)` }}>
+        <div style={{
+          position: 'sticky', top: 0,
+          height: '100vh',
+          display: 'flex',
+          overflow: 'hidden',
           borderTop: `1px solid ${BORDER}`,
-          borderLeft: `1px solid ${BORDER}`,
-        }}
-      >
-        {FEATURES.map((f, i) => (
-          <div key={f.id} style={{ borderRight: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}` }}>
-            <FeatureCard
-              feature={f}
-              delay={i * 75}
-              hasCircle={i === 0}
-              inView={inView}
-              isActive={active === f.id}
-              onEnter={() => !isMobile && setActive(f.id)}
-              onLeave={() => !isMobile && setActive(null)}
-            />
-          </div>
-        ))}
+        }}>
+          {FEATURES.map((f, i) => {
+            const w = widths[i]
+            const isLast = i === N - 1
+            const isActive = active === f.id
+
+            return (
+              <div
+                key={f.id}
+                onMouseEnter={() => !isMobile && setActive(f.id)}
+                onMouseLeave={() => !isMobile && setActive(null)}
+                style={{
+                  width: `${w * 100}%`,
+                  flexShrink: 0,
+                  height: '100%',
+                  borderRight: i < N - 1 ? `1px solid ${BORDER}` : 'none',
+                  overflow: 'hidden',
+                  position: 'relative',
+                  background: isActive ? 'rgba(240,235,224,0.04)' : 'transparent',
+                  transition: 'background 0.3s',
+                  cursor: 'crosshair',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  padding: '20px 20px 24px',
+                }}
+              >
+                {/* Top-left: index + tag */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.28em', color: 'rgba(240,235,224,0.28)', flexShrink: 0 }}>{f.n}</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--moss-200)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.tag}</span>
+                </div>
+
+                {/* Center: large title — stays large, gets clipped as card squishes */}
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
+                  <span style={{
+                    fontFamily: 'var(--font-display)',
+                    fontVariationSettings: "'wdth' 125, 'wght' 700",
+                    fontStretch: '125%', fontWeight: 700,
+                    fontSize: 'clamp(22px, 4vw, 64px)',
+                    color: CREAM,
+                    letterSpacing: '-0.045em',
+                    lineHeight: 0.92,
+                    textAlign: 'center',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    maxWidth: '100%',
+                  }}>{f.title}</span>
+
+                  {/* Circle draws on last card around the title once it's fully in */}
+                  {isLast && (
+                    <svg
+                      aria-hidden="true"
+                      style={{ position: 'absolute', inset: '-16px -20px', width: 'calc(100% + 40px)', height: 'calc(100% + 32px)', pointerEvents: 'none', overflow: 'visible' }}
+                    >
+                      <ellipse
+                        cx="50%" cy="50%"
+                        rx="47%" ry="44%"
+                        fill="none"
+                        stroke="rgba(240,235,224,0.72)"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        pathLength="1"
+                        strokeDasharray="0.93 0.07"
+                        strokeDashoffset={lastCardEntered ? 0 : 1}
+                        style={{ transition: 'stroke-dashoffset 620ms cubic-bezier(0.77,0,0.175,1)' }}
+                      />
+                    </svg>
+                  )}
+                </div>
+
+                {/* Bottom: stat hints */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3, overflow: 'hidden' }}>
+                  {f.hint.map((h, hi) => (
+                    <span key={hi} style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: h.color, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{h.text}</span>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+        </div>
       </div>
 
       {/* Bottom strip */}
@@ -1173,16 +1178,10 @@ function FeaturesSection() {
       {!isMobile && (
         <div
           ref={tooltipRef}
-          style={{
-            position: 'fixed', top: 0, left: 0,
-            zIndex: 9000, pointerEvents: 'none',
-            width: 340,
-            opacity: activeFeature ? 1 : 0,
-            transition: 'opacity 0.18s ease',
-          }}
+          style={{ position: 'fixed', top: 0, left: 0, zIndex: 9000, pointerEvents: 'none', width: 340, opacity: activeFeature ? 1 : 0, transition: 'opacity 0.18s ease' }}
         >
           {activeFeature && (
-            <div key={activeFeature.id} style={{ background: CREAM, border: `1px solid rgba(11,11,11,0.13)`, padding: '26px 28px 28px', position: 'relative' }}>
+            <div key={activeFeature.id} style={{ background: CREAM, border: `1px solid rgba(11,11,11,0.13)`, padding: '26px 28px 28px' }}>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 14 }}>
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.28em', color: 'rgba(11,11,11,0.26)', textTransform: 'uppercase' }}>{activeFeature.n}</span>
                 <span style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 110, 'wght' 700", fontWeight: 700, fontSize: 22, color: INK, letterSpacing: '-0.025em', lineHeight: 1 }}>{activeFeature.title}</span>
