@@ -1210,7 +1210,6 @@ function FeaturesSection() {
       {/* Bottom strip */}
       <div style={{ padding: '20px clamp(20px,4vw,48px)', borderTop: `1px solid ${BORDER}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <Tag>Free tier available · Pro from $12/mo</Tag>
-        <Tag style={{ color: 'var(--moss-200)' }}>No credit card required →</Tag>
       </div>
 
       {/* Cursor-following tooltip (desktop only) */}

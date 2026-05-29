@@ -220,7 +220,7 @@ function SignUpScreen({ onNameStored }) {
           Create your account
         </h1>
         <p style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: MUTED, textAlign: 'center', margin: '0 0 36px' }}>
-          No password. No credit card. Free forever.
+          No password required. Free forever.
         </p>
 
         {/* Google OAuth */}
