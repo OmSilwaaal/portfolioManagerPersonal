@@ -1004,15 +1004,20 @@ const FEATURES = [
 function FeaturesSection() {
   const outerRef = useRef(null)
   const tooltipRef = useRef(null)
-  const [progress, setProgress] = useState(0)
+  const cardRefs = useRef([])        // direct DOM refs — no React re-render on scroll
+  const circleRef = useRef(null)
   const [active, setActive] = useState(null)
   const isMobile = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
 
   const N = FEATURES.length // 6
+  // 100vh of scroll per new card entering = (N-1)*100vh total scroll distance
+  const SCROLL_PER_CARD_VH = 100
 
-  // Drive card widths from scroll position
+  // Update card widths directly on every scroll frame — no setState, no re-render
   useEffect(() => {
     let raf = null
+    let circleShown = false
+
     const update = () => {
       if (raf) return
       raf = requestAnimationFrame(() => {
@@ -1020,13 +1025,34 @@ function FeaturesSection() {
         if (!outerRef.current) return
         const rect = outerRef.current.getBoundingClientRect()
         const scrollable = outerRef.current.offsetHeight - window.innerHeight
-        setProgress(Math.max(0, Math.min(1, -rect.top / scrollable)))
+        const p = Math.max(0, Math.min(1, -rect.top / scrollable))
+
+        // v = continuous visible card count: 1 → N
+        const v = 1 + p * (N - 1)
+
+        // Update each card's width directly
+        for (let i = 0; i < N; i++) {
+          const el = cardRefs.current[i]
+          if (el) el.style.width = `${Math.max(0, Math.min(1, v - i)) / v * 100}%`
+        }
+
+        // Trigger circle once last card is ~90% of its final share
+        if (!circleShown && v > N - 0.1) {
+          circleShown = true
+          if (circleRef.current) circleRef.current.style.strokeDashoffset = '0'
+        }
+        // Reset if user scrolls back
+        if (circleShown && v < N - 0.2) {
+          circleShown = false
+          if (circleRef.current) circleRef.current.style.strokeDashoffset = '1'
+        }
       })
     }
+
     window.addEventListener('scroll', update, { passive: true })
     update()
     return () => { window.removeEventListener('scroll', update); if (raf) cancelAnimationFrame(raf) }
-  }, [])
+  }, [N])
 
   // Tooltip mouse tracking
   useEffect(() => {
@@ -1050,16 +1076,6 @@ function FeaturesSection() {
     return () => { window.removeEventListener('mousemove', onMove); if (raf) cancelAnimationFrame(raf) }
   }, [])
 
-  // v = continuous "number of cards visible", 1 → N
-  const v = 1 + progress * (N - 1)
-
-  // Width of card i: proportional to min(1, v - i), normalized by v
-  // This makes all visible cards share equally, with the entering card partially visible
-  const widths = FEATURES.map((_, i) => Math.max(0, Math.min(1, v - i)) / v)
-
-  // Circle appears on the last card once it's ~85% of its final width
-  const lastCardEntered = v > N - 0.15
-
   const activeFeature = FEATURES.find(f => f.id === active)
 
   return (
@@ -1075,9 +1091,12 @@ function FeaturesSection() {
         <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.18em', color: MUTED, margin: 0 }}>Scroll to explore →</p>
       </div>
 
-      {/* Tall outer div — gives the scroll distance. Inner is sticky. */}
-      {/* Each of the 5 new cards gets 80vh of scroll space to enter */}
-      <div ref={outerRef} style={{ position: 'relative', height: `calc(100vh + ${(N - 1) * 80}vh)` }}>
+      {/* Outer div: tall enough to force scrolling through all cards */}
+      {/* Height = sticky panel (100vh) + scroll space (N-1 cards × 100vh each) */}
+      <div
+        ref={outerRef}
+        style={{ position: 'relative', height: `calc(100vh + ${(N - 1) * SCROLL_PER_CARD_VH}vh)` }}
+      >
         <div style={{
           position: 'sticky', top: 0,
           height: '100vh',
@@ -1086,23 +1105,24 @@ function FeaturesSection() {
           borderTop: `1px solid ${BORDER}`,
         }}>
           {FEATURES.map((f, i) => {
-            const w = widths[i]
             const isLast = i === N - 1
-            const isActive = active === f.id
+            // Initial width: card 0 = 100%, rest = 0% — scroll handler takes over immediately
+            const initWidth = i === 0 ? '100%' : '0%'
 
             return (
               <div
                 key={f.id}
+                ref={el => { cardRefs.current[i] = el }}
                 onMouseEnter={() => !isMobile && setActive(f.id)}
                 onMouseLeave={() => !isMobile && setActive(null)}
                 style={{
-                  width: `${w * 100}%`,
+                  width: initWidth,
                   flexShrink: 0,
                   height: '100%',
                   borderRight: i < N - 1 ? `1px solid ${BORDER}` : 'none',
                   overflow: 'hidden',
                   position: 'relative',
-                  background: isActive ? 'rgba(240,235,224,0.04)' : 'transparent',
+                  background: active === f.id ? 'rgba(240,235,224,0.04)' : 'transparent',
                   transition: 'background 0.3s',
                   cursor: 'crosshair',
                   display: 'flex',
@@ -1117,7 +1137,7 @@ function FeaturesSection() {
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--moss-200)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.tag}</span>
                 </div>
 
-                {/* Center: large title — stays large, gets clipped as card squishes */}
+                {/* Center: large title — fixed size, gets clipped as card squishes */}
                 <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
                   <span style={{
                     fontFamily: 'var(--font-display)',
@@ -1134,23 +1154,26 @@ function FeaturesSection() {
                     maxWidth: '100%',
                   }}>{f.title}</span>
 
-                  {/* Circle draws on last card around the title once it's fully in */}
+                  {/* Hand-drawn circle on last card — draws via ref, not React state */}
                   {isLast && (
                     <svg
                       aria-hidden="true"
-                      style={{ position: 'absolute', inset: '-16px -20px', width: 'calc(100% + 40px)', height: 'calc(100% + 32px)', pointerEvents: 'none', overflow: 'visible' }}
+                      style={{ position: 'absolute', inset: '-18px -24px', width: 'calc(100% + 48px)', height: 'calc(100% + 36px)', pointerEvents: 'none', overflow: 'visible' }}
                     >
                       <ellipse
+                        ref={circleRef}
                         cx="50%" cy="50%"
                         rx="47%" ry="44%"
                         fill="none"
-                        stroke="rgba(240,235,224,0.72)"
+                        stroke="rgba(240,235,224,0.75)"
                         strokeWidth="1.5"
                         strokeLinecap="round"
                         pathLength="1"
                         strokeDasharray="0.93 0.07"
-                        strokeDashoffset={lastCardEntered ? 0 : 1}
-                        style={{ transition: 'stroke-dashoffset 620ms cubic-bezier(0.77,0,0.175,1)' }}
+                        style={{
+                          strokeDashoffset: 1,
+                          transition: 'stroke-dashoffset 680ms cubic-bezier(0.77,0,0.175,1)',
+                        }}
                       />
                     </svg>
                   )}
