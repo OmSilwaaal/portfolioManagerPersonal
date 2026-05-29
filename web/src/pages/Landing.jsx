@@ -481,18 +481,24 @@ function Hero({ onEnter }) {
   )
 }
 
-/* ── Section divider — compact multi-language marquee strip ──────────────── */
+/* ── Section divider — layered marquee strip ────────────────────────────── */
 const DIVIDER_ROWS = [
-  { words: ['Real-time intelligence', 'AI-powered', 'Portfolio impact', 'Market signals', 'Plain English', 'Act with confidence', 'No jargon', 'Urgency scoring'], dir: 1,  dur: 30, font: 'var(--font-sans)', sz: 10, wt: 600, ls: '0.2em', upper: true,  sep: '×' },
-  { words: ['Le marché est en mouvement', '市場が動いている', 'Der Markt bewegt sich', '시장이 움직이고 있습니다', 'El mercado se mueve', '市场正在运动', 'O рынке в реальном времени', 'Il mercato si muove'], dir: -1, dur: 38, font: 'var(--font-sans)', sz: 10, wt: 400, ls: '0.04em', upper: false, sep: '—' },
-  { words: ['AAPL +2.40%', 'NVDA −3.18%', 'MSFT +0.45%', 'BTC $42,180', 'GOLD +1.20%', 'TSLA −1.05%', 'CPI 3.4%', 'SPY +0.18%', 'QQQ +0.42%', 'META +1.73%'], dir: 1,  dur: 24, font: 'var(--font-mono)', sz: 10, wt: 500, ls: '0.08em', upper: false, sep: '·' },
+  { words: ['MARCHÉ LIBRE', 'FREE MARKET', '自由市場', 'FREIER MARKT', 'LIBRE MERCADO', '自由市场', 'VRIJE MARKT', 'PIYASA SERBEST'], dir: 1,  dur: 55, font: 'var(--font-display)', sz: 64, wt: 800, ls: '-0.02em', upper: true,  sep: '/', opacity: 0.06 },
+  { words: ['Real-time intelligence', 'AI-powered analysis', 'Portfolio impact scoring', 'Market signals decoded', 'Plain English explanations', 'Act with confidence', 'No jargon, ever', 'Urgency scoring'], dir: 1,  dur: 28, font: 'var(--font-sans)', sz: 11, wt: 700, ls: '0.18em', upper: true,  sep: '×', opacity: 0.45 },
+  { words: ['Le marché est en mouvement', '市場が動いている', 'Der Markt bewegt sich', '시장이 움직이고 있습니다', 'El mercado se mueve', '市场正在运动', 'O рынке в реальном времени', 'Il mercato si muove'], dir: -1, dur: 36, font: 'var(--font-sans)', sz: 13, wt: 400, ls: '0.02em', upper: false, sep: '—', opacity: 0.3 },
+  { words: ['AAPL +2.40%', 'NVDA −3.18%', 'MSFT +0.45%', 'BTC $42,180', 'GOLD +1.20%', 'TSLA −1.05%', 'CPI 3.4%', 'SPY +0.18%', 'QQQ +0.42%', 'META +1.73%', 'ETH $2,840', 'AMZN +0.91%'], dir: 1,  dur: 22, font: 'var(--font-mono)', sz: 11, wt: 500, ls: '0.06em', upper: false, sep: '·', opacity: 0.5 },
+  { words: ['INTELLIGENCE', 'ДАННЫЕ', 'インサイト', 'INTELLIGENCE', 'DATEN', 'DONNÉES', '데이터', 'INTELLIGENZA'], dir: -1, dur: 50, font: 'var(--font-display)', sz: 72, wt: 900, ls: '-0.03em', upper: true,  sep: '/', opacity: 0.05 },
+  { words: ['Know before the crowd', 'Smarter than the headlines', 'Markets never sleep', 'Your edge, every morning', 'Signal over noise', 'Stay ahead, stay calm', 'Money never sleeps', 'Trade with clarity'], dir: -1, dur: 32, font: 'var(--font-sans)', sz: 12, wt: 400, ls: '0.01em', upper: false, sep: '·', opacity: 0.28 },
+  { words: ['Gov trades tracked', 'Insider moves surfaced', 'Earnings decoded', 'Fed minutes summarized', 'Commodity flows mapped', 'Crypto flows analyzed', 'Paper trading included', 'Watchlist alerts live'], dir: 1,  dur: 26, font: 'var(--font-mono)', sz: 10, wt: 500, ls: '0.12em', upper: true,  sep: '—', opacity: 0.4 },
+  { words: ['портфель', 'ポートフォリオ', 'portfolio', 'Portefeuille', '포트폴리오', '投资组合', 'portafoglio', 'cartera'], dir: 1,  dur: 48, font: 'var(--font-display)', sz: 52, wt: 700, ls: '0.04em', upper: false, sep: '/', opacity: 0.07 },
+  { words: ['AI News Feed', 'Price Alerts', 'Copy Trading', 'Paper Trading', 'Gov Trades', 'Commodities', 'Crypto', 'Stocks'], dir: -1, dur: 20, font: 'var(--font-sans)', sz: 11, wt: 600, ls: '0.14em', upper: true,  sep: '×', opacity: 0.42 },
 ]
 
 function SectionDivider() {
   return (
-    <div style={{ background: CREAM, borderTop: `1px solid rgba(11,11,11,0.07)`, borderBottom: `1px solid rgba(11,11,11,0.07)`, overflow: 'hidden' }}>
+    <div style={{ background: CREAM, borderTop: `1px solid rgba(11,11,11,0.08)`, borderBottom: `1px solid rgba(11,11,11,0.08)`, overflow: 'hidden', position: 'relative' }}>
       {DIVIDER_ROWS.map((row, i) => (
-        <div key={i} style={{ overflow: 'hidden', padding: '5px 0' }}>
+        <div key={i} style={{ overflow: 'hidden', lineHeight: 1, marginTop: i === 0 ? 0 : -Math.floor(row.sz * 0.35) }}>
           <div style={{
             display: 'flex',
             animation: `${row.dir === 1 ? 'marquee' : 'marqueeRev'} ${row.dur}s linear infinite`,
@@ -507,11 +513,12 @@ function SectionDivider() {
                   fontWeight: row.wt,
                   letterSpacing: row.ls,
                   textTransform: row.upper ? 'uppercase' : 'none',
-                  color: 'rgba(11,11,11,0.38)',
+                  color: `rgba(11,11,11,${row.opacity})`,
                   whiteSpace: 'nowrap',
-                  padding: '0 22px',
+                  padding: `0 ${row.sz > 40 ? 32 : 20}px`,
+                  display: 'inline-block',
                 }}>
-                  {w}<span style={{ marginLeft: 22, opacity: 0.25 }}>{row.sep}</span>
+                  {w}<span style={{ marginLeft: row.sz > 40 ? 32 : 20, opacity: 0.3 }}>{row.sep}</span>
                 </span>
               ))
             )}
