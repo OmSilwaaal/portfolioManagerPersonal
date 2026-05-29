@@ -852,83 +852,11 @@ function PhysicsConvergence() {
     )
   }
 
-  // 80s rainbow stripe colors
-  const STRIPES = ['#d62828','#e76f1a','#e9c46a','#43aa8b','#4361ee']
-
   return (
     <section ref={sectionRef} style={{ background: CREAM, height: '100vh', position: 'relative', overflow: 'hidden' }}>
-
-      {/* ── CRT scan-line overlay ── */}
-      <div style={{
-        position: 'absolute', inset: 0, zIndex: 30, pointerEvents: 'none',
-        backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(11,11,11,0.06) 3px, rgba(11,11,11,0.06) 4px)',
-        mixBlendMode: 'multiply',
-      }} />
-
-      {/* ── Diagonal rainbow stripe block — bottom-right corner ── */}
-      <div style={{
-        position: 'absolute', bottom: -40, right: -40,
-        width: 340, height: 340,
-        transform: 'rotate(-18deg)',
-        zIndex: 2, pointerEvents: 'none', opacity: 0.72,
-        overflow: 'visible',
-      }}>
-        {STRIPES.map((col, i) => (
-          <div key={col} style={{
-            position: 'absolute',
-            top: i * 52,
-            left: -60,
-            right: -60,
-            height: 44,
-            background: col,
-            borderRadius: 0,
-          }} />
-        ))}
-        {/* bloom glow behind stripes */}
-        <div style={{
-          position: 'absolute', inset: -40,
-          background: 'radial-gradient(ellipse at center, rgba(233,196,106,0.35) 0%, transparent 70%)',
-          filter: 'blur(18px)',
-        }} />
-      </div>
-
-      {/* ── Top-left: Travauxus retro logo mark ── */}
-      <div style={{
-        position: 'absolute', top: 38, left: 'clamp(20px,4vw,48px)',
-        zIndex: 10, display: 'flex', flexDirection: 'column', gap: 10,
-      }}>
-        {/* Retro logo: diamond + name + rainbow stripe accent */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {/* Diamond icon with retro treatment */}
-          <div style={{ position: 'relative', flexShrink: 0 }}>
-            <svg width={36} height={36} viewBox="0 0 24 24" fill="none" style={{ position: 'relative', zIndex: 1 }}>
-              <path d="M12 2L22 12L12 22L2 12Z" stroke={INK} strokeWidth="1.5" strokeLinejoin="round"/>
-              <path d="M12 6.5L17.5 12L12 17.5L6.5 12Z" stroke={INK} strokeWidth="1.5" strokeLinejoin="round"/>
-            </svg>
-            {/* Bloom behind diamond */}
-            <div style={{
-              position: 'absolute', inset: -8, zIndex: 0,
-              background: 'radial-gradient(circle, rgba(67,97,238,0.22) 0%, transparent 70%)',
-              filter: 'blur(6px)',
-            }} />
-          </div>
-
-          {/* Name + rainbow stripe beside it */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <span style={{
-              fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 18,
-              letterSpacing: '-0.02em', color: INK, lineHeight: 1,
-            }}>Travauxus</span>
-            {/* Mini rainbow stripe bar */}
-            <div style={{ display: 'flex', height: 5, borderRadius: 2, overflow: 'hidden', gap: 1 }}>
-              {STRIPES.map(col => <div key={col} style={{ flex: 1, background: col }} />)}
-            </div>
-          </div>
-        </div>
-
+      <div style={{ position: 'absolute', top: 48, left: 'clamp(20px,4vw,48px)', zIndex: 10 }}>
         <Tag tone="dark" style={{ letterSpacing: '0.32em' }}>§ 06 — From chaos, signal</Tag>
       </div>
-
       <div style={{ position: 'absolute', top: 48, right: 'clamp(20px,4vw,48px)', zIndex: 10, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'rgba(11,11,11,0.36)', letterSpacing: '0.18em' }}>
         Drag · Play
       </div>
@@ -937,28 +865,20 @@ function PhysicsConvergence() {
         {PHYS_ITEMS.map((f, i) => renderItem(f, i))}
       </div>
 
-      {/* Centered title with bloom */}
+      {/* Centered title — physics items bounce off this */}
       <div ref={titleRef} style={{
         position: 'absolute', top: '50%', left: '50%',
         transform: 'translate(-50%, -50%)',
         zIndex: 5, pointerEvents: 'none',
         textAlign: 'center', lineHeight: 0.86,
       }}>
-        {/* Bloom layer behind text */}
-        <div style={{
-          position: 'absolute', inset: '-40px -60px',
-          background: 'radial-gradient(ellipse at center, rgba(233,196,106,0.28) 0%, rgba(11,11,11,0.0) 70%)',
-          filter: 'blur(22px)',
-          zIndex: -1,
-        }} />
         <div style={{
           fontFamily: 'var(--font-display)',
           fontVariationSettings: "'wdth' 125, 'wght' 700",
           fontStretch: '125%', fontWeight: 700,
           fontSize: 'clamp(52px, 8.5vw, 140px)',
           color: INK, letterSpacing: '-0.048em',
-          opacity: 0.85, whiteSpace: 'nowrap',
-          textShadow: `0 0 60px rgba(11,11,11,0.12)`,
+          opacity: 0.82, whiteSpace: 'nowrap',
         }}>SIGNAL FROM</div>
         <div style={{
           fontFamily: 'var(--font-display)',
@@ -970,12 +890,7 @@ function PhysicsConvergence() {
           letterSpacing: '-0.048em',
           opacity: 0.55, whiteSpace: 'nowrap',
         }}>THE NOISE.</div>
-        {/* Rainbow stripe accent under title */}
-        <div style={{ display: 'flex', height: 4, marginTop: 18, borderRadius: 2, overflow: 'hidden', opacity: 0.65 }}>
-          {STRIPES.map(col => <div key={col} style={{ flex: 1, background: col }} />)}
-        </div>
       </div>
-
     </section>
   )
 }
