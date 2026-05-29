@@ -982,20 +982,21 @@ const FEATURES = [
 ]
 
 /* ── Features section — sticky scroll squish (Odin's Crow style) ─────────── */
-const LOGO_CARD = { id: 'logo', isLogo: true }
-const ALL_CARDS = [...FEATURES, LOGO_CARD]
-
 function FeaturesSection() {
   const outerRef = useRef(null)
   const tooltipRef = useRef(null)
   const cardRefs = useRef([])        // direct DOM refs — no React re-render on scroll
+  const logoCardRef = useRef(null)   // absolute overlay that sweeps from left in phase 2
   const circleRef = useRef(null)
   const [active, setActive] = useState(null)
   const isMobile = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
 
-  const N = ALL_CARDS.length // 7 (6 features + logo)
-  // 100vh of scroll per new card entering = (N-1)*100vh total scroll distance
+  const N_FEAT = FEATURES.length // 6 feature cards
+  // Phase 1: feature cards squish  = (N_FEAT-1) × 100vh scroll
+  // Phase 2: logo sweeps from left = 1 × 100vh scroll
+  // Total scroll space = N_FEAT × 100vh → outer height = 100vh + N_FEAT×100vh
   const SCROLL_PER_CARD_VH = 100
+  const P1_END = (N_FEAT - 1) / N_FEAT  // p value where phase 1 ends
 
   // Update card widths directly on every scroll frame — no setState, no re-render
   useEffect(() => {
@@ -1011,24 +1012,38 @@ function FeaturesSection() {
         const scrollable = outerRef.current.offsetHeight - window.innerHeight
         const p = Math.max(0, Math.min(1, -rect.top / scrollable))
 
-        // v = continuous visible card count: 1 → N
-        const v = 1 + p * (N - 1)
-
-        // Update each card's width directly
-        for (let i = 0; i < N; i++) {
-          const el = cardRefs.current[i]
-          if (el) el.style.width = `${Math.max(0, Math.min(1, v - i)) / v * 100}%`
-        }
-
-        // Trigger circle once last card is ~90% of its final share
-        if (!circleShown && v > N - 0.1) {
-          circleShown = true
-          if (circleRef.current) circleRef.current.style.strokeDashoffset = '0'
-        }
-        // Reset if user scrolls back
-        if (circleShown && v < N - 0.2) {
-          circleShown = false
-          if (circleRef.current) circleRef.current.style.strokeDashoffset = '1'
+        if (p <= P1_END) {
+          // Phase 1: feature cards squish from 1 visible → all N_FEAT visible
+          const v = 1 + (p / P1_END) * (N_FEAT - 1)
+          for (let i = 0; i < N_FEAT; i++) {
+            const el = cardRefs.current[i]
+            if (el) el.style.width = `${Math.max(0, Math.min(1, v - i)) / v * 100}%`
+          }
+          // Keep logo overlay hidden
+          if (logoCardRef.current) logoCardRef.current.style.width = '0%'
+          // Reset circle if scrolled back
+          if (circleShown) {
+            circleShown = false
+            if (circleRef.current) circleRef.current.style.strokeDashoffset = '1'
+          }
+        } else {
+          // Phase 2: freeze feature cards at equal widths, logo panel wipes from left
+          const equalW = `${100 / N_FEAT}%`
+          for (let i = 0; i < N_FEAT; i++) {
+            const el = cardRefs.current[i]
+            if (el) el.style.width = equalW
+          }
+          const sweepP = (p - P1_END) / (1 - P1_END)  // 0 → 1
+          if (logoCardRef.current) logoCardRef.current.style.width = `${sweepP * 100}%`
+          // Trigger circle once sweep is ~90% done
+          if (!circleShown && sweepP > 0.88) {
+            circleShown = true
+            if (circleRef.current) circleRef.current.style.strokeDashoffset = '0'
+          }
+          if (circleShown && sweepP < 0.75) {
+            circleShown = false
+            if (circleRef.current) circleRef.current.style.strokeDashoffset = '1'
+          }
         }
       })
     }
@@ -1036,7 +1051,7 @@ function FeaturesSection() {
     window.addEventListener('scroll', update, { passive: true })
     update()
     return () => { window.removeEventListener('scroll', update); if (raf) cancelAnimationFrame(raf) }
-  }, [N])
+  }, [N_FEAT, P1_END])
 
   // Tooltip mouse tracking
   useEffect(() => {
@@ -1075,11 +1090,11 @@ function FeaturesSection() {
         <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.18em', color: MUTED, margin: 0 }}>Scroll to explore →</p>
       </div>
 
-      {/* Outer div: tall enough to force scrolling through all cards */}
-      {/* Height = sticky panel (100vh) + scroll space (N-1 cards × 100vh each) */}
+      {/* Outer div: tall enough to force scrolling through all phases */}
+      {/* Height = sticky panel (100vh) + N_FEAT × 100vh scroll space */}
       <div
         ref={outerRef}
-        style={{ position: 'relative', height: `calc(100vh + ${(N - 1) * SCROLL_PER_CARD_VH}vh)` }}
+        style={{ position: 'relative', height: `calc(100vh + ${N_FEAT * SCROLL_PER_CARD_VH}vh)` }}
       >
         <div style={{
           position: 'sticky', top: 0,
@@ -1088,100 +1103,107 @@ function FeaturesSection() {
           overflow: 'hidden',
           borderTop: `1px solid ${BORDER}`,
         }}>
-          {ALL_CARDS.map((card, i) => {
-            const isLogoCard = card.isLogo
-            const f = isLogoCard ? null : card
-            const initWidth = i === 0 ? '100%' : '0%'
-
-            return (
-              <div
-                key={card.id}
-                ref={el => { cardRefs.current[i] = el }}
-                onMouseEnter={() => !isMobile && !isLogoCard && setActive(card.id)}
-                onMouseLeave={() => !isMobile && setActive(null)}
-                style={{
-                  width: initWidth,
-                  flexShrink: 0,
-                  height: '100%',
-                  borderRight: i < N - 1 ? `1px solid ${BORDER}` : 'none',
-                  overflow: 'hidden',
-                  position: 'relative',
-                  background: isLogoCard ? 'rgba(240,235,224,0.03)' : active === card.id ? 'rgba(240,235,224,0.04)' : 'transparent',
-                  transition: 'background 0.3s',
-                  cursor: isLogoCard ? 'default' : 'crosshair',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between',
-                  padding: '16px 14px 18px',
-                  boxSizing: 'border-box',
-                }}
-              >
-                {isLogoCard ? (
-                  /* ── Logo finale card ──────────────────────────────────── */
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 16, position: 'relative' }}>
-                    <div style={{ position: 'relative', display: 'inline-block' }}>
-                      <svg width="44" height="44" viewBox="0 0 24 24" fill="none">
-                        <path d="M12 2L22 12L12 22L2 12Z" stroke={CREAM} strokeWidth="1.5" strokeLinejoin="round" />
-                        <path d="M12 6.5L17.5 12L12 17.5L6.5 12Z" stroke={CREAM} strokeWidth="1.5" strokeLinejoin="round" />
-                      </svg>
-                      {/* Circle draws tightly around the diamond icon */}
-                      <svg
-                        aria-hidden="true"
-                        viewBox="0 0 100 100"
-                        preserveAspectRatio="none"
-                        style={{ position: 'absolute', top: '-16px', left: '-16px', width: 'calc(100% + 32px)', height: 'calc(100% + 32px)', pointerEvents: 'none', overflow: 'visible' }}
-                      >
-                        <path
-                          ref={circleRef}
-                          d="M 54,4 C 76,1 98,16 98,38 C 98,60 84,88 60,96 C 36,104 8,94 2,72 C -4,50 8,18 26,8 C 38,2 46,3 54,4"
-                          fill="none"
-                          stroke="rgba(240,235,224,0.85)"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          pathLength="1"
-                          strokeDasharray="0.94 0.06"
-                          style={{ strokeDashoffset: 1, transition: 'stroke-dashoffset 750ms cubic-bezier(0.77,0,0.175,1)' }}
-                        />
-                      </svg>
-                    </div>
-                    <span style={{
-                      fontFamily: 'var(--font-display)',
-                      fontVariationSettings: "'wdth' 125, 'wght' 700",
-                      fontStretch: '125%', fontWeight: 700,
-                      fontSize: 'clamp(8px, 1vw, 16px)',
-                      color: CREAM, letterSpacing: '0.22em', textTransform: 'uppercase',
-                      writingMode: 'vertical-rl', textOrientation: 'mixed',
-                    }}>Travauxus</span>
-                  </div>
-                ) : (
-                  /* ── Feature card ──────────────────────────────────────── */
-                  <>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.24em', color: 'rgba(240,235,224,0.28)', flexShrink: 0 }}>{f.n}</span>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--moss-200)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{f.tag}</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, padding: '8px 0' }}>
-                      <span style={{
-                        fontFamily: 'var(--font-display)',
-                        fontVariationSettings: "'wdth' 125, 'wght' 700",
-                        fontStretch: '125%', fontWeight: 700,
-                        fontSize: 'clamp(13px, 2vw, 38px)',
-                        color: CREAM,
-                        letterSpacing: '0.06em',
-                        lineHeight: 1.0,
-                        writingMode: 'vertical-rl',
-                        textOrientation: 'mixed',
-                        textTransform: 'uppercase',
-                        overflow: 'hidden',
-                        maxHeight: '80%',
-                      }}>{f.title}</span>
-                    </div>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.12em', textTransform: 'uppercase', color: f.hint[0].color, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{f.hint[0].text}</span>
-                  </>
-                )}
+          {/* Feature cards — flex row, squish in phase 1 */}
+          {FEATURES.map((card, i) => (
+            <div
+              key={card.id}
+              ref={el => { cardRefs.current[i] = el }}
+              onMouseEnter={() => !isMobile && setActive(card.id)}
+              onMouseLeave={() => !isMobile && setActive(null)}
+              style={{
+                width: i === 0 ? '100%' : '0%',
+                flexShrink: 0,
+                height: '100%',
+                borderRight: `1px solid ${BORDER}`,
+                overflow: 'hidden',
+                position: 'relative',
+                background: active === card.id ? 'rgba(240,235,224,0.04)' : 'transparent',
+                transition: 'background 0.3s',
+                cursor: 'crosshair',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                padding: '16px 14px 18px',
+                boxSizing: 'border-box',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.24em', color: 'rgba(240,235,224,0.28)', flexShrink: 0 }}>{card.n}</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--moss-200)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{card.tag}</span>
               </div>
-            )
-          })}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, padding: '8px 0' }}>
+                <span style={{
+                  fontFamily: 'var(--font-display)',
+                  fontVariationSettings: "'wdth' 125, 'wght' 700",
+                  fontStretch: '125%', fontWeight: 700,
+                  fontSize: 'clamp(13px, 2vw, 38px)',
+                  color: CREAM,
+                  letterSpacing: '0.06em',
+                  lineHeight: 1.0,
+                  writingMode: 'vertical-rl',
+                  textOrientation: 'mixed',
+                  textTransform: 'uppercase',
+                  overflow: 'hidden',
+                  maxHeight: '80%',
+                }}>{card.title}</span>
+              </div>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.12em', textTransform: 'uppercase', color: card.hint[0].color, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{card.hint[0].text}</span>
+            </div>
+          ))}
+
+          {/* Logo overlay — absolutely positioned, wipes from left in phase 2 */}
+          <div
+            ref={logoCardRef}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '0%',
+              height: '100%',
+              overflow: 'hidden',
+              background: INK,
+              zIndex: 10,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRight: `1px solid ${BORDER}`,
+              boxSizing: 'border-box',
+            }}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20 }}>
+              <div style={{ position: 'relative', display: 'inline-block' }}>
+                <svg width="52" height="52" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 2L22 12L12 22L2 12Z" stroke={CREAM} strokeWidth="1.5" strokeLinejoin="round" />
+                  <path d="M12 6.5L17.5 12L12 17.5L6.5 12Z" stroke={CREAM} strokeWidth="1.5" strokeLinejoin="round" />
+                </svg>
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 100 100"
+                  preserveAspectRatio="none"
+                  style={{ position: 'absolute', top: '-16px', left: '-16px', width: 'calc(100% + 32px)', height: 'calc(100% + 32px)', pointerEvents: 'none', overflow: 'visible' }}
+                >
+                  <path
+                    ref={circleRef}
+                    d="M 54,4 C 76,1 98,16 98,38 C 98,60 84,88 60,96 C 36,104 8,94 2,72 C -4,50 8,18 26,8 C 38,2 46,3 54,4"
+                    fill="none"
+                    stroke="rgba(240,235,224,0.85)"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    pathLength="1"
+                    strokeDasharray="0.94 0.06"
+                    style={{ strokeDashoffset: 1, transition: 'stroke-dashoffset 750ms cubic-bezier(0.77,0,0.175,1)' }}
+                  />
+                </svg>
+              </div>
+              <span style={{
+                fontFamily: 'var(--font-display)',
+                fontVariationSettings: "'wdth' 125, 'wght' 700",
+                fontStretch: '125%', fontWeight: 700,
+                fontSize: 'clamp(10px, 1.2vw, 20px)',
+                color: CREAM, letterSpacing: '0.22em', textTransform: 'uppercase',
+              }}>Travauxus</span>
+            </div>
+          </div>
         </div>
       </div>
 
