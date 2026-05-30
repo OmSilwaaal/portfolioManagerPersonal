@@ -1,101 +1,155 @@
+/**
+ * News aggregator — replaces the paid MarketAux API with two free sources:
+ *
+ *  1. Finnhub  /news  (already integrated, free tier, has ticker symbols)
+ *  2. RSS feeds from Reuters Business + CNBC Markets + Yahoo Finance (no key needed)
+ *
+ * Exports the same getGeneralFeed / getNewsByTicker interface as before
+ * so no other files need changing.
+ */
+
 const axios = require('axios');
+const Parser = require('rss-parser');
 
-const MARKETAUX_BASE = 'https://api.marketaux.com/v1';
+const FINNHUB_BASE = 'https://finnhub.io/api/v1';
+const rssParser = new Parser({ timeout: 8000, headers: { 'User-Agent': 'Mozilla/5.0' } });
 
-// MarketAux entity types that represent actual traded securities
-const FINANCIAL_ENTITY_TYPES = new Set(['equity', 'etf', 'index', 'crypto', 'commodity', 'forex', 'fund']);
-
-// Headlines containing these phrases are almost never financial market news
-const NOISE_PATTERNS = [
-  /recipe/i, /how to (make|cook|bake|prepare)/i, /restaurant/i, /food review/i,
-  /travel guide/i, /best places to visit/i, /celebrity/i, /fashion/i,
-  /sports score/i, /movie review/i, /book review/i, /horoscope/i,
+// Free RSS feeds — no API key required
+const RSS_FEEDS = [
+  { url: 'https://feeds.reuters.com/reuters/businessNews',   source: 'Reuters' },
+  { url: 'https://www.cnbc.com/id/100003114/device/rss/rss.html', source: 'CNBC' },
+  { url: 'https://finance.yahoo.com/news/rssindex',          source: 'Yahoo Finance' },
 ];
 
+// Known ticker symbols found in headlines/descriptions — used to tag RSS articles
+// Simple word-boundary match: looks for $AAPL or "AAPL" in ALL-CAPS (2-5 chars) near known terms
+const TICKER_RE = /\$([A-Z]{1,5})\b|\b([A-Z]{2,5})\s+(?:stock|shares|Corp|Inc|Ltd|ETF|NYSE|NASDAQ)/g;
+
+function extractTicker(text) {
+  if (!text) return null;
+  const matches = [...text.matchAll(TICKER_RE)];
+  if (!matches.length) return null;
+  const symbol = matches[0][1] || matches[0][2];
+  // Filter out common false positives (English words, country codes, etc.)
+  const FALSE_POSITIVES = new Set(['THE','AND','FOR','ARE','BUT','NOT','YOU','ALL','CAN','HER','WAS','ONE','OUR','OUT','DAY','GET','HAS','HIM','HIS','HOW','ITS','LET','MAY','NEW','NOW','OLD','SEE','SET','TWO','USE','WAY','WHO','WHO','WHY','WILL','WITH','CEO','CFO','IPO','GDP','CPI','IMF','WHO','FED','SEC','IRS','FDA']);
+  return FALSE_POSITIVES.has(symbol) ? null : symbol;
+}
+
 function getApiKey() {
-  const key = process.env.MARKETAUX_API_KEY;
-  if (!key) throw new Error('MARKETAUX_API_KEY is not set in environment variables');
+  const key = process.env.FINNHUB_API_KEY;
+  if (!key) throw new Error('FINNHUB_API_KEY is not set');
   return key;
 }
 
-function isFinancialArticle(article) {
-  // Must have at least one entity that is a recognised financial instrument
-  const entities = article.entities || [];
-  if (entities.length === 0) return false;
+// Entity / noise filters (same as before)
+const NOISE_PATTERNS = [
+  /recipe/i, /how to (make|cook|bake|prepare)/i, /restaurant/i,
+  /travel guide/i, /celebrity/i, /sports score/i, /movie review/i,
+];
 
-  const hasFinancialEntity = entities.some((e) => {
-    const type = (e.type || '').toLowerCase();
-    const hasSymbol = e.symbol && e.symbol.length >= 1 && e.symbol.length <= 6;
-    return hasSymbol || FINANCIAL_ENTITY_TYPES.has(type);
+function isRelevant(headline) {
+  return !NOISE_PATTERNS.some((re) => re.test(headline));
+}
+
+// ── Finnhub news ──────────────────────────────────────────────────────────────
+
+async function fetchFinnhubCategory(category, token) {
+  try {
+    const res = await axios.get(`${FINNHUB_BASE}/news`, {
+      params: { category, token },
+      timeout: 10000,
+    });
+    return res.data || [];
+  } catch (err) {
+    console.warn(`[news] Finnhub ${category} failed:`, err.message);
+    return [];
+  }
+}
+
+function normalizeFinnhub(articles) {
+  return articles
+    .filter((a) => a.headline && isRelevant(a.headline))
+    .map((a) => ({
+      id: String(a.id || Date.now() + Math.random()),
+      headline: a.headline,
+      source: a.source || 'Finnhub',
+      publishedAt: a.datetime ? new Date(a.datetime * 1000).toISOString() : new Date().toISOString(),
+      url: a.url || '',
+      image_url: a.image || null,
+      ticker: a.related || extractTicker(a.headline) || null,
+      description: a.summary || '',
+      sentiment: 0, // Finnhub news doesn't include sentiment scores
+    }));
+}
+
+// ── RSS feeds ─────────────────────────────────────────────────────────────────
+
+async function fetchRssFeed({ url, source }) {
+  try {
+    const feed = await rssParser.parseURL(url);
+    return (feed.items || [])
+      .filter((item) => item.title && isRelevant(item.title))
+      .map((item) => ({
+        id: item.guid || item.link || String(Date.now() + Math.random()),
+        headline: item.title,
+        source,
+        publishedAt: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
+        url: item.link || '',
+        image_url: null,
+        ticker: extractTicker(item.title) || extractTicker(item.contentSnippet) || null,
+        description: item.contentSnippet || item.summary || '',
+        sentiment: 0,
+      }));
+  } catch (err) {
+    console.warn(`[news] RSS ${source} failed:`, err.message);
+    return [];
+  }
+}
+
+// ── Public interface ──────────────────────────────────────────────────────────
+
+async function getGeneralFeed(limit = 20) {
+  const token = getApiKey();
+
+  // Fetch Finnhub general + merger categories + all RSS feeds in parallel
+  const [general, mergers, ...rssResults] = await Promise.all([
+    fetchFinnhubCategory('general', token),
+    fetchFinnhubCategory('merger', token),
+    ...RSS_FEEDS.map(fetchRssFeed),
+  ]);
+
+  const finnhubArticles = normalizeFinnhub([...general, ...mergers]);
+  const rssArticles = rssResults.flat();
+
+  // Merge, deduplicate by headline similarity, sort newest-first
+  const allArticles = [...finnhubArticles, ...rssArticles];
+  const seen = new Set();
+  const deduped = allArticles.filter((a) => {
+    const key = a.headline.slice(0, 60).toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
   });
 
-  if (!hasFinancialEntity) return false;
-
-  // Quick headline sanity check
-  const headline = article.title || '';
-  if (NOISE_PATTERNS.some((re) => re.test(headline))) return false;
-
-  return true;
+  deduped.sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+  return deduped.slice(0, limit * 2); // return extra so the caller's dedup + filter still yields enough
 }
 
 async function getNewsByTicker(ticker, limit = 5) {
-  const api_token = getApiKey();
-  const response = await axios.get(`${MARKETAUX_BASE}/news/all`, {
-    params: {
-      symbols: ticker.toUpperCase(),
-      api_token,
-      limit,
-      language: 'en',
-      filter_entities: true,
-    },
-    timeout: 10000,
-  });
+  const token = getApiKey();
+  const to = new Date().toISOString().slice(0, 10);
+  const from = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
 
-  return normalizeArticles((response.data.data || []).filter(isFinancialArticle));
+  try {
+    const res = await axios.get(`${FINNHUB_BASE}/company-news`, {
+      params: { symbol: ticker.toUpperCase(), from, to, token },
+      timeout: 10000,
+    });
+    return normalizeFinnhub((res.data || []).slice(0, limit));
+  } catch (err) {
+    console.warn(`[news] Finnhub company-news ${ticker} failed:`, err.message);
+    return [];
+  }
 }
 
-async function getGeneralFeed(limit = 20) {
-  const api_token = getApiKey();
-
-  // Fetch more than needed so filtering still leaves enough
-  const fetchLimit = Math.min(limit * 2, 100);
-
-  const response = await axios.get(`${MARKETAUX_BASE}/news/all`, {
-    params: {
-      api_token,
-      limit: fetchLimit,
-      language: 'en',
-      filter_entities: true,
-      // Restrict to financial topics supported by MarketAux
-      topics: 'earnings,dividends,mergers_and_acquisitions,equity_offering,analyst_ratings,insider_trading,layoffs,ipos,economics,central_bank,stock_market',
-    },
-    timeout: 10000,
-  });
-
-  const financial = (response.data.data || []).filter(isFinancialArticle);
-  return normalizeArticles(financial).slice(0, limit);
-}
-
-function normalizeArticles(articles) {
-  return articles.map((article) => {
-    const entities = article.entities || [];
-    // Pick the entity with the strongest sentiment signal as the primary ticker
-    const primary = entities
-      .filter((e) => e.symbol)
-      .sort((a, b) => Math.abs(b.sentiment_score || 0) - Math.abs(a.sentiment_score || 0))[0] || entities[0];
-
-    return {
-      id: article.uuid || String(Date.now() + Math.random()),
-      headline: article.title || '',
-      source: article.source || 'Unknown',
-      publishedAt: article.published_at || new Date().toISOString(),
-      url: article.url || '',
-      image_url: article.image_url || null,
-      ticker: primary?.symbol || null,
-      description: article.description || article.snippet || '',
-      sentiment: primary?.sentiment_score || 0,
-    };
-  });
-}
-
-module.exports = { getNewsByTicker, getGeneralFeed };
+module.exports = { getGeneralFeed, getNewsByTicker };
