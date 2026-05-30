@@ -3,7 +3,7 @@ const router = express.Router();
 const { getCommodityPrice, getAllCommodities } = require('../services/alphaVantage');
 const NodeCache = require('node-cache');
 
-const contextCache = new NodeCache({ stdTTL: 3600 });
+const contextCache = new NodeCache({ stdTTL: 3600, maxKeys: 50 });
 
 async function getMacroContext(commodity) {
   const cacheKey = `context_${commodity}`;
@@ -51,13 +51,16 @@ router.get('/', async (req, res, next) => {
   try {
     const commodities = await getAllCommodities();
 
-    // Attach AI context in parallel (best-effort)
-    const withContext = await Promise.all(
-      commodities.map(async (c) => {
+    // Attach AI context with concurrency capped at 3 to avoid Claude rate limits
+    const withContext = [];
+    for (let i = 0; i < commodities.length; i += 3) {
+      const batch = commodities.slice(i, i + 3);
+      const results = await Promise.all(batch.map(async (c) => {
         const macroContext = await getMacroContext(c.commodity);
         return { ...c, macroContext };
-      })
-    );
+      }));
+      withContext.push(...results);
+    }
 
     res.json({ commodities: withContext });
   } catch (err) {

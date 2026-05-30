@@ -11,7 +11,7 @@ router.get('/price-alerts', requireAuth, async (req, res) => {
   const { tickers } = req.query
   if (!tickers) return res.json({ alerts: [] })
 
-  const tickerList = tickers.split(',').map(t => t.trim().toUpperCase()).filter(Boolean).slice(0, 20)
+  const tickerList = [...new Set(tickers.split(',').map(t => t.trim().toUpperCase()).filter(Boolean))].slice(0, 20)
   const token = process.env.FINNHUB_API_KEY
   if (!token) return res.json({ alerts: [] })
 

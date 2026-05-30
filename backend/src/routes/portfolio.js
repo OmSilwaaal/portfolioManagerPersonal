@@ -32,7 +32,11 @@ router.get('/impact', async (req, res, next) => {
       return res.status(400).json({ error: true, message: 'No valid holdings found. Format: AAPL:10,BTC:0.5' });
     }
 
-    const cacheKey = `impact:${holdingsParam}`;
+    const normalizedKey = holdingsList
+      .map((h) => `${h.ticker}:${h.quantity}`)
+      .sort()
+      .join(',');
+    const cacheKey = `impact:${normalizedKey}`;
     const cached = impactCache.get(cacheKey);
     if (cached) return res.json(cached);
 

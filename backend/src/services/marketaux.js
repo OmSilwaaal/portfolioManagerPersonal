@@ -132,7 +132,7 @@ async function getGeneralFeed(limit = 20) {
   });
 
   deduped.sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
-  return deduped.slice(0, limit * 2); // return extra so the caller's dedup + filter still yields enough
+  return deduped.slice(0, limit);
 }
 
 async function getNewsByTicker(ticker, limit = 5) {

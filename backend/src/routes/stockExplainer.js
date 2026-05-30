@@ -20,6 +20,8 @@ router.get('/:ticker', requireAuth, async (req, res) => {
       const age = Date.now() - new Date(cached.created_at).getTime()
       const maxAge = CACHE_DAYS * 24 * 60 * 60 * 1000
       if (age < maxAge) {
+        const remainingSecs = Math.floor((maxAge - age) / 1000);
+        res.set('Cache-Control', `public, max-age=${remainingSecs}`);
         return res.json({ ticker: cached.ticker, explanation: cached.explanation })
       }
     }
