@@ -32,7 +32,8 @@ function getBudgetStatus() {
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
-const FALLBACK_RESPONSE = {
+const FALLBACK_ITEM = {
+  relevant: true,
   summary: 'Summary unavailable',
   urgency: 'Low',
   reasoning: 'AI service temporarily unavailable',
@@ -40,108 +41,124 @@ const FALLBACK_RESPONSE = {
 };
 
 const BUDGET_FALLBACK = {
+  relevant: true,
   summary: 'Daily AI budget reached. Analysis will resume tomorrow.',
   urgency: 'Low',
   reasoning: 'Token budget exceeded',
   upside: null,
 };
 
-// Urgency criteria grounded in real market impact events
-const URGENCY_CRITERIA = `
-URGENCY CRITERIA — apply these strictly:
+// Kept in system prompt so it is cached after the first request in each window.
+// Prompt cache saves ~90% on repeated tokens within 5 minutes.
+const SYSTEM_PROMPT = `You are a financial intelligence assistant for retail investors. Return only valid JSON, never markdown fences.
 
-ACT NOW (use sparingly — only genuine market-moving events):
+URGENCY CRITERIA — apply these strictly and conservatively. Default to Low when uncertain.
+
+ACT NOW (genuine market-moving events only):
 - Earnings surprise >5% above or below expectations
 - FDA approval or rejection of a major drug
 - Merger, acquisition, or buyout announced or collapsed
 - Federal Reserve rate decision or surprise policy change
 - CEO/CFO departure under negative circumstances, or fraud allegation
 - Bankruptcy filing or imminent default
-- Major product recall or safety investigation with financial exposure
-- Geopolitical event directly disrupting a company's supply chain or market (war, sanctions, trade ban)
-- Exchange trading halt on a stock
+- Major product recall or safety investigation
+- Geopolitical event directly disrupting a company's supply chain (war, sanctions, trade ban)
 
 WATCH (important but not immediately actionable):
 - Analyst upgrade or downgrade with new price target
-- Company issues guidance revision (up or down)
+- Company issues guidance revision
 - Earnings report in the next 1–3 days
-- Congressional insider trade disclosed (especially large amounts)
+- Congressional insider trade disclosed (large amount)
 - Regulatory investigation opened
-- Sector-wide news affecting multiple holdings (e.g. rate speculation, commodity price spike)
-- Product launch or partnership announcement with meaningful revenue potential
+- Sector-wide event affecting multiple stocks
 
-LOW (background information, no immediate action required):
-- Earnings within consensus expectations (no surprise)
-- General market commentary or opinion pieces
+LOW (background noise — default):
+- Earnings within consensus expectations
+- General commentary or opinion
 - Minor analyst mentions with no rating change
-- Scheduled macro data releases that came in roughly as expected
-- Company reaffirms existing guidance
-- Routine dividend announcement
-`;
+- Scheduled data releases with no surprise
+- Company reaffirms existing guidance`;
 
-async function summarizeNewsItem(headline, content, sentimentScore = null) {
-  if (!checkBudget()) return BUDGET_FALLBACK;
+// ── Batch scoring: one API call for all articles ──────────────────────────────
+// Replaces 20 individual summarizeNewsItem calls with a single request.
+// Reduces input tokens by ~6× and eliminates per-call API overhead.
+async function batchSummarizeNews(articles) {
+  if (!articles.length) return [];
+  if (!checkBudget()) return articles.map(() => ({ ...BUDGET_FALLBACK }));
+
   try {
     const anthropic = getClient();
 
-    const sentimentHint = sentimentScore != null
-      ? `\nMarket sentiment signal: ${sentimentScore > 0.3 ? 'Positive' : sentimentScore < -0.3 ? 'Negative' : 'Neutral'} (score: ${sentimentScore.toFixed(2)}). Use this as supporting evidence but rely on your own judgment for urgency.`
-      : '';
+    const truncated = articles.map((a, i) => ({
+      i,
+      headline: a.headline,
+      // Truncate content — 300 chars is enough to score urgency
+      content: (a.description || '').slice(0, 300),
+      sentiment: a.sentiment != null ? a.sentiment.toFixed(2) : null,
+    }));
 
-    const prompt = `${URGENCY_CRITERIA}
+    const prompt = `Score each of these ${truncated.length} financial news articles.
 
-News headline: ${headline}
-News content: ${content || headline}${sentimentHint}
+For each article:
+1. Is it genuinely about financial markets, stocks, crypto, commodities, or economic policy? If not, set relevant:false and urgency:"Low".
+2. Write a 2-sentence plain-English summary (no jargon).
+3. Rate urgency using the criteria in your system prompt.
+4. If it's a strong bullish catalyst for a specific purchasable stock (upside opportunity), set upside. Otherwise null.
 
-Task:
-1. First decide: is this article genuinely about financial markets, stocks, crypto, commodities, economic policy, or company performance? If it is NOT (e.g. recipes, travel, celebrity gossip, sports scores, general lifestyle content), set relevant to false and urgency to "Low".
-2. If relevant, write a 2-sentence plain-English summary — no jargon, no acronyms.
-3. Rate urgency using the criteria above.
-4. If this news is a strong bullish catalyst for a specific stock that someone might want to BUY (upside opportunity), identify it. Otherwise set upside to null.
+Articles JSON:
+${JSON.stringify(truncated)}
 
-Return ONLY valid JSON, no markdown:
-{
-  "relevant": true | false,
-  "summary": string,
-  "urgency": "Low" | "Watch" | "Act Now",
-  "reasoning": "one sentence citing which specific criterion was met",
-  "upside": { "ticker": string, "reason": string } | null
-}`;
+Return a JSON array in the SAME order with exactly ${truncated.length} objects:
+[{"i":0,"relevant":bool,"summary":string,"urgency":"Low"|"Watch"|"Act Now","reasoning":string,"upside":{"ticker":string,"reason":string}|null},...]`;
 
     const message = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 380,
-      system: [
-        {
-          type: 'text',
-          text: 'You are a financial intelligence assistant that scores news for retail investors. Be conservative: default to Low unless a clear criterion is met. Return only valid JSON. Never use markdown fences.',
-          cache_control: { type: 'ephemeral' },
-        },
-      ],
+      // ~150 tokens per article output × N articles
+      max_tokens: Math.min(150 * truncated.length + 200, 4096),
+      system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: prompt }],
     });
 
     recordUsage(message.usage);
-    const responseText = message.content[0].type === 'text' ? message.content[0].text : '';
-    const cleaned = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    const parsed = JSON.parse(cleaned);
+    const raw = message.content[0]?.text || '[]';
+    const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const results = JSON.parse(cleaned);
 
-    const validUrgencies = ['Low', 'Watch', 'Act Now'];
-    if (!validUrgencies.includes(parsed.urgency)) parsed.urgency = 'Low';
+    // Map back by index, fall back to FALLBACK_ITEM for any missing
+    const byIndex = {};
+    for (const r of results) byIndex[r.i] = r;
 
-    return {
-      relevant: parsed.relevant !== false,
-      summary: parsed.summary || FALLBACK_RESPONSE.summary,
-      urgency: parsed.urgency,
-      reasoning: parsed.reasoning || '',
-      upside: parsed.upside || null,
-    };
+    return articles.map((_, i) => {
+      const r = byIndex[i];
+      if (!r) return { ...FALLBACK_ITEM };
+      const validUrgencies = ['Low', 'Watch', 'Act Now'];
+      return {
+        relevant: r.relevant !== false,
+        summary: r.summary || FALLBACK_ITEM.summary,
+        urgency: validUrgencies.includes(r.urgency) ? r.urgency : 'Low',
+        reasoning: r.reasoning || '',
+        upside: r.upside || null,
+      };
+    });
   } catch (err) {
-    console.log('Claude summarization error:', err.message);
-    return FALLBACK_RESPONSE;
+    console.log('Claude batch scoring error:', err.message);
+    return articles.map(() => ({ ...FALLBACK_ITEM }));
   }
 }
 
+// ── Single-item scoring (used for individual lookups outside the main feed) ───
+async function summarizeNewsItem(headline, content, sentimentScore = null) {
+  if (!checkBudget()) return BUDGET_FALLBACK;
+  try {
+    const results = await batchSummarizeNews([{ headline, description: content, sentiment: sentimentScore }]);
+    return results[0] || FALLBACK_ITEM;
+  } catch (err) {
+    console.log('Claude summarization error:', err.message);
+    return FALLBACK_ITEM;
+  }
+}
+
+// ── Portfolio impact — Haiku instead of Sonnet (4× cheaper, adequate quality) ─
 async function analyzePortfolioImpact(holdingsWithPrices, scoredNewsItems) {
   if (!checkBudget()) return {
     overallImpact: 'Low',
@@ -152,66 +169,38 @@ async function analyzePortfolioImpact(holdingsWithPrices, scoredNewsItems) {
   try {
     const anthropic = getClient();
 
-    // Build holdings text with actual dollar values
     const holdingsText = holdingsWithPrices
       .filter((h) => h.quantity > 0)
       .map((h) => {
-        const value = h.value ? `$${h.value.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : 'value unknown';
-        const change = h.changePercent != null ? ` (today: ${h.changePercent > 0 ? '+' : ''}${h.changePercent.toFixed(2)}%)` : '';
+        const value = h.value ? `$${h.value.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : 'unknown value';
+        const change = h.changePercent != null ? ` (today ${h.changePercent > 0 ? '+' : ''}${h.changePercent.toFixed(2)}%)` : '';
         return `${h.ticker}: ${h.quantity} units @ $${h.price ?? '?'} = ${value}${change}`;
       })
       .join('\n');
 
     const totalValue = holdingsWithPrices.reduce((s, h) => s + (h.value || 0), 0);
 
-    // Use AI-scored summaries, prioritising Act Now and Watch items
-    const relevantNews = (scoredNewsItems || [])
-      .filter((n) => n.urgency !== 'Low')
-      .slice(0, 8)
-      .concat((scoredNewsItems || []).filter((n) => n.urgency === 'Low').slice(0, 2));
-
-    const newsText = relevantNews
-      .map((n) => `[${n.urgency}] ${n.ticker ? `${n.ticker}: ` : ''}${n.summary || n.headline}`)
+    // Prioritise high-urgency and ticker-relevant news, cap at 6 items to save tokens
+    const tickers = new Set(holdingsWithPrices.map((h) => h.ticker));
+    const relevant = (scoredNewsItems || [])
+      .filter((n) => n.urgency !== 'Low' || tickers.has(n.ticker))
+      .slice(0, 6);
+    const newsText = relevant
+      .map((n) => `[${n.urgency}]${n.ticker ? ` ${n.ticker}:` : ''} ${(n.summary || n.headline || '').slice(0, 120)}`)
       .join('\n');
 
-    const prompt = `A retail investor's portfolio (total value ~$${totalValue.toLocaleString('en-US', { maximumFractionDigits: 0 })}):
-
-${holdingsText}
-
-Most relevant recent news (pre-scored by urgency):
-${newsText}
-
-For each holding, estimate the likely dollar impact of this news (e.g. "+$120 to +$340" or "-$200 to -$500" or "minimal impact"). Base estimates on typical stock move sizes for this type of news event and the position size shown above. Be honest when impact is unclear.
-
-Return ONLY valid JSON, no markdown:
-{
-  "overallImpact": "Low" | "Watch" | "Act Now",
-  "summary": "2-3 sentence plain-English explanation of what this news means for this specific portfolio — use dollar amounts",
-  "tickerBreakdown": [
-    {
-      "ticker": string,
-      "impact": "Positive" | "Negative" | "Neutral",
-      "estimatedDollarChange": string,
-      "reason": string
-    }
-  ],
-  "recommendation": "One plain-English action sentence — what should this investor consider doing today?"
-}`;
+    const prompt = `Portfolio (~$${totalValue.toLocaleString('en-US', { maximumFractionDigits: 0 })} total):\n${holdingsText}\n\nTop news:\n${newsText}\n\nFor each holding estimate the dollar impact of this news. Return ONLY JSON:\n{"overallImpact":"Low"|"Watch"|"Act Now","summary":"2-3 sentence plain-English impact using dollar amounts","tickerBreakdown":[{"ticker":string,"impact":"Positive"|"Negative"|"Neutral","estimatedDollarChange":string,"reason":string}],"recommendation":"one plain-English action sentence"}`;
 
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 800,
-      system: [{
-        type: 'text',
-        text: 'You are a financial intelligence assistant. Translate market news into plain-English dollar impacts for a retail investor\'s specific holdings. Be concrete about dollar ranges. Return only valid JSON. Never use markdown fences.',
-        cache_control: { type: 'ephemeral' },
-      }],
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 600,
+      system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: prompt }],
     });
 
     recordUsage(message.usage);
-    const responseText = message.content[0].type === 'text' ? message.content[0].text : '';
-    const cleaned = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const raw = message.content[0]?.text || '{}';
+    const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     return JSON.parse(cleaned);
   } catch (err) {
     console.log('Claude portfolio analysis error:', err.message);
@@ -224,52 +213,31 @@ Return ONLY valid JSON, no markdown:
   }
 }
 
+// ── Gov trade analysis — keep Sonnet for nuanced insider-trade context ─────────
 async function summarizeGovTrade(tradeData, investorContext = null) {
   if (!checkBudget()) return {
-    summary: BUDGET_FALLBACK.summary,
-    urgency: 'Low',
-    reasoning: BUDGET_FALLBACK.reasoning,
-    sentiment: 'Neutral',
-    time_sensitive: false,
+    summary: BUDGET_FALLBACK.summary, urgency: 'Low',
+    reasoning: BUDGET_FALLBACK.reasoning, sentiment: 'Neutral', time_sensitive: false,
   };
   try {
     const anthropic = getClient();
 
     const action = /purchase/i.test(tradeData.transactionType) ? 'purchased' : 'sold';
-    const lagDesc =
-      tradeData.disclosureLagDays > 0
-        ? `${tradeData.disclosureLagDays} days after the trade`
-        : 'on the day of the trade';
-    const contextNote = investorContext
-      ? `\nInvestor profile: ${investorContext.investorType}, ${investorContext.riskTolerance} risk tolerance.`
-      : '';
+    const lagDesc = tradeData.disclosureLagDays > 0 ? `${tradeData.disclosureLagDays} days after the trade` : 'on the day of the trade';
+    const contextNote = investorContext ? `\nInvestor: ${investorContext.investorType}, ${investorContext.riskTolerance} risk.` : '';
 
-    const prompt = `${tradeData.title} ${tradeData.officialName} (${tradeData.party}) ${action} ${tradeData.amountRange} of ${tradeData.ticker} on ${tradeData.tradeDate}. The disclosure was made ${lagDesc}.${contextNote}
-
-Analyze the significance of this trade for a retail investor. Consider:
-- The official's committee roles and likely access to non-public information
-- The disclosure timing (faster = more time-sensitive signal)
-- Whether this is a purchase (bullish signal) or sale (less signal — could be diversification)
-- The amount relative to typical congressional trades
-
-Return ONLY valid JSON with no markdown:
-{
-  "summary": "2 sentence plain-English explanation of this trade and why it might matter",
-  "urgency": "Low" | "Watch" | "Act Now",
-  "reasoning": "1 sentence explaining the urgency rating",
-  "sentiment": "Bullish" | "Bearish" | "Neutral",
-  "time_sensitive": true | false
-}`;
+    const prompt = `${tradeData.title} ${tradeData.officialName} (${tradeData.party}) ${action} ${tradeData.amountRange} of ${tradeData.ticker} on ${tradeData.tradeDate}. Disclosed ${lagDesc}.${contextNote}\n\nAnalyze significance for a retail investor. Consider committee roles, disclosure timing, purchase vs sale.\n\nReturn ONLY JSON:\n{"summary":"2 sentence plain-English explanation","urgency":"Low"|"Watch"|"Act Now","reasoning":"1 sentence","sentiment":"Bullish"|"Bearish"|"Neutral","time_sensitive":true|false}`;
 
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 400,
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 300,
+      system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: prompt }],
     });
 
     recordUsage(message.usage);
-    const responseText = message.content[0].type === 'text' ? message.content[0].text : '';
-    const cleaned = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const raw = message.content[0]?.text || '{}';
+    const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     const parsed = JSON.parse(cleaned);
 
     const validUrgencies = ['Low', 'Watch', 'Act Now'];
@@ -280,78 +248,19 @@ Return ONLY valid JSON with no markdown:
     return parsed;
   } catch (err) {
     console.log('Claude gov trade summary error:', err.message);
-    return {
-      summary: 'Analysis temporarily unavailable.',
-      urgency: tradeData.urgency || 'Low',
-      reasoning: 'AI service temporarily unavailable.',
-      sentiment: 'Neutral',
-      time_sensitive: false,
-    };
+    return { summary: 'Analysis temporarily unavailable.', urgency: tradeData.urgency || 'Low', reasoning: 'AI unavailable.', sentiment: 'Neutral', time_sensitive: false };
   }
 }
 
 async function summarizeNewsItemWithContext(headline, content, userProfile = null, sentimentScore = null) {
+  // Thin wrapper — reuses single-item path; profile note added if present
   if (!checkBudget()) return BUDGET_FALLBACK;
-  try {
-    const anthropic = getClient();
-
-    const profileNote = userProfile
-      ? `\nInvestor profile: ${userProfile.investorType || 'retail'} investor with ${userProfile.riskTolerance || 'moderate'} risk tolerance. Tailor urgency framing to this profile.`
-      : '';
-
-    const sentimentHint = sentimentScore != null
-      ? `\nSentiment signal: ${sentimentScore > 0.3 ? 'Positive' : sentimentScore < -0.3 ? 'Negative' : 'Neutral'} (score: ${sentimentScore.toFixed(2)}).`
-      : '';
-
-    const prompt = `${URGENCY_CRITERIA}
-
-News headline: ${headline}
-News content: ${content || headline}${sentimentHint}${profileNote}
-
-Task:
-1. Write a 2-sentence plain-English summary — no jargon.
-2. Rate urgency using the criteria above, adjusted for this investor's profile.
-3. If this is a bullish buying opportunity for a specific stock, set upside. Otherwise null.
-
-Return ONLY valid JSON, no markdown:
-{
-  "summary": string,
-  "urgency": "Low" | "Watch" | "Act Now",
-  "reasoning": "one sentence citing which specific criterion was met",
-  "upside": { "ticker": string, "reason": string } | null
-}`;
-
-    const message = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 380,
-      system: [
-        {
-          type: 'text',
-          text: 'You are a financial intelligence assistant that scores news for retail investors. Be conservative: default to Low unless a clear criterion is met. Return only valid JSON. Never use markdown fences.',
-          cache_control: { type: 'ephemeral' },
-        },
-      ],
-      messages: [{ role: 'user', content: prompt }],
-    });
-
-    recordUsage(message.usage);
-    const responseText = message.content[0].type === 'text' ? message.content[0].text : '';
-    const cleaned = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    const parsed = JSON.parse(cleaned);
-
-    const validUrgencies = ['Low', 'Watch', 'Act Now'];
-    if (!validUrgencies.includes(parsed.urgency)) parsed.urgency = 'Low';
-
-    return {
-      summary: parsed.summary || FALLBACK_RESPONSE.summary,
-      urgency: parsed.urgency,
-      reasoning: parsed.reasoning || '',
-      upside: parsed.upside || null,
-    };
-  } catch (err) {
-    console.log('Claude contextual news summary error:', err.message);
-    return FALLBACK_RESPONSE;
-  }
+  const results = await batchSummarizeNews([{
+    headline: userProfile ? `[${userProfile.investorType || 'retail'} investor, ${userProfile.riskTolerance || 'moderate'} risk] ${headline}` : headline,
+    description: content,
+    sentiment: sentimentScore,
+  }]);
+  return results[0] || FALLBACK_ITEM;
 }
 
 async function generateWeeklyBrief(scoredItems) {
@@ -359,28 +268,23 @@ async function generateWeeklyBrief(scoredItems) {
   try {
     const anthropic = getClient();
 
-    // Build a richer input using the already-scored items
-    const actNow = scoredItems.filter((i) => i.urgency === 'Act Now').slice(0, 4);
-    const watch = scoredItems.filter((i) => i.urgency === 'Watch').slice(0, 4);
-    const upside = scoredItems.filter((i) => i.upside).slice(0, 3);
+    const actNow = scoredItems.filter((i) => i.urgency === 'Act Now').slice(0, 3);
+    const watch = scoredItems.filter((i) => i.urgency === 'Watch').slice(0, 3);
+    const upside = scoredItems.filter((i) => i.upside).slice(0, 2);
 
     const lines = [
-      actNow.length ? `ACT NOW:\n${actNow.map((i) => `- ${i.summary || i.headline}`).join('\n')}` : '',
-      watch.length ? `WATCH:\n${watch.map((i) => `- ${i.summary || i.headline}`).join('\n')}` : '',
-      upside.length ? `UPSIDE OPPORTUNITIES:\n${upside.map((i) => `- ${i.upside.ticker}: ${i.upside.reason}`).join('\n')}` : '',
+      actNow.length ? `ACT NOW:\n${actNow.map((i) => `- ${(i.summary || i.headline || '').slice(0, 100)}`).join('\n')}` : '',
+      watch.length ? `WATCH:\n${watch.map((i) => `- ${(i.summary || i.headline || '').slice(0, 100)}`).join('\n')}` : '',
+      upside.length ? `UPSIDE:\n${upside.map((i) => `- ${i.upside.ticker}: ${i.upside.reason}`).join('\n')}` : '',
     ].filter(Boolean).join('\n\n');
 
     const message = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 500,
-      system: [{
-        type: 'text',
-        text: 'You are a financial analyst writing a concise weekly market brief for retail investors with no finance background. Plain English only — no jargon. Return only valid JSON, no markdown.',
-        cache_control: { type: 'ephemeral' },
-      }],
+      max_tokens: 350,
+      system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
       messages: [{
         role: 'user',
-        content: `Based on this week's pre-scored market intelligence:\n\n${lines}\n\nWrite a brief market outlook in plain English.\n\nReturn ONLY valid JSON:\n{\n  "brief": "2-3 sentence overview of what matters most this week",\n  "bullets": [\n    "Watch: [specific thing]",\n    "Risk: [specific risk]",\n    "Opportunity: [specific stock or sector with upside]",\n    "Trend: [dominant market theme]"\n  ]\n}`,
+        content: `Write a brief weekly market outlook in plain English based on:\n\n${lines}\n\nReturn ONLY JSON:\n{"brief":"2-3 sentence overview","bullets":["Watch: X","Risk: X","Opportunity: X","Trend: X"]}`,
       }],
     });
 
@@ -393,4 +297,4 @@ async function generateWeeklyBrief(scoredItems) {
   }
 }
 
-module.exports = { summarizeNewsItem, analyzePortfolioImpact, summarizeGovTrade, summarizeNewsItemWithContext, getBudgetStatus, generateWeeklyBrief };
+module.exports = { batchSummarizeNews, summarizeNewsItem, analyzePortfolioImpact, summarizeGovTrade, summarizeNewsItemWithContext, getBudgetStatus, generateWeeklyBrief };

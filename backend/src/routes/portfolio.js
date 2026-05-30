@@ -2,10 +2,11 @@ const express = require('express');
 const router = express.Router();
 const { getStockQuote } = require('../services/finnhub');
 const { getGeneralFeed } = require('../services/marketaux');
-const { summarizeNewsItem, analyzePortfolioImpact } = require('../services/claude');
+const { batchSummarizeNews, analyzePortfolioImpact } = require('../services/claude');
 const NodeCache = require('node-cache');
 
-const impactCache = new NodeCache({ stdTTL: 180 }); // 3-min cache per holdings set
+const impactCache = new NodeCache({ stdTTL: 180 });
+const feedCache = new NodeCache({ stdTTL: 1200 }); // mirrors feed route TTL
 
 // GET /api/portfolio/impact?holdings=AAPL:10,BTC:0.5
 router.get('/impact', async (req, res, next) => {
@@ -53,14 +54,16 @@ router.get('/impact', async (req, res, next) => {
 
     const totalValue = holdingsWithPrices.reduce((sum, h) => sum + (h.value || 0), 0);
 
-    // Score the news with AI so portfolio analysis gets pre-computed summaries + urgency
+    // Reuse the feed cache if available — avoids re-scoring news already scored
     const tickers = new Set(holdingsList.map((h) => h.ticker));
-    const scoredNews = await Promise.all(
-      rawNews.slice(0, 15).map(async (item) => {
-        const ai = await summarizeNewsItem(item.headline, item.description, item.sentiment);
-        return { ...item, ...ai };
-      })
-    );
+    let scoredNews;
+    const cachedFeed = feedCache.get('feed_main');
+    if (cachedFeed?.items?.length) {
+      scoredNews = cachedFeed.items;
+    } else {
+      const scores = await batchSummarizeNews(rawNews.slice(0, 15));
+      scoredNews = rawNews.slice(0, 15).map((item, i) => ({ ...item, ...scores[i] }));
+    }
 
     // Prioritise news that explicitly mentions held tickers
     scoredNews.sort((a, b) => {
