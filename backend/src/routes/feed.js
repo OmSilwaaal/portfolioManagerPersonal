@@ -59,9 +59,10 @@ router.get('/', async (req, res, next) => {
     );
 
     const urgencyOrder = { 'Act Now': 3, Watch: 2, Low: 1 };
-    newsWithSummaries.sort((a, b) => (urgencyOrder[b.urgency] || 0) - (urgencyOrder[a.urgency] || 0));
+    const filtered = newsWithSummaries.filter((item) => item.relevant !== false);
+    filtered.sort((a, b) => (urgencyOrder[b.urgency] || 0) - (urgencyOrder[a.urgency] || 0));
 
-    const result = { items: newsWithSummaries, cachedAt: new Date().toISOString() };
+    const result = { items: filtered, cachedAt: new Date().toISOString() };
     cache.set(cacheKey, result);
     res.json(result);
   } catch (err) {

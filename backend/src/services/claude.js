@@ -94,12 +94,14 @@ News headline: ${headline}
 News content: ${content || headline}${sentimentHint}
 
 Task:
-1. Write a 2-sentence plain-English summary — no jargon, no acronyms, explain it as if to a friend with no finance background.
-2. Rate urgency using the criteria above.
-3. If this news is a strong bullish catalyst for a specific stock that someone might want to BUY (upside opportunity), identify it. Otherwise set upside to null.
+1. First decide: is this article genuinely about financial markets, stocks, crypto, commodities, economic policy, or company performance? If it is NOT (e.g. recipes, travel, celebrity gossip, sports scores, general lifestyle content), set relevant to false and urgency to "Low".
+2. If relevant, write a 2-sentence plain-English summary — no jargon, no acronyms.
+3. Rate urgency using the criteria above.
+4. If this news is a strong bullish catalyst for a specific stock that someone might want to BUY (upside opportunity), identify it. Otherwise set upside to null.
 
 Return ONLY valid JSON, no markdown:
 {
+  "relevant": true | false,
   "summary": string,
   "urgency": "Low" | "Watch" | "Act Now",
   "reasoning": "one sentence citing which specific criterion was met",
@@ -128,6 +130,7 @@ Return ONLY valid JSON, no markdown:
     if (!validUrgencies.includes(parsed.urgency)) parsed.urgency = 'Low';
 
     return {
+      relevant: parsed.relevant !== false,
       summary: parsed.summary || FALLBACK_RESPONSE.summary,
       urgency: parsed.urgency,
       reasoning: parsed.reasoning || '',
