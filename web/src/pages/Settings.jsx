@@ -280,11 +280,98 @@ function ProfileView({ onBack }) {
   )
 }
 
+function DeleteAccountModal({ onCancel, onConfirmed }) {
+  const [step, setStep] = useState(1) // 1 = warning, 2 = final confirm
+  const [deleting, setDeleting] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleFinalDelete = async () => {
+    setDeleting(true)
+    setError('')
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/user`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.message || 'Failed to delete account.')
+      }
+      await supabase.auth.signOut()
+      onConfirmed()
+    } catch (err) {
+      setError(err.message)
+      setDeleting(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)' }}>
+      <div className="bg-[#141414] border border-[#2a2a2a] rounded-2xl p-6 w-full max-w-sm">
+        {step === 1 ? (
+          <>
+            <div className="flex items-center justify-center w-12 h-12 rounded-full bg-red-500/10 mb-4 mx-auto">
+              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+            </div>
+            <h2 className="text-white font-bold text-lg text-center mb-2">Delete your account?</h2>
+            <p className="text-[#6b7280] text-sm text-center mb-6 leading-relaxed">
+              This will permanently delete your account, portfolio data, and all settings. This cannot be undone.
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => setStep(2)}
+                className="w-full py-3 rounded-xl text-sm font-semibold bg-red-500 hover:bg-red-600 text-white transition-colors"
+              >
+                Yes, delete my account
+              </button>
+              <button
+                onClick={onCancel}
+                className="w-full py-3 rounded-xl text-sm font-medium text-[#a1a1aa] hover:text-white hover:bg-[#1f1f1f] transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <h2 className="text-white font-bold text-lg text-center mb-2">Are you absolutely sure?</h2>
+            <p className="text-[#6b7280] text-sm text-center mb-6 leading-relaxed">
+              There is no way back. Your account will be gone forever.
+            </p>
+            {error && <p className="text-red-400 text-xs text-center mb-4">{error}</p>}
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={handleFinalDelete}
+                disabled={deleting}
+                className="w-full py-3 rounded-xl text-sm font-semibold bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white transition-colors"
+              >
+                {deleting ? 'Deleting…' : 'Delete permanently'}
+              </button>
+              <button
+                onClick={onCancel}
+                disabled={deleting}
+                className="w-full py-3 rounded-xl text-sm font-medium text-[#a1a1aa] hover:text-white hover:bg-[#1f1f1f] disabled:opacity-50 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function AccountView({ onBack }) {
   const navigate = useNavigate()
   const dispatch = useDispatch()
   const { user } = useAuth()
   const [signingOut, setSigningOut] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
 
   const meta = user?.user_metadata ?? {}
   const displayName = meta.full_name ?? meta.name ?? meta.display_name ?? null
@@ -298,8 +385,20 @@ function AccountView({ onBack }) {
     navigate('/', { replace: true })
   }
 
+  const handleDeleted = () => {
+    dispatch(resetPreferences())
+    navigate('/', { replace: true })
+  }
+
   return (
     <>
+      {showDeleteModal && (
+        <DeleteAccountModal
+          onCancel={() => setShowDeleteModal(false)}
+          onConfirmed={handleDeleted}
+        />
+      )}
+
       <BackButton onClick={onBack} />
       <h1 className="text-xl font-bold text-white mb-6">Account</h1>
 
@@ -321,7 +420,7 @@ function AccountView({ onBack }) {
       <button
         onClick={handleSignOut}
         disabled={signingOut}
-        className="w-full flex items-center justify-center gap-2 bg-[#141414] hover:bg-red-500/10 border border-[#2a2a2a] hover:border-red-500/30 text-[#a1a1aa] hover:text-red-400 text-sm font-medium py-3.5 rounded-xl transition-colors"
+        className="w-full flex items-center justify-center gap-2 bg-[#141414] hover:bg-red-500/10 border border-[#2a2a2a] hover:border-red-500/30 text-[#a1a1aa] hover:text-red-400 text-sm font-medium py-3.5 rounded-xl transition-colors mb-3"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
@@ -329,6 +428,17 @@ function AccountView({ onBack }) {
           <line x1="21" y1="12" x2="9" y2="12"/>
         </svg>
         {signingOut ? 'Signing out…' : 'Sign out'}
+      </button>
+
+      <button
+        onClick={() => setShowDeleteModal(true)}
+        className="w-full flex items-center justify-center gap-2 bg-transparent hover:bg-red-500/5 border border-transparent hover:border-red-500/20 text-[#4b5563] hover:text-red-500 text-sm font-medium py-3 rounded-xl transition-colors"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+          <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+        </svg>
+        Delete account
       </button>
     </>
   )

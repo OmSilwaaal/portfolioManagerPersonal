@@ -21,6 +21,7 @@ const { router: explainRouter } = require('./routes/stockExplainer');
 const { router: stripeRouter } = require('./routes/stripe');
 const snaptradeRouter = require('./routes/snaptrade');
 const portfolioImportRouter = require('./routes/portfolioImport');
+const userRouter = require('./routes/user');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const { sessionMiddleware, requireAuth } = require('./middleware/auth');
 const { getBudgetStatus } = require('./services/claude');
@@ -111,6 +112,7 @@ app.use('/api/explain', aiLimiter, explainRouter);
 app.use('/api/stripe', stripeRouter);
 app.use('/api/snaptrade', requireAuth, snaptradeRouter);
 app.use('/api/portfolio-import', requireAuth, portfolioImportRouter);
+app.use('/api/user', requireAuth, userRouter);
 
 // Health check
 app.get('/health', (_req, res) => {
