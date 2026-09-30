@@ -33,6 +33,12 @@ warmCoinList();
 const { startAlertPoller } = require('./services/alertPoller');
 startAlertPoller();
 
+// Initialize High-Speed Solana Pipeline
+const { startGrpcStreamer } = require('./services/grpcStreamer');
+const { watchRedisForAlpha } = require('./services/executionEngine');
+startGrpcStreamer().catch(err => console.error('[GRPC STREAMER] Init Error:', err));
+watchRedisForAlpha();
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 

@@ -9,7 +9,10 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.0",
+    "@solana/web3.js": "^1.99.0",
     "@supabase/supabase-js": "^2.106.0",
+    "@triton-one/yellowstone-grpc": "^8.0.0",
+    "@upstash/redis": "^1.39.0",
     "axios": "^1.6.0",
     "better-sqlite3": "^9.4.0",
     "cors": "^2.8.5",

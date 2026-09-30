@@ -28,6 +28,8 @@ import Portfolio from './pages/Portfolio'
 import PrivacyPolicy from './pages/PrivacyPolicy'
 import Terms from './pages/Terms'
 import Disclaimer from './pages/Disclaimer'
+import TradingTerminal from './pages/TradingTerminal'
+import PrivyProviderWrapper from './providers/PrivyProviderWrapper'
 
 // Import API modules to register endpoints
 import './api/stocksApi'
@@ -144,6 +146,7 @@ function AppInner() {
         <Route path="/commodities" element={<Commodities />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/pricing" element={<Pricing />} />
+        <Route path="/terminal" element={<TradingTerminal />} />
       </Route>
     </Routes>
   )
@@ -152,9 +155,11 @@ function AppInner() {
 export default function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <AppInner />
-      </AuthProvider>
+      <PrivyProviderWrapper>
+        <AuthProvider>
+          <AppInner />
+        </AuthProvider>
+      </PrivyProviderWrapper>
     </BrowserRouter>
   )
 }
