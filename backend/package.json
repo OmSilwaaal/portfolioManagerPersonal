@@ -26,6 +26,9 @@
     "uuid": "9.0.1"
   },
   "overrides": {
-    "uuid": "$uuid"
+    "uuid": "9.0.1",
+    "rpc-websockets": {
+      "uuid": "9.0.1"
+    }
   }
 }
