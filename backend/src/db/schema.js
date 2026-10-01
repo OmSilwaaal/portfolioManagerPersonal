@@ -1,7 +1,10 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 
-const DB_PATH = path.join(__dirname, '../../market_intelligence.sqlite');
+// On Railway, mount a Volume at /data to persist across deploys.
+// Locally falls back to the project root.
+const DB_PATH = process.env.DB_PATH ||
+  path.join(process.env.RAILWAY_VOLUME_MOUNT_PATH || __dirname, '../../market_intelligence.sqlite');
 
 let db;
 
