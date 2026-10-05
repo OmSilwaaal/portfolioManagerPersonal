@@ -1,14 +1,5 @@
 require('dotenv').config();
 const { Redis } = require('@upstash/redis');
-const { 
-  Connection, 
-  Keypair, 
-  PublicKey, 
-  VersionedTransaction, 
-  TransactionMessage, 
-  SystemProgram, 
-  LAMPORTS_PER_SOL 
-} = require('@solana/web3.js');
 const axios = require('axios');
 
 // Initialize Upstash Redis client
@@ -19,7 +10,12 @@ const redis = new Redis({
 
 const HELIUS_API_KEY = process.env.HELIUS_API_KEY;
 const HELIUS_RPC_URL = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
-const connection = new Connection(HELIUS_RPC_URL, 'confirmed');
+
+// Lazy-load Solana connection to avoid crashing if WebSocket not available
+function getSolanaConnection() {
+  const { Connection } = require('@solana/web3.js');
+  return new Connection(HELIUS_RPC_URL, 'confirmed');
+}
 
 // Jito Tip Accounts (randomly select one during execution to distribute load)
 const JITO_TIP_ACCOUNTS = [
@@ -94,7 +90,7 @@ async function executeJitoSwap(swapDetails) {
     instructions.push(jitoTipInstruction);
 
     // 3. Get latest blockhash
-    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+    const { blockhash, lastValidBlockHeight } = await getSolanaConnection().getLatestBlockhash('confirmed');
 
     // 4. Build Versioned Transaction
     const messageV0 = new TransactionMessage({
