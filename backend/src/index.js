@@ -1,4 +1,8 @@
 require('dotenv').config();
+// Polyfill WebSocket for Node 20 (required by @solana/web3.js and @upstash/redis)
+if (typeof globalThis.WebSocket === 'undefined') {
+  globalThis.WebSocket = require('ws');
+}
 const express = require('express');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
