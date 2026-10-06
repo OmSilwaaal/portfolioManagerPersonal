@@ -17,6 +17,7 @@ const calendarRouter = require('./routes/calendar');
 const portfolioRouter = require('./routes/portfolio');
 const alertsRouter = require('./routes/alerts');
 const govTradesRouter = require('./routes/govTrades');
+const radarRouter = require('./routes/radar');
 const commoditiesRouter = require('./routes/commodities');
 const preferencesRouter = require('./routes/preferences');
 const searchRouter = require('./routes/search');
@@ -47,6 +48,9 @@ if (process.env.ENABLE_SOLANA_PIPELINE === 'true') {
   startGrpcStreamer().catch(err => console.error('[GRPC STREAMER] Init Error:', err));
   watchRedisForAlpha();
 }
+
+// Memecoin radar collector (Solana new pools → snapshots). Opt-in via ENABLE_RADAR=true.
+require('./radar').startRadar();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -134,6 +138,7 @@ app.use('/api/stocks', aiLimiter, requireAuth, stocksRouter);
 app.use('/api/crypto', aiLimiter, requireAuth, cryptoRouter);
 app.use('/api/commodities', commoditiesLimiter, requireAuth, commoditiesRouter);
 app.use('/api/gov-trades', aiLimiter, requireAuth, govTradesRouter);
+app.use('/api/radar', radarRouter); // admin-secret protected inside the router
 
 // Lower-cost routes — still require auth to prevent enumeration
 app.use('/api/alerts', requireAuth, alertsRouter);
