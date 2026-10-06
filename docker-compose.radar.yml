@@ -1,0 +1,17 @@
+# Free, information-only memecoin radar running on your own machine.
+#   Start:   docker compose -f docker-compose.radar.yml up -d --build
+#   Logs:    docker compose -f docker-compose.radar.yml logs -f
+#   Report:  docker compose -f docker-compose.radar.yml exec radar node src/radar/report.js
+#   Stop:    docker compose -f docker-compose.radar.yml down      (data stays in ./radar-data)
+services:
+  radar:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.radar
+    restart: unless-stopped          # comes back by itself after a crash or a Docker restart
+    volumes:
+      - ./radar-data:/data           # the database lives here on your Mac, outside the container
+    environment:
+      RADAR_RETENTION_DAYS: "14"
+      # Paid PumpPortal trade feed is OFF. Only add PUMPPORTAL_API_KEY here if you ever decide to pay for it.
+    stop_grace_period: 20s

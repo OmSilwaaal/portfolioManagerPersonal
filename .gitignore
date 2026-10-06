@@ -3,6 +3,8 @@
 *.env
 .env.local
 .env.*.local
+.env.*
+!.env.example
 
 # Dependencies
 node_modules/
@@ -38,3 +40,8 @@ desktop.ini
 
 # Local scratch scripts with credentials
 backend/test_supabase.js
+*.sqlite-shm
+*.sqlite-wal
+
+# Local radar database (Docker volume)
+radar-data/
