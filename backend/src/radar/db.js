@@ -6,7 +6,7 @@ const path = require('path');
 const DB_PATH = process.env.RADAR_DB_PATH ||
   path.join(process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(__dirname, '../..'), 'radar.sqlite');
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 let db;
 
 function getRadarDb() {
@@ -37,6 +37,18 @@ function migrate() {
     }
   }
   initSchema();
+  // v3: cache the latest snapshot on the token row so the hot "who's due" queries never scan snapshot history
+  const tokenCols = db.prepare('PRAGMA table_info(token)').all().map((c) => c.name);
+  for (const [col, type] of [['last_snapshot_ts', 'INTEGER'], ['last_vol_h1', 'REAL'], ['last_liq', 'REAL']]) {
+    if (!tokenCols.includes(col)) db.exec(`ALTER TABLE token ADD COLUMN ${col} ${type}`);
+  }
+  if (version < 3) {
+    db.exec(`UPDATE token SET
+      last_snapshot_ts = (SELECT MAX(ts) FROM market_snapshot s WHERE s.token_address = token.token_address),
+      last_vol_h1 = (SELECT vol_h1 FROM market_snapshot s WHERE s.token_address = token.token_address ORDER BY ts DESC LIMIT 1),
+      last_liq = (SELECT liquidity_usd FROM market_snapshot s WHERE s.token_address = token.token_address ORDER BY ts DESC LIMIT 1)`);
+  }
+  db.exec('CREATE INDEX IF NOT EXISTS idx_token_live ON token(pool_created_ts) WHERE dead_ts IS NULL');
   db.pragma(`user_version = ${SCHEMA_VERSION}`);
 }
 
@@ -103,6 +115,54 @@ function initSchema() {
       PRIMARY KEY (token_address, ts)
     ) WITHOUT ROWID;
 
+    -- Launch facts from the PumpPortal create event (instant) + token metadata socials (IPFS, fetched later but
+    -- immutable since creation, so usable from launch time).
+    CREATE TABLE IF NOT EXISTS token_launch (
+      token_address  TEXT PRIMARY KEY,
+      ts             INTEGER NOT NULL,
+      creator        TEXT,
+      dev_buy_sol    REAL,
+      dev_buy_tokens REAL,
+      mcap_sol       REAL,
+      uri            TEXT,
+      mayhem         INTEGER,
+      meta_ts        INTEGER,
+      meta_attempts  INTEGER NOT NULL DEFAULT 0,
+      has_twitter    INTEGER,
+      has_telegram   INTEGER,
+      has_website    INTEGER,
+      desc_len       INTEGER
+    );
+
+    -- DexScreener paid boosts / enhanced profiles / community takeovers. ts = when WE first saw it (point-in-time).
+    CREATE TABLE IF NOT EXISTS token_promo (
+      token_address TEXT    NOT NULL,
+      kind          TEXT    NOT NULL,      -- 'boost' | 'profile' | 'cto'
+      amount_key    REAL    NOT NULL,      -- boost totalAmount (a new top-up = a new row); 0 otherwise
+      ts            INTEGER NOT NULL,
+      links_json    TEXT,
+      PRIMARY KEY (token_address, kind, amount_key)
+    ) WITHOUT ROWID;
+
+    -- Individual trades from the paid PumpPortal stream (only for tokens we chose to watch, within budget).
+    CREATE TABLE IF NOT EXISTS trade (
+      token_address TEXT    NOT NULL,
+      ts_ms         INTEGER NOT NULL,      -- when we received it
+      sig           TEXT    NOT NULL,
+      wallet        TEXT,
+      is_buy        INTEGER NOT NULL,
+      sol           REAL,
+      tokens        REAL,
+      mcap_sol      REAL,
+      v_sol         REAL,
+      PRIMARY KEY (token_address, ts_ms, sig)
+    ) WITHOUT ROWID;
+
+    CREATE TABLE IF NOT EXISTS radar_kv (
+      key   TEXT PRIMARY KEY,
+      value TEXT
+    );
+
     -- Cached market features (point-in-time, so final the moment they're written). Bump version to invalidate.
     CREATE TABLE IF NOT EXISTS feature_snapshot (
       token_address TEXT    NOT NULL,
@@ -115,3 +175,14 @@ function initSchema() {
 }
 
 module.exports = { getRadarDb, DB_PATH };
+
+function kvGet(key) {
+  const r = getRadarDb().prepare('SELECT value FROM radar_kv WHERE key = ?').get(key);
+  return r ? r.value : null;
+}
+function kvSet(key, value) {
+  getRadarDb().prepare('INSERT INTO radar_kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, String(value));
+}
+
+module.exports.kvGet = kvGet;
+module.exports.kvSet = kvSet;

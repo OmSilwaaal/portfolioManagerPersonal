@@ -1,5 +1,6 @@
 const axios = require('axios');
 const { getRadarDb } = require('./db');
+const { mapLimit } = require('./util');
 
 // Holder / authority / creator-history data from Rugcheck (free, no key). Each check is stored as a timestamped row,
 // and features only read the latest row with ts <= t, so a check can never leak into the past.
@@ -48,19 +49,17 @@ function parseReport(r, tokenCreatedTs) {
 }
 
 function pending() {
-  const db = getRadarDb();
   const ts = now();
-  return db.prepare(`
+  return getRadarDb().prepare(`
     SELECT t.token_address, t.pool_created_ts,
-           (SELECT MAX(ts) FROM token_security x WHERE x.token_address = t.token_address) AS last_check,
-           (SELECT vol_h1 FROM market_snapshot s WHERE s.token_address = t.token_address ORDER BY ts DESC LIMIT 1) AS vol_h1
+           (SELECT MAX(ts) FROM token_security x WHERE x.token_address = t.token_address) AS last_check
     FROM token t
-    WHERE t.dead_ts IS NULL AND ? - t.pool_created_ts BETWEEN ? AND 6 * 3600
-  `).all(ts, FIRST_CHECK_AGE).filter((t) => {
-    if ((t.vol_h1 || 0) < MIN_VOL_H1) return false;
+    WHERE t.dead_ts IS NULL AND t.pool_created_ts BETWEEN ? AND ? AND t.last_vol_h1 >= ?
+  `).all(ts - 6 * 3600, ts - FIRST_CHECK_AGE, MIN_VOL_H1).filter((t) => {
     if (!t.last_check) return true;
     return ts - t.pool_created_ts >= RECHECK_AGE && t.last_check - t.pool_created_ts < RECHECK_AGE;
-  }).sort((a, b) => b.pool_created_ts - a.pool_created_ts).slice(0, PER_TICK);
+  }).sort((a, b) => (a.last_check ? 1 : 0) - (b.last_check ? 1 : 0) || b.pool_created_ts - a.pool_created_ts)
+    .slice(0, PER_TICK);   // first checks before rechecks, newest first
 }
 
 async function checkSecurity() {
@@ -71,8 +70,10 @@ async function checkSecurity() {
     VALUES (@tok, @ts, @creator, @rc_score, @danger_count, @top1_pct_ex, @top10_pct_ex, @creator_pct, @insider_pct, @mint_auth, @freeze_auth,
      @holders, @lp_locked_pct, @rugged, @creator_prev_count, @creator_prev_dead_share, @risks_json)`);
   const setCreator = db.prepare('UPDATE token SET creator = ? WHERE token_address = ? AND creator IS NULL');
-  let done = 0, failed = 0;
-  for (const t of pending()) {
+  let done = 0, failed = 0, limited = false;
+  // Two lanes in parallel, each pacing itself; a 429 stops both lanes for this tick.
+  await mapLimit(pending(), 2, async (t) => {
+    if (limited) return;
     try {
       const { data } = await axios.get(REPORT(t.token_address), { timeout: 15000 });
       const row = parseReport(data, t.pool_created_ts);
@@ -82,19 +83,22 @@ async function checkSecurity() {
       done++;
     } catch (e) {
       failed++;
-      if (e.response?.status === 429) { console.warn('[radar] rugcheck rate limited, backing off this tick'); break; }
+      if (e.response?.status === 429) { limited = true; console.warn('[radar] rugcheck rate limited, backing off this tick'); }
     }
     await sleep(SPACING_MS);
-  }
+  });
   return { checked: done, failed };
 }
 
-let timer = null;
+let timer = null, inFlight = false;
 function start() {
   if (timer) return;
   timer = setInterval(async () => {
+    if (inFlight) return;                 // never stack ticks if Rugcheck is slow
+    inFlight = true;
     try { const r = await checkSecurity(); if (r.checked || r.failed) console.log('[radar] security', r); }
     catch (e) { console.error('[radar] security error:', e.message); }
+    finally { inFlight = false; }
   }, CHECK_EVERY_MS);
 }
 function stop() { clearInterval(timer); timer = null; }

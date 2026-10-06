@@ -119,7 +119,25 @@ function runReport({ models, horizons = HORIZONS, sinceHours = null, includeTpsl
   };
 }
 
-module.exports = { runReport };
+// "How fast must a user act?" Re-runs one model with different signal→fill delays. If the edge only exists at a
+// few seconds' latency, it belongs to bots and a human-facing ticker can't deliver it — this measures that directly.
+function latencySweep({ model = 'market_v1_safe', strategy = '60m', latencies = [5, 15, 45, 90, 180, 300], sinceHours = null, ...rawOpt } = {}) {
+  const opt = Object.fromEntries(Object.entries(rawOpt).filter(([, v]) => v !== undefined && !Number.isNaN(v)));
+  const universe = loadUniverse({ sinceTs: sinceHours ? Math.floor(Date.now() / 1000) - sinceHours * 3600 : 0 });
+  const strat = strategy === 'tpsl' ? { type: 'tpsl' } : { type: 'horizon', minutes: Number(String(strategy).replace('m', '')) };
+  const threshold = opt.threshold ?? MODEL_THRESHOLD[model];
+  return {
+    model, strategy, assumptions: { ...DEFAULTS, ...opt, threshold: threshold ?? DEFAULTS.threshold },
+    rows: latencies.map((latencySec) => {
+      const o = { ...opt, latencySec, ...(threshold !== undefined ? { threshold } : {}) };
+      const sim = simulate(universe, { model, strategy: strat, ...o });
+      const s = summarize(sim.trades.map((t) => t.netReturn));
+      return { latencySec, n: s.n, winRate: s.winRate, mean: s.mean, median: s.median, rugRate: s.rugRate };
+    }),
+  };
+}
+
+module.exports = { runReport, latencySweep };
 
 if (require.main === module) {
   const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > -1 ? process.argv[i + 1] : d; };

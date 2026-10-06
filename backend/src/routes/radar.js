@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { getRadarDb } = require('../radar/db');
-const { runReport } = require('../radar/report');
+const { runReport, latencySweep } = require('../radar/report');
+const stream = require('../radar/stream');
 const { requireAdminSecret } = require('../middleware/validate');
 
 // Research endpoints — admin only. Never expose raw signal scores/reports publicly until the stats justify it.
@@ -12,6 +13,11 @@ router.get('/status', (req, res) => {
   const now = Math.floor(Date.now() / 1000);
   res.json({
     enabled: process.env.ENABLE_RADAR === 'true',
+    pumpportal: stream.status(),
+    launchesLastHour: db.prepare('SELECT COUNT(*) c FROM token WHERE first_seen_ts > ?').get(now - 3600).c,
+    promosSeen: db.prepare('SELECT COUNT(*) c FROM token_promo').get().c,
+    metadataFetched: db.prepare('SELECT COUNT(*) c FROM token_launch WHERE meta_ts IS NOT NULL').get().c,
+    tradesStored: db.prepare('SELECT COUNT(*) c FROM trade').get().c,
     tokens: db.prepare('SELECT COUNT(*) c FROM token').get().c,
     tracking: db.prepare('SELECT COUNT(*) c FROM token WHERE dead_ts IS NULL AND ? - pool_created_ts < 86400').get(now).c,
     deadGone: db.prepare("SELECT COUNT(*) c FROM token WHERE dead_reason = 'gone'").get().c,
@@ -41,10 +47,23 @@ router.get('/report', (req, res, next) => {
     res.json(runReport({
       threshold: q.threshold ? Number(q.threshold) : undefined,
       sizeUsd: q.size ? Number(q.size) : undefined,
+      latencySec: q.latency ? Number(q.latency) : undefined,
       sinceHours: q.sinceHours ? Number(q.sinceHours) : null,
       models: q.models ? String(q.models).split(',') : undefined,
       horizons: q.horizons ? String(q.horizons).split(',').map(Number) : undefined,
       includeTpsl: q.tpsl !== '0',
+    }));
+  } catch (err) { next(err); }
+});
+
+// GET /api/radar/latency?model=market_v1_safe&strategy=60m — edge vs. how late you act (5s … 5min)
+router.get('/latency', (req, res, next) => {
+  try {
+    const q = req.query;
+    res.json(latencySweep({
+      model: q.model || undefined, strategy: q.strategy || undefined,
+      sinceHours: q.sinceHours ? Number(q.sinceHours) : null,
+      threshold: q.threshold ? Number(q.threshold) : undefined,
     }));
   } catch (err) { next(err); }
 });

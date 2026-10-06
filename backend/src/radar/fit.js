@@ -9,8 +9,10 @@ const NUMERIC = ['volume_accel', 'vol_trend', 'txn_accel', 'buy_pressure', 'buy_
   'price_chg_5m', 'price_chg_15m', 'price_chg_60m', 'liq_delta_15m', 'realized_vol_30m', 'drawdown_from_peak',
   'mins_since_peak', 'up_streak', 'curve_progress', 'age_min', 'liquidity_usd', 'rank_vol_accel', 'mkt_buy_pressure',
   'mkt_activity', 'top10_pct_ex', 'top1_pct_ex', 'creator_pct', 'insider_pct', 'rc_score', 'danger_count',
-  'creator_prev_dead_share', 'creator_rug_rate_own'];
-const BINARY = ['has_sec', 'mint_auth', 'freeze_auth', 'migrated'];
+  'creator_prev_dead_share', 'creator_rug_rate_own', 'dev_buy_sol', 'boost_total', 'unique_buyers_5m', 'buyer_hhi_5m',
+  'net_flow_sol_5m', 'sell_ratio_5m'];
+const BINARY = ['has_sec', 'mint_auth', 'freeze_auth', 'migrated', 'has_twitter', 'has_telegram', 'has_website',
+  'has_profile', 'cto', 'dev_sold', 'mayhem'];
 const INTERACTIONS = [['volume_accel', 'buy_pressure'], ['price_chg_15m', 'volume_accel'], ['rank_vol_accel', 'txn_accel']];
 
 const EMBARGO_SEC = 8 * 3600;

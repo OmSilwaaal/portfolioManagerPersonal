@@ -87,35 +87,96 @@ function attachSecurity(rows, secRows) {
   }
 }
 
-// Did this token end up a rug within its first 6h? Used ONLY for creator history of earlier tokens, and only
-// counted once resolved (created+6h, or when it died), so it never uses outcomes unknown at decision time.
-function resolveOutcome(token, series) {
-  const horizon = token.pool_created_ts + CREATOR_RESOLVE_SECONDS;
-  const inWindow = series.filter((s) => s.ts <= horizon);
-  if (!inWindow.length) return null;
-  const peak = Math.max(...inWindow.map((s) => s.price_usd));
-  const last = inWindow[inWindow.length - 1].price_usd;
-  const dead = token.dead_ts && token.dead_ts <= horizon;
-  if (dead) return { resolvedTs: token.dead_ts, rug: token.dead_reason === 'gone' || last / peak < 0.1 };
-  if (series[series.length - 1].ts < horizon) return null;   // not enough history yet — unknown, not "fine"
-  return { resolvedTs: horizon, rug: last / peak < 0.1 };
-}
-
+// Did a creator's earlier token FAIL within its first 6h (pool vanished, went dead/inactive, or price collapsed >90%)?
+// Counted for a later token only once resolved (dead, or 6h passed) before that row's time — never future knowledge.
+// Uses the token table for every launch (a serial rugger's tokens mostly die before 15 min and never enter the
+// tradeable universe), plus the price series where we have one.
 function attachCreatorHistory(universe) {
+  const creators = new Set([...universe.values()].map((u) => u.token.creator).filter(Boolean));
+  if (!creators.size) { for (const u of universe.values()) for (const f of u.rows) { f.creator_seen_resolved = 0; f.creator_rug_rate_own = null; } return; }
+  const all = getRadarDb().prepare(`SELECT token_address, creator, pool_created_ts, dead_ts, dead_reason FROM token
+    WHERE creator IN (${[...creators].map(() => '?').join(',')})`).all(...creators);
   const byCreator = new Map();
-  for (const u of universe.values()) {
-    u.outcome = resolveOutcome(u.token, u.series);
-    if (!u.token.creator) continue;
-    if (!byCreator.has(u.token.creator)) byCreator.set(u.token.creator, []);
-    byCreator.get(u.token.creator).push(u);
+  for (const t of all) {
+    const horizon = t.pool_created_ts + CREATOR_RESOLVE_SECONDS;
+    let outcome = null;
+    if (t.dead_ts && t.dead_ts <= horizon && t.dead_reason !== 'unindexed') outcome = { resolvedTs: t.dead_ts, fail: true };
+    else {
+      const u = universe.get(t.token_address);
+      if (u && u.series[u.series.length - 1].ts >= horizon) {
+        const inWin = u.series.filter((s) => s.ts <= horizon);
+        const peak = Math.max(...inWin.map((s) => s.price_usd));
+        outcome = { resolvedTs: horizon, fail: inWin[inWin.length - 1].price_usd / peak < 0.1 };
+      } else if (!u && Date.now() / 1000 >= horizon && !t.dead_ts) outcome = { resolvedTs: horizon, fail: false };
+    }
+    if (!outcome) continue;
+    if (!byCreator.has(t.creator)) byCreator.set(t.creator, []);
+    byCreator.get(t.creator).push({ ...outcome, token: t.token_address, created: t.pool_created_ts });
   }
   for (const u of universe.values()) {
-    const sibs = u.token.creator ? byCreator.get(u.token.creator).filter((s) => s !== u && s.token.pool_created_ts < u.token.pool_created_ts && s.outcome) : [];
+    const sibs = (byCreator.get(u.token.creator) || []).filter((s) => s.token !== u.token.token_address && s.created < u.token.pool_created_ts);
     for (const f of u.rows) {
-      const done = sibs.filter((s) => s.outcome.resolvedTs <= f.ts);
+      const done = sibs.filter((s) => s.resolvedTs <= f.ts);
       f.creator_seen_resolved = done.length;
-      f.creator_rug_rate_own = done.length ? done.filter((s) => s.outcome.rug).length / done.length : null;
+      f.creator_rug_rate_own = done.length ? done.filter((s) => s.fail).length / done.length : null;
     }
+  }
+}
+
+// Launch facts (instant from PumpPortal) + metadata socials (IPFS content is immutable since launch, so usable from
+// launch time even though we fetch it later) + DexScreener promotions (only from when WE first saw them).
+function attachLaunchAndPromo(rows, launch, promos) {
+  let k = -1, boost = 0, profile = 0, cto = 0, profileLinks = null;
+  for (const f of rows) {
+    while (k + 1 < promos.length && promos[k + 1].ts <= f.ts) {
+      const p = promos[++k];
+      if (p.kind === 'boost') boost = Math.max(boost, p.amount_key);
+      if (p.kind === 'profile') { profile = 1; profileLinks = p.links_json; }
+      if (p.kind === 'cto') cto = 1;
+    }
+    const link = (name) => (profileLinks && profileLinks.includes(name) ? 1 : 0);
+    f.dev_buy_sol = launch ? launch.dev_buy_sol : null;
+    f.mayhem = launch ? launch.mayhem : null;
+    f.has_twitter = Math.max(launch?.has_twitter || 0, link('twitter'));
+    f.has_telegram = Math.max(launch?.has_telegram || 0, link('telegram'));
+    f.has_website = Math.max(launch?.has_website || 0, link('website'));
+    f.boost_total = boost;
+    f.has_profile = profile;
+    f.cto = cto;
+  }
+}
+
+// Wallet-level flow from the paid trade stream (null wherever we weren't watching the token yet — never guessed).
+const TRADE_WINDOW_MS = 5 * 60 * 1000;
+function attachTrades(rows, trades, creator) {
+  const first = trades.length ? trades[0].ts_ms : Infinity;
+  let lo = 0, hi = 0, devSold = 0;
+  for (const f of rows) {
+    const t = f.ts * 1000;
+    while (hi < trades.length && trades[hi].ts_ms <= t) {
+      if (!trades[hi].is_buy && creator && trades[hi].wallet === creator) devSold += trades[hi].sol || 0;
+      hi++;
+    }
+    while (lo < hi && trades[lo].ts_ms <= t - TRADE_WINDOW_MS) lo++;
+    if (t < first + 60 * 1000) {    // need at least a minute of coverage before trusting a 5-min window
+      f.unique_buyers_5m = f.unique_sellers_5m = f.buyer_hhi_5m = f.net_flow_sol_5m = f.sell_ratio_5m = f.dev_sold = null;
+      continue;
+    }
+    const buyers = new Map(), sellers = new Set();
+    let buySol = 0, sellSol = 0;
+    for (let i = lo; i < hi; i++) {
+      const x = trades[i];
+      if (x.is_buy) { buySol += x.sol || 0; buyers.set(x.wallet, (buyers.get(x.wallet) || 0) + (x.sol || 0)); }
+      else { sellSol += x.sol || 0; sellers.add(x.wallet); }
+    }
+    let hhi = null;
+    if (buySol > 0) { hhi = 0; for (const v of buyers.values()) hhi += (v / buySol) ** 2; }
+    f.unique_buyers_5m = buyers.size;
+    f.unique_sellers_5m = sellers.size;
+    f.buyer_hhi_5m = hhi;                                 // 1 = one wallet doing all the buying (fake/bundled pump)
+    f.net_flow_sol_5m = buySol - sellSol;
+    f.sell_ratio_5m = buySol + sellSol > 0 ? sellSol / (buySol + sellSol) : null;
+    f.dev_sold = devSold > 0 ? 1 : 0;
   }
 }
 
@@ -181,6 +242,13 @@ const MODELS = {
   },
   market_v1_safe: (f) => (isSafe(f) ? MODELS.market_v1(f) : 0),
   market_v2_safe: (f) => (isSafe(f) ? MODELS.market_v2(f) : 0),
+  // Wallet flow (paid stream): many distinct buyers, not one wallet faking volume, money flowing in, dev not dumping.
+  flow_v1: (f) => {
+    if (f.unique_buyers_5m === null || f.unique_buyers_5m === undefined || f.dev_sold) return 0;
+    return 100 * (0.35 * lin(f.unique_buyers_5m, 5, 40) + 0.25 * (1 - lin(f.buyer_hhi_5m, 0.15, 0.6)) +
+      0.25 * lin(f.net_flow_sol_5m, 0, 20) + 0.15 * logVol(f));
+  },
+  flow_v1_safe: (f) => (isSafe(f) ? MODELS.flow_v1(f) : 0),
   // Diagnostic: how "clean" a token is, with NO momentum. Shows what the filters alone contribute.
   sec_only: (f) => (f.has_sec !== 1 ? 0 : isSafe(f) ? 100 * (1 - 0.01 * (f.rc_score ?? 50)) : 0),
 };
@@ -199,7 +267,12 @@ function isEligible(f) {
 // Load every token's snapshot series + point-in-time features. Market features come from the cache when present.
 function loadUniverse({ sinceTs = 0 } = {}) {
   const db = getRadarDb();
-  const tokens = db.prepare('SELECT * FROM token WHERE pool_created_ts >= ?').all(sinceTs);
+  // Only tokens that lived long enough to ever be tradeable (most launches die in minutes and can't be scored anyway).
+  const tokens = db.prepare('SELECT * FROM token WHERE pool_created_ts >= ? AND last_snapshot_ts - pool_created_ts >= ?')
+    .all(sinceTs, ELIGIBLE.minAgeMin * 60);
+  const launchStmt = db.prepare('SELECT * FROM token_launch WHERE token_address = ?');
+  const promoStmt = db.prepare('SELECT * FROM token_promo WHERE token_address = ? ORDER BY ts');
+  const tradeStmt = db.prepare('SELECT ts_ms, wallet, is_buy, sol FROM trade WHERE token_address = ? ORDER BY ts_ms');
   const snapStmt = db.prepare('SELECT * FROM market_snapshot WHERE token_address = ? ORDER BY ts');
   const cacheStmt = db.prepare('SELECT ts, json FROM feature_snapshot WHERE token_address = ? AND version = ?');
   const putCache = db.prepare('INSERT OR REPLACE INTO feature_snapshot (token_address, ts, version, json) VALUES (?, ?, ?, ?)');
@@ -222,6 +295,8 @@ function loadUniverse({ sinceTs = 0 } = {}) {
     });
     if (fresh.length) db.transaction(() => { for (const f of fresh) putCache.run(t.token_address, f.ts, FEATURE_VERSION, JSON.stringify(f)); })();
     attachSecurity(rows, secStmt.all(t.token_address));
+    attachLaunchAndPromo(rows, launchStmt.get(t.token_address), promoStmt.all(t.token_address));
+    attachTrades(rows, tradeStmt.all(t.token_address), t.creator);
     out.set(t.token_address, { token: t, series, rows });
   }
   attachCreatorHistory(out);

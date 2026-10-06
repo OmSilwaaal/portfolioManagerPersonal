@@ -4,6 +4,7 @@
 // A: volume/buy spike LEADS a real pump      → models must find a significant edge, mostly non-reactive.
 // C: spike FOLLOWS the pump (reactive)       → precedence check must flag most signals as reactive.
 // G: spike unrelated to price (noise)        → spike-only models must not be significant; fitted lift stays low.
+// W: real pumps led by many buyers, fake spikes by one wallet → wallet-flow model must beat volume alone.
 // S: like A, plus security flags predict rugs → the *_safe filter must cut the rug rate.
 // Every world includes pump.fun graduations, which must never be scored as rugs.
 const fs = require('fs');
@@ -18,6 +19,7 @@ function buildWorld(mode, N, dbPath) {
   const db = require('./db').getRadarDb();
   const insTok = db.prepare('INSERT INTO token (token_address,symbol,name,creator,first_pool,current_pool,dex,launchpad,pool_created_ts,first_seen_ts,migrated_ts,dead_ts,dead_reason) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
   const insSnap = db.prepare('INSERT INTO market_snapshot (token_address,ts,pool_address,price_usd,liquidity_usd,liq_estimated,fdv,vol_m5,vol_h1,buys_m5,sells_m5,buys_h1,sells_h1) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)');
+  const insTrade = db.prepare('INSERT INTO trade (token_address,ts_ms,sig,wallet,is_buy,sol,tokens,mcap_sol,v_sol) VALUES (?,?,?,?,?,?,?,?,?)');
   const insSec = db.prepare('INSERT INTO token_security (token_address,ts,creator,rc_score,danger_count,top1_pct_ex,top10_pct_ex,creator_pct,insider_pct,mint_auth,freeze_auth,holders,lp_locked_pct,rugged,creator_prev_count,creator_prev_dead_share,risks_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
   let seed = 777; const rnd = () => (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296;
   const gauss = () => Math.sqrt(-2 * Math.log(rnd() + 1e-12)) * Math.cos(2 * Math.PI * rnd());
@@ -42,6 +44,9 @@ function buildWorld(mode, N, dbPath) {
       if ((mode === 'A' || mode === 'S') && pump) tSpike = tPump - 4;
       if (mode === 'C' && pump) tSpike = tPump + 4;
       if (mode === 'G') tSpike = rnd() < 0.10 ? 30 + Math.floor(rnd() * 90) : null;
+      // W: real pumps are led by MANY distinct buyers; an equal number of fake spikes come from ONE wallet, no pump.
+      const fake = mode === 'W' && !pump && rnd() < 0.12;
+      if (mode === 'W') tSpike = pump ? tPump - 4 : fake ? 30 + Math.floor(rnd() * 90) : null;
       const tok = `T${mode}${k}`;
       let price = 1e-5, deadTs = null, deadReason = null;
       const rows = [];
@@ -52,6 +57,14 @@ function buildWorld(mode, N, dbPath) {
         if (pump && m >= tPump && m < tPump + 10) drift = 0.05;
         price *= Math.exp(drift + 0.02 * gauss());
         const spike = tSpike !== null && m >= tSpike && m < tSpike + 6;
+      if (mode === 'W') {
+        const n = spike ? 25 : 3;
+        for (let q = 0; q < n; q++) {
+          const buy = spike ? 1 : rnd() < 0.5 ? 1 : 0;
+          const wallet = spike && fake ? 'WHALE' + k : 'w' + Math.floor(rnd() * 400);
+          insTrade.run(`T${mode}${k}`, (created + m * 60) * 1000 + Math.floor(rnd() * 59000), `s${k}_${m}_${q}`, wallet, buy, 0.2 + rnd(), 1000, 30, 30);
+        }
+      }
         const vm5 = (80 + 30 * rnd()) * (spike ? 9 : 1), vh1 = 1000 + 200 * rnd();
         const br = spike ? 0.82 : 0.45 + 0.1 * rnd();
         const onCurve = !(migrates && m >= migMin);
@@ -68,6 +81,7 @@ function buildWorld(mode, N, dbPath) {
     }
   })();
   
+  db.exec('UPDATE token SET last_snapshot_ts = (SELECT MAX(ts) FROM market_snapshot s WHERE s.token_address = token.token_address)');
   return require('./report').runReport({ horizons: [15, 60] });
 }
 
@@ -101,11 +115,16 @@ if (require.main === module) {
   const c = row(C, 'all', 'market_v1', '60m');
   ok &= check('C: reactive signal flagged by precedence check', c.precedence.shareReactive > 0.5, `reactive=${pct(c.precedence.shareReactive)}`);
 
+  const W = buildWorld('W', N, path.join(dir, 'W.sqlite'));
+  const wv = row(W, 'all', 'volume_only', '60m'), wf = row(W, 'all', 'flow_v1', '60m');
+  ok &= check('W: wallet flow separates real pumps from one-wallet fake volume', wf.n >= 10 && wf.mean > wv.mean + 0.1 && wf.significantAfterCorrection,
+    `volume_only mean=${pct(wv.mean)} (n=${wv.n}) vs flow_v1 mean=${pct(wf.mean)} (n=${wf.n})`);
+
   const S = buildWorld('S', N, path.join(dir, 'S.sqlite'));
   const s0 = row(S, 'all', 'market_v1', '60m'), s1 = row(S, 'all', 'market_v1_safe', '60m');
   ok &= check('S: safety filter cuts rug rate', s1.rugRate < s0.rugRate, `rug ${pct(s0.rugRate)} → ${pct(s1.rugRate)}, mean ${pct(s0.mean)} → ${pct(s1.mean)}`);
 
-  const fakeRugs = [G, A, C, S].reduce((n, o) => n + o.data.migrated, 0);
+  const fakeRugs = [G, A, C, W, S].reduce((n, o) => n + o.data.migrated, 0);
   ok &= check('graduations tracked as migrations, not deaths', fakeRugs > 0, `${fakeRugs} graduations across worlds`);
 
   fs.rmSync(dir, { recursive: true, force: true });
