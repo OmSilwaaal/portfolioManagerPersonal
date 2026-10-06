@@ -6,6 +6,7 @@ import { supabase } from '../utils/supabase/client'
 import { useAuth } from '../contexts/AuthContext'
 import { UserAvatar } from '../components/Sidebar'
 import { useGetMyProfileQuery, useUpdateProfileMutation } from '../api/profilesApi'
+import { API_BASE } from '../api/baseApi'
 
 const CATEGORY_LABELS = {
   stocks: 'US Stocks',
@@ -116,13 +117,14 @@ function resizeImageToDataUrl(file, maxSize = 200, quality = 0.7) {
 }
 
 function ProfileView({ onBack }) {
-  const { data: profile, isLoading } = useGetMyProfileQuery()
+  const { data: profile, isLoading, error: loadError } = useGetMyProfileQuery()
   const [updateProfile, { isLoading: saving }] = useUpdateProfileMutation()
 
   const [username, setUsername] = useState('')
   const [bio, setBio] = useState('')
   const [avatarUrl, setAvatarUrl] = useState('')
   const [usernameError, setUsernameError] = useState('')
+  const [saveError, setSaveError] = useState('')
   const [dragOver, setDragOver] = useState(false)
   const [uploadError, setUploadError] = useState('')
   const fileInputRef = useRef(null)
@@ -138,6 +140,7 @@ function ProfileView({ onBack }) {
   const handleSave = async (e) => {
     e.preventDefault()
     setUsernameError('')
+    setSaveError('')
     const clean = username.trim().toLowerCase()
     if (clean && !USERNAME_RE.test(clean)) {
       setUsernameError('3–20 chars: letters, numbers, underscores only')
@@ -147,7 +150,9 @@ function ProfileView({ onBack }) {
       await updateProfile({ username: clean, bio: bio.trim(), avatar_url: avatarUrl.trim() }).unwrap()
       onBack()
     } catch (err) {
-      setUsernameError(err?.data?.message ?? 'Failed to save.')
+      const message = err?.data?.message ?? `Failed to save (${err?.status ?? 'network error'}).`
+      if (/username/i.test(message)) setUsernameError(message)
+      else setSaveError(message)
     }
   }
 
@@ -267,6 +272,12 @@ function ProfileView({ onBack }) {
             <p className="text-[#4b5563] text-xs mt-1">{bio.length}/200</p>
           </div>
 
+          {(saveError || loadError) && (
+            <p className="text-red-400 text-xs text-center">
+              {saveError || `Couldn't load your profile (${loadError?.status ?? 'network error'}).`}
+            </p>
+          )}
+
           <button
             type="submit"
             disabled={saving}
@@ -290,7 +301,7 @@ function DeleteAccountModal({ onCancel, onConfirmed }) {
     setError('')
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/user`, {
+      const res = await fetch(`${API_BASE}/user`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${session?.access_token}` },
       })
@@ -370,6 +381,7 @@ function AccountView({ onBack }) {
   const navigate = useNavigate()
   const dispatch = useDispatch()
   const { user } = useAuth()
+  const { data: profile } = useGetMyProfileQuery()
   const [signingOut, setSigningOut] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
 
@@ -403,7 +415,7 @@ function AccountView({ onBack }) {
       <h1 className="text-xl font-bold text-white mb-6">Account</h1>
 
       <div className="flex flex-col items-center mb-8">
-        <UserAvatar user={user} size={72} />
+        <UserAvatar user={user} size={72} src={profile?.avatar_url} />
         {displayName && <p className="text-white font-semibold text-lg mt-3">{displayName}</p>}
         {email && <p className="text-[#6b7280] text-sm mt-1">{email}</p>}
         <span className="mt-2 text-xs bg-[#1f1f1f] border border-[#2a2a2a] text-[#a1a1aa] px-2.5 py-0.5 rounded-full capitalize">
@@ -633,6 +645,7 @@ function NotificationsView({ onBack }) {
 export default function Settings() {
   const [view, setView] = useState(null)
   const { user } = useAuth()
+  const { data: profile } = useGetMyProfileQuery()
   const preferences = useSelector((state) => state.preferences)
 
   const meta = user?.user_metadata ?? {}
@@ -670,7 +683,7 @@ export default function Settings() {
   return (
     <main className="flex-1 p-5 md:p-8 max-w-lg mx-auto w-full">
       <div className="flex flex-col items-center mb-8 pt-2">
-        <UserAvatar user={user} size={64} />
+        <UserAvatar user={user} size={64} src={profile?.avatar_url} />
         {displayName && <p className="text-white font-bold text-lg mt-3">{displayName}</p>}
         {email && <p className="text-[#6b7280] text-sm mt-1">{email}</p>}
       </div>

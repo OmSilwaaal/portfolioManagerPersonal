@@ -68,9 +68,10 @@ const COMMUNITY_ITEMS = [
   },
 ]
 
-function UserAvatar({ user, size = 32 }) {
+function UserAvatar({ user, size = 32, src = null }) {
   const meta = user?.user_metadata ?? {}
-  const avatarUrl = meta.avatar_url ?? meta.picture ?? null
+  // `src` lets callers show the avatar saved on the user's profile, which overrides the auth provider's photo
+  const avatarUrl = src || meta.avatar_url || meta.picture || null
   const name = meta.full_name ?? meta.name ?? meta.display_name ?? user?.email ?? '?'
   const initials = name
     .split(' ')

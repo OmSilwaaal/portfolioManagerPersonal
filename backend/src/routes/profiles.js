@@ -67,7 +67,19 @@ router.patch('/me', requireAuth, async (req, res) => {
       updates.username = clean || null
     }
     if (bio !== undefined) updates.bio = bio.trim().slice(0, 200)
-    if (avatar_url !== undefined) updates.avatar_url = avatar_url.trim().slice(0, 500)
+    if (avatar_url !== undefined) {
+      const url = avatar_url.trim()
+      // Uploaded photos arrive as resized base64 data URLs (~10–30KB); truncating them corrupts the image
+      const isDataUrl = /^data:image\/(jpeg|png|webp|gif);base64,/.test(url)
+      const maxLen = isDataUrl ? 45000 : 500
+      if (url.length > maxLen) {
+        return res.status(400).json({ error: true, message: 'Image is too large. Try a smaller photo.' })
+      }
+      if (url && !isDataUrl && !/^https?:\/\//.test(url)) {
+        return res.status(400).json({ error: true, message: 'Avatar must be an uploaded image or an http(s) URL.' })
+      }
+      updates.avatar_url = url
+    }
 
     const { data, error } = await supabase
       .from('profiles')
