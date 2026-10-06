@@ -7,6 +7,17 @@ import { useAuth } from '../contexts/AuthContext'
 import { UserAvatar } from '../components/Sidebar'
 import { useGetMyProfileQuery, useUpdateProfileMutation } from '../api/profilesApi'
 import { API_BASE } from '../api/baseApi'
+import { getIdentity } from '../utils/identity'
+import { useRecovery } from '../components/welcome/useRecovery'
+import { FriendsPanel, ReferralPanel, RecoveryPanel, label as panelLabel } from '../components/welcome/panels'
+import {
+  useGetSmsStatusQuery,
+  useSendSmsCodeMutation,
+  useVerifySmsCodeMutation,
+  useUpdateSmsMutation,
+  useSendSmsTestMutation,
+  useRemoveSmsPhoneMutation,
+} from '../api/smsApi'
 
 const CATEGORY_LABELS = {
   stocks: 'US Stocks',
@@ -384,10 +395,9 @@ function AccountView({ onBack }) {
   const { data: profile } = useGetMyProfileQuery()
   const [signingOut, setSigningOut] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const recovery = useRecovery()
 
-  const meta = user?.user_metadata ?? {}
-  const displayName = meta.full_name ?? meta.name ?? meta.display_name ?? null
-  const email = user?.email ?? null
+  const { name: displayName, handle } = getIdentity(user, profile)
   const provider = user?.app_metadata?.provider ?? 'email'
 
   const handleSignOut = async () => {
@@ -411,22 +421,31 @@ function AccountView({ onBack }) {
         />
       )}
 
-      <BackButton onClick={onBack} />
+      <BackButton onClick={() => {
+        if (recovery.pending && !window.confirm('Your recovery phrase is shown only once. Leave without saving it?')) return
+        onBack()
+      }} />
       <h1 className="text-xl font-bold text-white mb-6">Account</h1>
 
       <div className="flex flex-col items-center mb-8">
         <UserAvatar user={user} size={72} src={profile?.avatar_url} />
-        {displayName && <p className="text-white font-semibold text-lg mt-3">{displayName}</p>}
-        {email && <p className="text-[#6b7280] text-sm mt-1">{email}</p>}
+        <p className="text-white font-semibold text-lg mt-3">{displayName}</p>
+        {handle && <p className="text-[#6b7280] text-sm mt-0.5">{handle}</p>}
         <span className="mt-2 text-xs bg-[#1f1f1f] border border-[#2a2a2a] text-[#a1a1aa] px-2.5 py-0.5 rounded-full capitalize">
           {provider === 'google' ? 'Google account' : 'Email account'}
         </span>
       </div>
 
       <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl divide-y divide-[#2a2a2a] mb-6">
-        <Row label="Name" value={displayName ?? 'Not set'} />
-        <Row label="Email" value={email ?? 'Not set'} />
+        <Row label="Name" value={displayName} />
+        <Row label="Username" value={handle ?? 'Not set'} />
         <Row label="Sign-in method" value={provider === 'google' ? 'Google OAuth' : 'Magic link'} />
+      </div>
+
+      <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-5 mb-6">
+        <p style={panelLabel} className="mb-1">Recovery phrase</p>
+        <p className="text-[#6b7280] text-xs mb-4">Sign in from the login page with six words if you lose access to your email.</p>
+        <RecoveryPanel r={recovery} compactIntro />
       </div>
 
       <button
@@ -614,30 +633,228 @@ function WatchlistView({ onBack }) {
   )
 }
 
+function Toggle({ on, onChange, disabled, label }) {
+  return (
+    <button
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onChange(!on)}
+      className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 disabled:opacity-40 ${on ? 'bg-[#10b981]' : 'bg-[#2a2a2a]'}`}
+    >
+      <span
+        className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform"
+        style={{ transform: on ? 'translateX(20px)' : 'translateX(0)' }}
+      />
+    </button>
+  )
+}
+
+const apiError = (err, fallback) => err?.data?.message ?? fallback
+
+function SmsCard() {
+  const { data: sms, isLoading } = useGetSmsStatusQuery()
+  const [sendCode, { isLoading: sending }] = useSendSmsCodeMutation()
+  const [verifyCode, { isLoading: verifying }] = useVerifySmsCodeMutation()
+  const [updateSms, { isLoading: updating }] = useUpdateSmsMutation()
+  const [sendTest, { isLoading: testing }] = useSendSmsTestMutation()
+  const [removePhone, { isLoading: removing }] = useRemoveSmsPhoneMutation()
+
+  const [step, setStep] = useState('phone') // 'phone' | 'code'
+  const [phone, setPhone] = useState('')
+  const [code, setCode] = useState('')
+  const [error, setError] = useState('')
+  const [note, setNote] = useState('')
+  const [cooldown, setCooldown] = useState(0)
+
+  useEffect(() => {
+    if (cooldown <= 0) return
+    const t = setTimeout(() => setCooldown((c) => c - 1), 1000)
+    return () => clearTimeout(t)
+  }, [cooldown])
+
+  const requestCode = async () => {
+    setError(''); setNote('')
+    try {
+      await sendCode({ phone }).unwrap()
+      setStep('code')
+      setCode('')
+      setCooldown(30)
+    } catch (err) {
+      setError(apiError(err, "Couldn't send a code. Try again."))
+    }
+  }
+
+  const submitCode = async () => {
+    setError(''); setNote('')
+    try {
+      await verifyCode({ phone, code }).unwrap()
+      setStep('phone'); setPhone(''); setCode('')
+    } catch (err) {
+      setError(apiError(err, 'Could not verify that code.'))
+    }
+  }
+
+  const handleToggle = async (priceAlerts) => {
+    setError(''); setNote('')
+    try { await updateSms({ priceAlerts }).unwrap() } catch (err) { setError(apiError(err, 'Could not save that.')) }
+  }
+
+  const handleTest = async () => {
+    setError(''); setNote('')
+    try { await sendTest().unwrap(); setNote('Test text sent — check your phone.') }
+    catch (err) { setError(apiError(err, "Couldn't send a test text.")) }
+  }
+
+  const handleRemove = async () => {
+    setError(''); setNote('')
+    try { await removePhone().unwrap() } catch (err) { setError(apiError(err, 'Could not remove your number.')) }
+  }
+
+  const inputCls = 'w-full bg-[#0f0f0f] border border-[#2a2a2a] text-white placeholder-[#4b5563] text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-[#10b981] transition-colors'
+  const primaryCls = 'bg-[#10b981] hover:bg-[#059669] disabled:opacity-40 text-white text-sm font-semibold px-5 py-3 rounded-xl transition-colors'
+
+  return (
+    <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-5 mb-4">
+      <div className="flex items-start gap-3 mb-4">
+        <div className="w-10 h-10 rounded-lg bg-[#10b981]/10 flex items-center justify-center flex-shrink-0">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-white text-sm font-semibold">SMS alerts</p>
+          <p className="text-[#6b7280] text-xs mt-0.5">Get a text the moment one of your price alerts hits — even when the app is closed.</p>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="h-10 rounded-xl bg-[#1f1f1f] animate-pulse" />
+      ) : !sms?.configured ? (
+        <p className="text-[#6b7280] text-xs bg-[#1f1f1f] rounded-lg px-3 py-2.5">Text alerts are launching soon.</p>
+      ) : sms.verified ? (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between bg-[#0f0f0f] border border-[#2a2a2a] rounded-xl px-4 py-3">
+            <div>
+              <p className="text-white text-sm font-medium tabular-nums">•••• •••• {sms.phoneLast4}</p>
+              <p className="text-[#10b981] text-xs mt-0.5 flex items-center gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                Verified
+              </p>
+            </div>
+            <button onClick={handleRemove} disabled={removing} className="text-[#6b7280] hover:text-red-400 text-xs font-medium transition-colors">
+              {removing ? 'Removing…' : 'Remove'}
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-white text-sm">Price alerts</p>
+              <p className="text-[#6b7280] text-xs mt-0.5">Text me when a target price is reached</p>
+            </div>
+            <Toggle on={sms.priceAlerts} onChange={handleToggle} disabled={updating} label="Price alert texts" />
+          </div>
+
+          <button onClick={handleTest} disabled={testing} className="w-full border border-[#2a2a2a] hover:border-[#3a3a3a] text-[#a1a1aa] hover:text-white text-sm font-medium py-2.5 rounded-xl transition-colors disabled:opacity-40">
+            {testing ? 'Sending…' : 'Send a test text'}
+          </button>
+        </div>
+      ) : step === 'phone' ? (
+        <form onSubmit={(e) => { e.preventDefault(); requestCode() }} className="space-y-3">
+          <input
+            type="tel"
+            autoComplete="tel"
+            inputMode="tel"
+            value={phone}
+            onChange={(e) => { setPhone(e.target.value); setError('') }}
+            placeholder="+1 555 123 4567"
+            className={inputCls}
+          />
+          <button type="submit" disabled={sending || phone.replace(/\D/g, '').length < 10} className={`${primaryCls} w-full`}>
+            {sending ? 'Sending code…' : 'Text me a code'}
+          </button>
+          <p className="text-[#4b5563] text-[11px] leading-relaxed">
+            Include your country code. Message and data rates may apply. Reply STOP to any text to opt out.
+          </p>
+        </form>
+      ) : (
+        <form onSubmit={(e) => { e.preventDefault(); submitCode() }} className="space-y-3">
+          <p className="text-[#a1a1aa] text-xs">Enter the code we texted to {phone}.</p>
+          <input
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={8}
+            value={code}
+            onChange={(e) => { setCode(e.target.value.replace(/\D/g, '')); setError('') }}
+            placeholder="123456"
+            className={`${inputCls} text-center tracking-[0.4em] text-lg font-semibold`}
+          />
+          <button type="submit" disabled={verifying || code.length < 4} className={`${primaryCls} w-full`}>
+            {verifying ? 'Verifying…' : 'Verify'}
+          </button>
+          <div className="flex items-center justify-between text-xs">
+            <button type="button" onClick={() => { setStep('phone'); setError('') }} className="text-[#6b7280] hover:text-white transition-colors">
+              Change number
+            </button>
+            <button type="button" onClick={requestCode} disabled={cooldown > 0 || sending} className="text-[#10b981] disabled:text-[#4b5563] transition-colors">
+              {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend code'}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {error && <p className="text-red-400 text-xs mt-3">{error}</p>}
+      {note && <p className="text-[#10b981] text-xs mt-3">{note}</p>}
+    </div>
+  )
+}
+
 function NotificationsView({ onBack }) {
   return (
     <>
       <BackButton onClick={onBack} />
       <h1 className="text-xl font-bold text-white mb-6">Notifications</h1>
 
-      <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl divide-y divide-[#2a2a2a] mb-4">
+      <SmsCard />
+
+      <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl divide-y divide-[#2a2a2a]">
         {[
           { label: 'Push notifications', desc: 'Alerts on your device' },
           { label: 'Email digest', desc: 'Daily or weekly summary' },
-          { label: 'SMS alerts', desc: 'Text message alerts' },
         ].map(({ label, desc }) => (
           <div key={label} className="flex items-center justify-between px-4 py-4">
             <div>
               <p className="text-white text-sm font-medium">{label}</p>
               <p className="text-[#6b7280] text-xs mt-0.5">{desc}</p>
             </div>
-            <span className="text-xs bg-[#1f1f1f] border border-[#2a2a2a] text-[#6b7280] px-2.5 py-1 rounded-full">
-              Soon
-            </span>
+            <span className="text-xs bg-[#1f1f1f] border border-[#2a2a2a] text-[#6b7280] px-2.5 py-1 rounded-full">Soon</span>
           </div>
         ))}
       </div>
-      <p className="text-[#6b7280] text-xs text-center">Notification features are in development.</p>
+    </>
+  )
+}
+
+function FriendsView({ onBack }) {
+  return (
+    <>
+      <BackButton onClick={onBack} />
+      <h1 className="text-xl font-bold text-white mb-1">Friends</h1>
+      <p className="text-[#6b7280] text-sm mb-6">Find anyone on Travauxus by their @username.</p>
+      <FriendsPanel />
+    </>
+  )
+}
+
+function InviteView({ onBack }) {
+  return (
+    <>
+      <BackButton onClick={onBack} />
+      <h1 className="text-xl font-bold text-white mb-1">Invite &amp; Pro</h1>
+      <p className="text-[#6b7280] text-sm mb-6">Share your code — you both get free Pro when they join.</p>
+      <ReferralPanel />
     </>
   )
 }
@@ -648,9 +865,7 @@ export default function Settings() {
   const { data: profile } = useGetMyProfileQuery()
   const preferences = useSelector((state) => state.preferences)
 
-  const meta = user?.user_metadata ?? {}
-  const displayName = meta.full_name ?? meta.name ?? meta.display_name ?? null
-  const email = user?.email ?? null
+  const { name: displayName, handle } = getIdentity(user, profile)
   const watchlistCount = preferences.watchlist?.length ?? 0
   const investorLabel = INVESTOR_LABELS[preferences.investorType] ?? null
 
@@ -674,6 +889,16 @@ export default function Settings() {
       <WatchlistView onBack={() => setView(null)} />
     </main>
   )
+  if (view === 'friends') return (
+    <main className="flex-1 p-5 md:p-8 max-w-lg mx-auto w-full">
+      <FriendsView onBack={() => setView(null)} />
+    </main>
+  )
+  if (view === 'invite') return (
+    <main className="flex-1 p-5 md:p-8 max-w-lg mx-auto w-full">
+      <InviteView onBack={() => setView(null)} />
+    </main>
+  )
   if (view === 'notifications') return (
     <main className="flex-1 p-5 md:p-8 max-w-lg mx-auto w-full">
       <NotificationsView onBack={() => setView(null)} />
@@ -684,8 +909,8 @@ export default function Settings() {
     <main className="flex-1 p-5 md:p-8 max-w-lg mx-auto w-full">
       <div className="flex flex-col items-center mb-8 pt-2">
         <UserAvatar user={user} size={64} src={profile?.avatar_url} />
-        {displayName && <p className="text-white font-bold text-lg mt-3">{displayName}</p>}
-        {email && <p className="text-[#6b7280] text-sm mt-1">{email}</p>}
+        <p className="text-white font-bold text-lg mt-3">{displayName}</p>
+        {handle && <p className="text-[#6b7280] text-sm mt-0.5">{handle}</p>}
       </div>
 
       <div className="space-y-3">
@@ -708,7 +933,7 @@ export default function Settings() {
             </svg>
           }
           title="Account"
-          subtitle={email ?? 'Manage your account'}
+          subtitle={handle ?? 'Manage your account'}
           preview={null}
         />
         <Card
@@ -735,6 +960,27 @@ export default function Settings() {
           preview={watchlistCount > 0 ? `${watchlistCount} ticker${watchlistCount !== 1 ? 's' : ''} tracked` : undefined}
         />
         <Card
+          onClick={() => setView('friends')}
+          icon={
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+          }
+          title="Friends"
+          subtitle="Search by @username and add friends"
+        />
+        <Card
+          onClick={() => setView('invite')}
+          icon={
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d6b87a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 12v10H4V12M2 7h20v5H2zM12 22V7M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>
+            </svg>
+          }
+          title="Invite & Pro"
+          subtitle="Your referral code — free Pro for you both"
+        />
+        <Card
           onClick={() => setView('notifications')}
           icon={
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -743,8 +989,7 @@ export default function Settings() {
             </svg>
           }
           title="Notifications"
-          subtitle="Push, email, and SMS alerts"
-          preview="Coming soon"
+          subtitle="Text alerts for your price targets"
         />
       </div>
 

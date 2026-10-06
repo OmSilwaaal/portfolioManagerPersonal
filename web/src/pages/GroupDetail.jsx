@@ -13,6 +13,7 @@ import {
   useVotePollMutation,
 } from '../api/groupsApi'
 import '../api/profilesApi'
+import { safeUrl } from '../utils/safeUrl'
 
 const COLORS = ['#e2e8f0','#fca5a5','#fdba74','#fef08a','#86efac','#93c5fd','#c4b5fd','#f9a8d4']
 const EMOJIS = ['📈','💹','🏦','🎯','📊','🚀','💡','🔬']
@@ -236,7 +237,7 @@ function PostCard({ post, groupId, isAdmin, currentUserId, isFirst, isLast }) {
                     const clr = s === 'Bullish' ? 'rgba(52,211,153,0.9)' : s === 'Bearish' ? 'rgba(239,68,68,0.9)' : 'rgba(255,255,255,0.45)'
                     return <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: bg, color: clr }}>{s === 'Bullish' ? '↑ Bullish' : s === 'Bearish' ? '↓ Bearish' : '— Neutral'}</span>
                   })()}
-                  {parsed.url && <a href={parsed.url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-white/40 hover:text-white/70 ml-auto">Read →</a>}
+                  {safeUrl(parsed.url) && <a href={safeUrl(parsed.url)} target="_blank" rel="noopener noreferrer" className="text-[10px] text-white/40 hover:text-white/70 ml-auto">Read →</a>}
                 </div>
               </div>
             </div>
@@ -290,7 +291,7 @@ function MemberList({ members, isAdmin, currentUserId, onMemberAction, onUpdateM
               </Link>
               <div className="flex-1 min-w-0">
                 <Link to={`/profile/${m.user_id}`} className="text-xs font-medium text-white/70 hover:text-white transition-colors truncate block">
-                  {m.display_name ?? m.email ?? 'Member'}
+                  {m.display_name ?? 'Member'}
                 </Link>
                 {m.rank && (
                   <span className="text-[9px] text-white/40 truncate block">{m.rank}</span>
@@ -474,7 +475,7 @@ export default function GroupDetail() {
         if (status === 'SUBSCRIBED') {
           await ch.track({
             userId: user.id,
-            username: user.user_metadata?.full_name ?? user.email ?? user.id,
+            username: user.user_metadata?.full_name ?? 'Member',
             typing: false,
           })
         }
@@ -567,7 +568,7 @@ export default function GroupDetail() {
     if (channelRef.current && user?.id) {
       channelRef.current.track({
         userId: user.id,
-        username: user.user_metadata?.full_name ?? user.email ?? user.id,
+        username: user.user_metadata?.full_name ?? 'Member',
         typing: false,
       })
     }
@@ -904,7 +905,7 @@ export default function GroupDetail() {
                     setContent(e.target.value.slice(0, 2000))
                     setPostError('')
                     if (channelRef.current && user?.id) {
-                      const uname = user.user_metadata?.full_name ?? user.email ?? user.id
+                      const uname = user.user_metadata?.full_name ?? 'Member'
                       channelRef.current.track({ userId: user.id, username: uname, typing: true })
                       clearTimeout(typingTimeoutRef.current)
                       typingTimeoutRef.current = setTimeout(() => {
