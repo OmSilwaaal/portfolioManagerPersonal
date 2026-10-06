@@ -8,6 +8,7 @@ if (typeof globalThis.WebSocket === 'undefined') {
 const express = require('express');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
 
 const stocksRouter = require('./routes/stocks');
 const cryptoRouter = require('./routes/crypto');
@@ -15,7 +16,12 @@ const feedRouter = require('./routes/feed');
 const calendarRouter = require('./routes/calendar');
 const portfolioRouter = require('./routes/portfolio');
 const alertsRouter = require('./routes/alerts');
+const smsRouter = require('./routes/sms');
+const friendsRouter = require('./routes/friends');
+const referralsRouter = require('./routes/referrals');
+const { manage: recoveryRouter, signIn: recoverSignInRouter } = require('./routes/recovery');
 const govTradesRouter = require('./routes/govTrades');
+const radarRouter = require('./routes/radar');
 const commoditiesRouter = require('./routes/commodities');
 const preferencesRouter = require('./routes/preferences');
 const searchRouter = require('./routes/search');
@@ -31,7 +37,6 @@ const userRouter = require('./routes/user');
 const memecoinsRouter = require('./routes/memecoins');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const { sessionMiddleware, requireAuth } = require('./middleware/auth');
-const { getBudgetStatus } = require('./services/claude');
 
 // Initialize DB on startup
 require('./db/schema').getDb();
@@ -40,17 +45,34 @@ warmCoinList();
 const { startAlertPoller } = require('./services/alertPoller');
 startAlertPoller();
 
-// Initialize High-Speed Solana Pipeline
-const { startGrpcStreamer } = require('./services/grpcStreamer');
-const { watchRedisForAlpha } = require('./services/executionEngine');
-startGrpcStreamer().catch(err => console.error('[GRPC STREAMER] Init Error:', err));
-watchRedisForAlpha();
+// High-speed Solana pipeline — experimental/mock code (random triggers, throwaway keypairs).
+// Opt-in only; never runs unless ENABLE_SOLANA_PIPELINE=true.
+if (process.env.ENABLE_SOLANA_PIPELINE === 'true') {
+  const { startGrpcStreamer } = require('./services/grpcStreamer');
+  const { watchRedisForAlpha } = require('./services/executionEngine');
+  startGrpcStreamer().catch(err => console.error('[GRPC STREAMER] Init Error:', err));
+  watchRedisForAlpha();
+}
+
+// Memecoin radar collector (Solana new pools → snapshots). Opt-in via ENABLE_RADAR=true.
+require('./radar').startRadar();
 require('./services/snapshotCollector').startSnapshotCollector();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const isProd = process.env.NODE_ENV === 'production';
+
+// Behind Railway/Vercel proxies: trust the first hop so rate limiting keys on the real client IP
+app.set('trust proxy', 1);
+app.disable('x-powered-by');
+app.use(helmet({
+  // This is a JSON API — lock down everything; nothing here should ever be framed or script-executed
+  contentSecurityPolicy: { directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] } },
+  crossOriginResourcePolicy: { policy: 'cross-origin' }, // frontend (different origin) must read responses
+}));
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
+// Explicit allow-list. Add more origins via CORS_EXTRA_ORIGINS (comma-separated).
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
@@ -58,28 +80,29 @@ const allowedOrigins = [
   process.env.FRONTEND_URL_WWW,
   'https://travauxus.com',
   'https://www.travauxus.com',
+  ...(process.env.CORS_EXTRA_ORIGINS || '').split(',').map((o) => o.trim()),
 ].filter(Boolean);
 
-// Also allow any Railway or Vercel preview deployment
-const allowedPatterns = [
+// Wildcard preview-deployment origins are only allowed outside production —
+// anyone can host an app on *.vercel.app / *.railway.app.
+const previewPatterns = isProd ? [] : [
   /^https:\/\/.*\.railway\.app$/,
   /^https:\/\/.*\.vercel\.app$/,
 ];
 
 app.use(cors({
-  credentials: true,
   origin: (origin, callback) => {
-    // Allow requests with no origin (curl, Postman, server-to-server)
+    // No Origin header = curl / server-to-server / Stripe webhooks (auth is via Bearer token or signature)
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
-    if (allowedPatterns.some(re => re.test(origin))) return callback(null, true);
-    callback(new Error(`CORS: origin ${origin} not allowed`));
+    if (previewPatterns.some(re => re.test(origin))) return callback(null, true);
+    callback(null, false); // omit CORS headers rather than throwing a 500
   },
 }));
 // Raw body for webhook signature verification — MUST come before express.json()
 app.use('/api/paper-trading/webhook', express.raw({ type: 'application/json' }))
 app.use('/api/stripe/pro-webhook', express.raw({ type: 'application/json' }))
-app.use(express.json({ limit: '50kb' })); // cap request body size
+app.use(express.json({ limit: '60kb' })); // cap request body size (profile avatars are ~45KB max)
 app.use(sessionMiddleware);
 
 // ── RATE LIMITERS ─────────────────────────────────────────────────────────────
@@ -99,7 +122,34 @@ const aiLimiter = makeLimiter(60 * 1000, 10, 'Too many requests. Please wait a m
 // Commodities: 3 per minute (each call triggers multiple Claude requests)
 const commoditiesLimiter = makeLimiter(60 * 1000, 3, 'Too many commodities requests. Please wait a moment.');
 
+// Brute-force / abuse targets
+const joinLimiter = makeLimiter(15 * 60 * 1000, 20, 'Too many attempts. Please try again later.');
+const promoLimiter = makeLimiter(15 * 60 * 1000, 10, 'Too many attempts. Please try again later.');
+const destructiveLimiter = makeLimiter(60 * 60 * 1000, 5, 'Too many requests. Please try again later.');
+const tradeLimiter = makeLimiter(60 * 1000, 30, 'Too many trade requests. Please slow down.');
+// Every code / test text costs real money — keep these tight
+const smsSendLimiter = makeLimiter(60 * 60 * 1000, 6, 'Too many text requests. Please try again in an hour.');
+// Phrase sign-in is a credential-guessing target; friend search is a user-enumeration target
+const recoverLimiter = makeLimiter(15 * 60 * 1000, 8, 'Too many attempts. Please try again later.');
+const friendSearchLimiter = makeLimiter(60 * 1000, 30, 'Searching too fast. Please slow down.');
+const referralLimiter = makeLimiter(60 * 60 * 1000, 10, 'Too many attempts. Please try again later.');
+const recoveryCreateLimiter = makeLimiter(60 * 60 * 1000, 6, 'Too many requests. Please try again later.');
+const smsVerifyLimiter = makeLimiter(15 * 60 * 1000, 10, 'Too many attempts. Please try again later.');
+
 app.use('/api', globalLimiter);
+app.use('/api/groups/join', joinLimiter);
+app.use('/api/stripe/redeem-code', promoLimiter);
+app.use('/api/user', destructiveLimiter);
+app.use('/api/recover/login', recoverLimiter);
+app.use('/api/friends/search', friendSearchLimiter);
+app.use('/api/referrals/redeem', referralLimiter);
+app.post('/api/recovery', recoveryCreateLimiter);
+app.use('/api/sms/send-code', smsSendLimiter);
+app.use('/api/sms/test', smsSendLimiter);
+app.use('/api/sms/verify', smsVerifyLimiter);
+app.use('/api/paper-trading/buy', tradeLimiter);
+app.use('/api/paper-trading/sell', tradeLimiter);
+app.use('/api/paper-trading/purchase-cash', tradeLimiter);
 
 // ── ROUTES ────────────────────────────────────────────────────────────────────
 
@@ -109,9 +159,15 @@ app.use('/api/stocks', aiLimiter, requireAuth, stocksRouter);
 app.use('/api/crypto', aiLimiter, requireAuth, cryptoRouter);
 app.use('/api/commodities', commoditiesLimiter, requireAuth, commoditiesRouter);
 app.use('/api/gov-trades', aiLimiter, requireAuth, govTradesRouter);
+app.use('/api/radar', radarRouter); // admin-secret protected inside the router
 
 // Lower-cost routes — still require auth to prevent enumeration
 app.use('/api/alerts', requireAuth, alertsRouter);
+app.use('/api/sms', requireAuth, smsRouter);
+app.use('/api/friends', requireAuth, friendsRouter);
+app.use('/api/referrals', requireAuth, referralsRouter);
+app.use('/api/recovery', recoveryRouter);
+app.use('/api/recover', recoverSignInRouter); // public: signing in with a recovery phrase
 app.use('/api/preferences', requireAuth, preferencesRouter);
 app.use('/api/portfolio', requireAuth, portfolioRouter);
 
@@ -132,7 +188,7 @@ app.use('/api/research/eval', requireAuth, require('./routes/researchEval'));
 
 // Health check
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString(), budget: getBudgetStatus() });
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 // Error handlers

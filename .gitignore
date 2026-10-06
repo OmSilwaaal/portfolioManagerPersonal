@@ -35,3 +35,6 @@ ios/**/*.dSYM.zip
 **/.DS_Store
 Thumbs.db
 desktop.ini
+
+# Local scratch scripts with credentials
+backend/test_supabase.js

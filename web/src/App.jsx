@@ -13,6 +13,7 @@ import Crypto from './pages/Crypto'
 import CopyTrading from './pages/CopyTrading'
 import Alerts from './pages/Alerts'
 import Onboarding from './pages/Onboarding'
+import Welcome from './pages/Welcome'
 import Feed from './pages/Feed'
 import GovTrades from './pages/GovTrades'
 import Commodities from './pages/Commodities'
@@ -30,6 +31,7 @@ import Terms from './pages/Terms'
 import Disclaimer from './pages/Disclaimer'
 import TradingTerminal from './pages/TradingTerminal'
 import ResearchDashboard from './pages/ResearchDashboard'
+import { CelebrationProvider } from './components/ProfitCelebration'
 import PrivyProviderWrapper from './providers/PrivyProviderWrapper'
 
 // Import API modules to register endpoints
@@ -100,6 +102,14 @@ function AppInner() {
     document.documentElement.classList.toggle('dark', isDark)
   }, [isDark])
 
+  // Remember an invite code from a shared link (?ref=CODE) so it survives the sign-up round trip
+  useEffect(() => {
+    try {
+      const ref = new URLSearchParams(window.location.search).get('ref')
+      if (ref && /^[A-Za-z0-9-]{6,12}$/.test(ref)) localStorage.setItem('travauxus_ref', ref.toUpperCase())
+    } catch { /* storage unavailable */ }
+  }, [])
+
   // Hydrate preferences from Supabase metadata on every login
   useEffect(() => {
     if (!user) return
@@ -114,7 +124,8 @@ function AppInner() {
         priorityAlerts: meta.priorityAlerts ?? [],
         watchlist: meta.watchlist ?? [],
         onboardingComplete: true,
-        isPro: user.app_metadata?.isPro ?? false,
+        // Pro = paid subscription, or an unexpired referral reward
+        isPro: Boolean(user.app_metadata?.isPro) || Date.parse(user.app_metadata?.referralProUntil ?? '') > Date.now(),
       }))
     }
   }, [user, dispatch])
@@ -129,6 +140,11 @@ function AppInner() {
       <Route path="/onboarding" element={<Onboarding />} />
       <Route path="/app" element={<Navigate to="/feed" replace />} />
       <Route path="/dashboard" element={<Navigate to="/feed" replace />} />
+
+      {/* Protected — no sidebar */}
+      <Route element={<ProtectedLayoutMinimal />}>
+        <Route path="/welcome" element={<Welcome />} />
+      </Route>
 
       {/* Protected — with sidebar */}
       <Route element={<ProtectedLayout />}>
@@ -159,7 +175,9 @@ export default function App() {
     <BrowserRouter>
       <PrivyProviderWrapper>
         <AuthProvider>
-          <AppInner />
+          <CelebrationProvider>
+            <AppInner />
+          </CelebrationProvider>
         </AuthProvider>
       </PrivyProviderWrapper>
     </BrowserRouter>

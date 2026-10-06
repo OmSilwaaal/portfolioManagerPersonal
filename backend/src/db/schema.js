@@ -204,7 +204,53 @@ function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_signal_snapshot_token_ts ON signal_snapshot(token_id, as_of_ts);
   `);
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS sms_settings (
+      user_id      TEXT    PRIMARY KEY,
+      phone_enc    TEXT    NOT NULL,
+      phone_last4  TEXT    NOT NULL,
+      verified     INTEGER NOT NULL DEFAULT 0,
+      price_alerts INTEGER NOT NULL DEFAULT 1,
+      verified_at  TEXT,
+      sent_day     TEXT,
+      sent_count   INTEGER NOT NULL DEFAULT 0
+    );
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS recovery_codes (
+      user_id     TEXT PRIMARY KEY,
+      phrase_hash TEXT NOT NULL UNIQUE,
+      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS referral_codes (
+      user_id TEXT PRIMARY KEY,
+      code    TEXT NOT NULL UNIQUE
+    );
+
+    CREATE TABLE IF NOT EXISTS referrals (
+      referee_id  TEXT PRIMARY KEY,
+      referrer_id TEXT NOT NULL,
+      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals(referrer_id);
+
+    CREATE TABLE IF NOT EXISTS friendships (
+      requester_id TEXT NOT NULL,
+      addressee_id TEXT NOT NULL,
+      status       TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','accepted')),
+      created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (requester_id, addressee_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_friend_addressee ON friendships(addressee_id);
+  `);
+
   // Migrations — add columns if they don't exist (SQLite lacks ADD COLUMN IF NOT EXISTS)
+  // Alerts were previously global; scope them to the owning user (legacy rows keep user_id NULL and become unreachable)
+  try { db.exec('ALTER TABLE alerts ADD COLUMN user_id TEXT') } catch (_) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_alerts_user ON alerts(user_id)') } catch (_) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_csv_positions_user ON csv_positions(user_id)') } catch (_) {}
   try { db.exec('ALTER TABLE paper_positions ADD COLUMN targetPrice REAL DEFAULT NULL') } catch (_) {}
   try { db.exec('ALTER TABLE paper_positions ADD COLUMN stopLoss REAL DEFAULT NULL') } catch (_) {}
   // Give existing $0 portfolios the $500 starting balance

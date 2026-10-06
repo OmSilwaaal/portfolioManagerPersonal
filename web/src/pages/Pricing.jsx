@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import { setIsPro } from '../store/preferencesSlice'
 import { supabase } from '../utils/supabase/client'
+import { API_BASE } from '../api/baseApi'
 
 const PRO_PRICE = '$12'
 
@@ -57,8 +58,7 @@ export default function Pricing() {
     setCheckoutError('')
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      const apiBase = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api'
-      const res = await fetch(`${apiBase}/stripe/pro-checkout`, {
+      const res = await fetch(`${API_BASE}/stripe/pro-checkout`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${session?.access_token}`, 'Content-Type': 'application/json' },
       })
@@ -81,8 +81,7 @@ export default function Pricing() {
     setApplying(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      const apiBase = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api'
-      const res = await fetch(`${apiBase}/stripe/redeem-code`, {
+      const res = await fetch(`${API_BASE}/stripe/redeem-code`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${session?.access_token}`,

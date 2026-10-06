@@ -2,3 +2,5 @@
 -- Run this in Supabase Dashboard → SQL Editor → New query
 
 ALTER TABLE groups ADD COLUMN IF NOT EXISTS image_url TEXT;
+
+ALTER TABLE names ADD COLUMN IF NOT EXISTS namee TEXT;

@@ -5,6 +5,7 @@ import { useDispatch } from 'react-redux'
 import { setPreferences, setOnboardingComplete } from '../../store/preferencesSlice'
 import { supabase } from '../../utils/supabase/client'
 import { useAuth } from '../../contexts/AuthContext'
+import { API_BASE } from '../../api/baseApi'
 import QuizQuestion from './QuizQuestion'
 import WatchlistBuilder from './WatchlistBuilder'
 
@@ -122,6 +123,75 @@ function AuthInput({ label, ...props }) {
   )
 }
 
+// ─── Recovery-phrase sign-in ──────────────────────────────────────────────────
+
+function RecoverySignIn({ onBack }) {
+  const [phrase, setPhrase] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const wordCount = phrase.trim().split(/\s+/).filter(Boolean).length
+
+  const submit = async (e) => {
+    e.preventDefault()
+    if (wordCount !== 6 || busy) return
+    setError('')
+    setBusy(true)
+    try {
+      const res = await fetch(`${API_BASE}/recover/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phrase }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok || !body.token_hash) throw new Error(body.message || 'That recovery phrase is not valid.')
+      const { error: otpError } = await supabase.auth.verifyOtp({ token_hash: body.token_hash, type: 'magiclink' })
+      if (otpError) throw new Error('Could not sign you in. Try again.')
+      // AuthContext picks up the new session and routes the user into the app
+    } catch (err) {
+      setError(err.message)
+      setBusy(false)
+    }
+  }
+
+  const ready = wordCount === 6 && !busy
+  return (
+    <div style={{ minHeight: '100vh', background: INK, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 24px 40px', position: 'relative' }}>
+      <button onClick={onBack} style={{ position: 'absolute', top: 24, left: 32, background: 'none', border: 0, cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.10em', color: MUTED }}>
+        ← Back
+      </button>
+      <div style={{ marginBottom: 48 }}><Logo size="lg" /></div>
+      <form onSubmit={submit} style={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <h1 style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(28px,5vw,36px)', letterSpacing: '-0.04em', lineHeight: 0.95, color: CREAM, textAlign: 'center', margin: '0 0 2px' }}>
+          Use recovery phrase
+        </h1>
+        <p style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: MUTED, textAlign: 'center', margin: '0 0 12px', lineHeight: 1.7 }}>
+          Enter the six words you saved when you set up your account.
+        </p>
+        <textarea
+          value={phrase}
+          onChange={(e) => { setPhrase(e.target.value); setError('') }}
+          placeholder="word word word word word word"
+          rows={3}
+          autoComplete="off"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          disabled={busy}
+          style={{ ...inputStyle(false), fontFamily: 'var(--font-mono)', resize: 'none', lineHeight: 1.7 }}
+        />
+        {error && <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#f87171', letterSpacing: '0.06em', margin: 0 }}>{error}</p>}
+        <button
+          type="submit"
+          disabled={!ready}
+          style={{ width: '100%', padding: '13px 16px', background: ready ? CREAM : 'rgba(240,235,224,0.06)', color: ready ? INK : 'rgba(240,235,224,0.22)', border: 'none', cursor: ready ? 'pointer' : 'not-allowed', fontFamily: 'var(--font-sans)', fontSize: 14, fontWeight: 600, letterSpacing: '-0.01em' }}
+        >
+          {busy ? 'Signing in…' : 'Sign in →'}
+        </button>
+      </form>
+    </div>
+  )
+}
+
 // ─── Sign-up screen ───────────────────────────────────────────────────────────
 
 function SignUpScreen({ onNameStored }) {
@@ -131,6 +201,7 @@ function SignUpScreen({ onNameStored }) {
   const [sent, setSent] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
+  const [usePhrase, setUsePhrase] = useState(false)
 
   const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)
   const canSubmit = name.trim().length > 0 && isValidEmail(email)
@@ -173,6 +244,8 @@ function SignUpScreen({ onNameStored }) {
     onNameStored(name.trim(), email.trim().toLowerCase())
     setSent(true)
   }
+
+  if (usePhrase) return <RecoverySignIn onBack={() => setUsePhrase(false)} />
 
   if (sent) {
     return (
@@ -302,6 +375,14 @@ function SignUpScreen({ onNameStored }) {
           </button>
         </form>
 
+        <button
+          type="button"
+          onClick={() => setUsePhrase(true)}
+          style={{ display: 'block', margin: '22px auto 0', background: 'none', border: 0, cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.12em', color: MUTED, textDecoration: 'underline', textUnderlineOffset: 4 }}
+        >
+          SIGN IN WITH A RECOVERY PHRASE
+        </button>
+
         {/* Legal footer */}
         <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'rgba(240,235,224,0.22)', textAlign: 'center', marginTop: 28, lineHeight: 1.9 }}>
           BY CONTINUING YOU AGREE TO OUR{' '}
@@ -391,7 +472,7 @@ export default function QuizContainer() {
 
       setTimeout(() => {
         dispatch(setOnboardingComplete(true))
-        navigate('/feed')
+        navigate('/welcome', { replace: true })
       }, 2000)
     }
   }
@@ -453,7 +534,7 @@ export default function QuizContainer() {
         </div>
 
         <span className="text-[#4b5563] text-xs truncate max-w-[120px]">
-          {user?.email ?? ''}
+          {user?.user_metadata?.full_name ?? user?.user_metadata?.display_name ?? ''}
         </span>
       </div>
 

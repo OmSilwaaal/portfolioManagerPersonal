@@ -1,10 +1,11 @@
-const { getAllAlerts, markAlertTriggered } = require('../db/queries')
+const { getAllPendingAlerts, markAlertTriggered } = require('../db/queries')
 const { getStockQuote } = require('./finnhub')
+const { notifyUser } = require('./sms')
 
 async function checkAlerts() {
   let alerts
   try {
-    alerts = getAllAlerts().filter((a) => !a.triggered)
+    alerts = getAllPendingAlerts()
   } catch {
     return
   }
@@ -32,6 +33,12 @@ async function checkAlerts() {
         markAlertTriggered(alert.id)
         console.log(
           `[alerts] triggered: ${alert.ticker} ${alert.direction} $${alert.targetPrice} (now $${price.toFixed(2)})`
+        )
+        const arrow = alert.direction === 'above' ? 'rose above' : 'fell below'
+        notifyUser(
+          alert.user_id,
+          `Travauxus alert: ${alert.ticker} ${arrow} $${alert.targetPrice} — now $${price.toFixed(2)}. Reply STOP to opt out.`,
+          { kind: 'price_alerts' }
         )
       } catch (err) {
         console.error('[alerts] failed to mark triggered:', err.message)

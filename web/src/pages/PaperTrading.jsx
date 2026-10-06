@@ -14,6 +14,9 @@ import {
 } from '../api/paperTradingApi'
 import { useGetStockQuery } from '../api/stocksApi'
 import JargonTooltip from '../components/JargonTooltip'
+import { useCelebrate } from '../components/ProfitCelebration'
+import { useGetMyProfileQuery } from '../api/profilesApi'
+import { getIdentity, initialsOf } from '../utils/identity'
 
 /* ─── Helpers ─────────────────────────────────────────────────────────────── */
 
@@ -97,6 +100,7 @@ function OrderPanel({ ticker, stockData, stockLoading, stockError, cash, positio
 
   const [buyStock] = useBuyStockMutation()
   const [sellStock] = useSellStockMutation()
+  const celebrate = useCelebrate()
 
   const price = stockData?.price ?? null
   const sharesNum = parseFloat(shares) || 0
@@ -122,10 +126,11 @@ function OrderPanel({ ticker, stockData, stockLoading, stockError, cash, positio
         setStopLoss('')
         onSuccess?.()
       } else {
-        await sellStock({ ticker, shares: sharesNum }).unwrap()
+        const result = await sellStock({ ticker, shares: sharesNum }).unwrap()
         setSuccess(`Sold ${sharesNum} share${sharesNum !== 1 ? 's' : ''} of ${ticker}`)
         setShares('')
         onSuccess?.()
+        celebrate(result)
       }
     } catch (err) {
       setError(err?.data?.error ?? err?.message ?? 'Something went wrong.')
@@ -480,21 +485,130 @@ function CashModal({ onClose }) {
 }
 
 /* ─── Leaderboard ─────────────────────────────────────────────────────────── */
+const RANK_TIERS = [
+  { min: 100, label: 'Legend', color: '#f5c451' },
+  { min: 25, label: 'Whale', color: '#a78bfa' },
+  { min: 5, label: 'Hot', color: '#2ee6a6' },
+  { min: 0, label: 'Green', color: '#6ee7b7' },
+]
+const rankTier = (pct) => (pct > 0 ? RANK_TIERS.find((t) => pct >= t.min) ?? null : null)
+
+const MEDAL = ['#f5c451', '#cbd5e1', '#d08a4e']
+
+function entryName(entry, isMe, me) {
+  if (isMe) return { name: me.name, handle: me.handle }
+  const name = entry.displayName ?? (entry.username ? null : `Trader ${entry.userId.slice(-4).toUpperCase()}`)
+  return { name: name ?? `@${entry.username}`, handle: name && entry.username ? `@${entry.username}` : null }
+}
+
+function RankAvatar({ entry, name, avatarUrl, size = 36, ring }) {
+  const src = avatarUrl ?? entry.avatarUrl
+  return (
+    <div
+      className="rounded-full flex items-center justify-center font-bold overflow-hidden flex-shrink-0"
+      style={{ width: size, height: size, fontSize: size * 0.36, background: 'rgba(255,255,255,0.08)', color: '#f0ebe0', boxShadow: ring ? `0 0 0 2px ${ring}` : undefined }}
+    >
+      {src ? <img src={src} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" /> : initialsOf(name)}
+    </div>
+  )
+}
+
+function Podium({ top, meId, meIdentity, meAvatar }) {
+  // Visual order: 2nd · 1st · 3rd
+  const order = [top[1], top[0], top[2]].filter(Boolean)
+  return (
+    <div className="grid grid-cols-3 gap-2 items-end px-4 pt-6 pb-4">
+      {order.map((entry) => {
+        const idx = top.indexOf(entry)
+        const isMe = entry.userId === meId
+        const { name, handle } = entryName(entry, isMe, meIdentity)
+        const positive = entry.returnPct >= 0
+        return (
+          <div key={entry.userId} className="flex flex-col items-center text-center min-w-0" style={{ paddingBottom: idx === 0 ? 0 : 0 }}>
+            <div className="relative mb-2">
+              {idx === 0 && <span aria-hidden className="absolute -top-5 left-1/2 -translate-x-1/2 text-lg">👑</span>}
+              <RankAvatar entry={entry} name={name} avatarUrl={isMe ? meAvatar : null} size={idx === 0 ? 56 : 44} ring={MEDAL[idx]} />
+              <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 text-[10px] font-extrabold px-1.5 rounded-full" style={{ background: MEDAL[idx], color: '#0a0a0a' }}>
+                {idx + 1}
+              </span>
+            </div>
+            <p className="text-xs font-semibold text-white truncate max-w-full mt-1">{name}</p>
+            {handle && <p className="text-[10px] text-white/30 truncate max-w-full">{handle}</p>}
+            <p className={`text-sm font-bold tabular-nums mt-1 ${positive ? 'text-emerald-400' : 'text-red-400'}`}>
+              {positive ? '+' : ''}{fmt(entry.returnPct)}%
+            </p>
+            <div className="w-full rounded-t-lg mt-2" style={{ height: idx === 0 ? 38 : idx === 1 ? 26 : 18, background: `linear-gradient(180deg, ${MEDAL[idx]}33, transparent)`, borderTop: `2px solid ${MEDAL[idx]}` }} />
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function Leaderboard({ currentUserId }) {
-  const { data, isLoading } = useGetLeaderboardQuery()
+  const { user } = useAuth()
+  const { data: profile } = useGetMyProfileQuery(undefined, { skip: !user })
+  const { data, isLoading } = useGetLeaderboardQuery(undefined, { pollingInterval: 60000 })
   const board = data?.leaderboard ?? []
+  const me = data?.me ?? null
+  const meIdentity = getIdentity(user, profile)
+  const meAvatar = profile?.avatar_url || null
+  const meInTop = me && board.some((e) => e.userId === me.userId)
+  const rest = board.slice(3)
+
+  const Row = ({ entry, sticky }) => {
+    const isMe = entry.userId === currentUserId
+    const positive = (entry.returnPct ?? 0) >= 0
+    const { name, handle } = entryName(entry, isMe, meIdentity)
+    const tier = rankTier(entry.returnPct ?? 0)
+    return (
+      <div className={`flex items-center gap-3 px-5 py-3 ${isMe ? 'bg-emerald-400/[0.07]' : ''} ${sticky ? 'border-t' : ''}`} style={sticky ? { borderColor: 'rgba(255,255,255,0.08)' } : undefined}>
+        <span className="text-sm font-bold w-7 text-center tabular-nums text-white/30">{entry.rank}</span>
+        <RankAvatar entry={entry} name={name} avatarUrl={isMe ? meAvatar : null} />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-white font-medium truncate">
+            {name}
+            {isMe && <span className="ml-2 text-[10px] font-bold text-emerald-400 uppercase tracking-wide">You</span>}
+          </p>
+          <p className="text-[11px] text-white/30 truncate">
+            {handle ? `${handle} · ` : ''}{entry.positionCount} position{entry.positionCount !== 1 ? 's' : ''}
+            {tier && <span className="ml-1.5 font-semibold" style={{ color: tier.color }}>· {tier.label}</span>}
+          </p>
+        </div>
+        <div className="text-right">
+          <p className={`text-base font-bold tabular-nums ${positive ? 'text-emerald-400' : 'text-red-400'}`}>
+            {positive ? '+' : ''}{fmt(entry.returnPct)}%
+          </p>
+          <p className="text-[11px] text-white/30 tabular-nums">
+            {positive ? '+' : '-'}${fmt(Math.abs(entry.tradingPnl ?? 0))}
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="rounded-2xl overflow-hidden" style={glassCard}>
-      <div className="px-5 py-4 border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-        <h3 className="text-sm font-semibold text-white">Leaderboard</h3>
-        <p className="text-[11px] text-white/30 mt-0.5">Ranked by trading return on starting $500 — extra top-ups excluded</p>
+      <div className="px-5 py-4 border-b flex items-start justify-between gap-3" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+        <div>
+          <h3 className="text-sm font-semibold text-white">Leaderboard</h3>
+          <p className="text-[11px] text-white/30 mt-0.5">Live return on your starting $500 — top-ups excluded</p>
+        </div>
+        {me && (
+          <div className="text-right flex-shrink-0">
+            <p className="text-[10px] uppercase tracking-widest text-white/30">Your rank</p>
+            <p className="text-lg font-bold text-white leading-tight tabular-nums">
+              #{me.rank}<span className="text-xs text-white/30 font-medium"> / {data.totalTraders}</span>
+            </p>
+          </div>
+        )}
       </div>
       {isLoading ? (
         <div className="p-5 space-y-3">
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="flex items-center gap-3 animate-pulse">
               <div className="w-6 h-3 bg-white/10 rounded" />
+              <div className="w-9 h-9 bg-white/10 rounded-full" />
               <div className="flex-1 h-3 bg-white/10 rounded" />
               <div className="w-20 h-3 bg-white/8 rounded" />
             </div>
@@ -503,34 +617,13 @@ function Leaderboard({ currentUserId }) {
       ) : board.length === 0 ? (
         <div className="px-5 py-8 text-center text-white/30 text-sm">No data yet — be the first to trade!</div>
       ) : (
-        <div className="divide-y" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
-          {board.map((entry, idx) => {
-            const isMe = entry.userId === currentUserId
-            const positive = (entry.returnPct ?? 0) >= 0
-            return (
-              <div key={entry.userId} className={`flex items-center gap-4 px-5 py-3.5 ${isMe ? 'bg-white/[0.03]' : ''}`}>
-                <span className={`text-sm font-bold w-6 text-center tabular-nums ${idx === 0 ? 'text-yellow-400' : idx === 1 ? 'text-gray-300' : idx === 2 ? 'text-amber-600' : 'text-white/30'}`}>
-                  {idx + 1}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-white font-medium truncate">
-                    {isMe ? 'You' : `Trader ${entry.userId.slice(-4).toUpperCase()}`}
-                    {isMe && <span className="ml-2 text-[10px] text-white/40 font-normal">← you</span>}
-                  </p>
-                  <p className="text-[11px] text-white/30">{entry.positionCount} position{entry.positionCount !== 1 ? 's' : ''}</p>
-                </div>
-                <div className="text-right">
-                  <p className={`text-lg font-bold tabular-nums ${positive ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {positive ? '+' : ''}{fmt(entry.returnPct)}%
-                  </p>
-                  <p className="text-[11px] text-white/30 tabular-nums">
-                    {positive ? '+' : ''}${fmt(Math.abs(entry.tradingPnl ?? 0))} P&L
-                  </p>
-                </div>
-              </div>
-            )
-          })}
-        </div>
+        <>
+          {board.length >= 3 && <Podium top={board.slice(0, 3)} meId={currentUserId} meIdentity={meIdentity} meAvatar={meAvatar} />}
+          <div className="divide-y" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+            {(board.length >= 3 ? rest : board).map((entry) => <Row key={entry.userId} entry={entry} />)}
+          </div>
+          {me && !meInTop && <Row entry={me} sticky />}
+        </>
       )}
     </div>
   )
@@ -572,6 +665,14 @@ function PaperTradingInner({ userId }) {
   const { data: transactions, isLoading: txLoading } = useGetTransactionsQuery(50)
   const { data: stockData, isLoading: stockLoading, isError: stockError } = useGetStockQuery(ticker, { skip: !ticker })
   const [sellStock] = useSellStockMutation()
+  const celebrate = useCelebrate()
+
+  // Take-profit orders fire server-side while you're away; celebrate them when the portfolio reports it
+  useEffect(() => {
+    for (const sold of portfolio?.autoSold ?? []) {
+      if (sold.reason === 'target_price') celebrate({ ...sold, auto: 'target_price' })
+    }
+  }, [portfolio, celebrate])
 
   const cash = portfolio?.cashBalance ?? 0
   const positions = portfolio?.positions ?? []
@@ -583,9 +684,10 @@ function PaperTradingInner({ userId }) {
 
   const handleSell = async (t, shares) => {
     try {
-      await sellStock({ ticker: t, shares }).unwrap()
+      const result = await sellStock({ ticker: t, shares }).unwrap()
       setCloseModal(null)
       refetchPortfolio()
+      celebrate(result)
     } catch (_) {}
   }
 

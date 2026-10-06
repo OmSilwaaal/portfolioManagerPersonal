@@ -7,6 +7,7 @@ import { supabase } from '../utils/supabase/client'
 import { useAuth } from '../contexts/AuthContext'
 import { useGetMyProfileQuery } from '../api/profilesApi'
 import { useGetGroupsQuery } from '../api/groupsApi'
+import { getIdentity, initialsOf } from '../utils/identity'
 
 const BORDER = 'var(--on-ink-border)'
 
@@ -68,15 +69,12 @@ const COMMUNITY_ITEMS = [
   },
 ]
 
-function UserAvatar({ user, size = 32 }) {
+function UserAvatar({ user, size = 32, src = null }) {
   const meta = user?.user_metadata ?? {}
-  const avatarUrl = meta.avatar_url ?? meta.picture ?? null
-  const name = meta.full_name ?? meta.name ?? meta.display_name ?? user?.email ?? '?'
-  const initials = name
-    .split(' ')
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? '')
-    .join('')
+  // `src` lets callers show the avatar saved on the user's profile, which overrides the auth provider's photo
+  const avatarUrl = src || meta.avatar_url || meta.picture || null
+  const name = getIdentity(user, null).name
+  const initials = initialsOf(name)
 
   if (avatarUrl) {
     return (
@@ -147,11 +145,7 @@ export default function Sidebar() {
   const { data: profile } = useGetMyProfileQuery(undefined, { skip: !user })
 
   const meta = user?.user_metadata ?? {}
-  const email = user?.email ?? null
-
-  const displayName = profile?.username
-    ? `@${profile.username}`
-    : (profile?.display_name ?? meta.full_name ?? meta.name ?? meta.display_name ?? null)
+  const { name: displayName, handle } = getIdentity(user, profile)
   const avatarUrl = profile?.avatar_url || meta.avatar_url || meta.picture || null
 
   const { data: groups = [] } = useGetGroupsQuery(undefined, { skip: !user, pollingInterval: 60000 })
@@ -378,8 +372,8 @@ export default function Sidebar() {
               {displayName && (
                 <p style={{ fontFamily: 'var(--font-sans)', fontSize: 12, fontWeight: 500, color: 'var(--on-ink-text-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.3 }}>{displayName}</p>
               )}
-              {email && (
-                <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--on-ink-text-4)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.3 }}>{email}</p>
+              {handle && (
+                <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--on-ink-text-4)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.3 }}>{handle}</p>
               )}
             </div>
           </div>
