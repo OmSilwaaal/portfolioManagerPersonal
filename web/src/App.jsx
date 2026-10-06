@@ -29,6 +29,7 @@ import PrivacyPolicy from './pages/PrivacyPolicy'
 import Terms from './pages/Terms'
 import Disclaimer from './pages/Disclaimer'
 import TradingTerminal from './pages/TradingTerminal'
+import ResearchDashboard from './pages/ResearchDashboard'
 import PrivyProviderWrapper from './providers/PrivyProviderWrapper'
 
 // Import API modules to register endpoints
@@ -147,6 +148,7 @@ function AppInner() {
         <Route path="/settings" element={<Settings />} />
         <Route path="/pricing" element={<Pricing />} />
         <Route path="/terminal" element={<TradingTerminal />} />
+<Route path="/research" element={<ResearchDashboard />} />
       </Route>
     </Routes>
   )

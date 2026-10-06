@@ -1,0 +1,68 @@
+[
+  {
+    "gate": "0. Simulator reproducible (same seed -> identical data)",
+    "pass": true,
+    "measured": "bit-identical",
+    "bar": "equal"
+  },
+  {
+    "gate": "0b. Point-in-time audit: production features use no future data",
+    "pass": true,
+    "measured": "flagged=0",
+    "bar": "0 flagged"
+  },
+  {
+    "gate": "1. A ranked predictive (+both GB, top1%/5%)",
+    "pass": true,
+    "measured": "lift@1%=9.0 [8.3,9.6], lift@5%=5.0 [4.8,5.3], fwd p=0.001",
+    "bar": "CI lo>1, p<.01, lift@5%>=2"
+  },
+  {
+    "gate": "1b. A ablation: +social, +smart each beat market-only; +both beats each (paired, lift@5%)",
+    "pass": true,
+    "measured": "d(+soc-mkt)=2.75 p=0.001; d(+smt-mkt)=2.70 p=0.001; d(both-soc)=0.78 p=0.001; d(both-smt)=0.83 p=0.001",
+    "bar": "all p<.01 / <.05"
+  },
+  {
+    "gate": "2. C not predictive (social reactive)",
+    "pass": true,
+    "measured": "0/32 tests flagged; max lift=1.36, min p=0.035",
+    "bar": "0 flagged (p<0.0031 & (lift>1.25 or excess fwd>=0.5%))"
+  },
+  {
+    "gate": "3. G near-zero false signals (2 seeds, all 32 tests each)",
+    "pass": true,
+    "measured": "flagged=[0, 0]; +both GB lift@5%=[np.float64(1.07), np.float64(0.77)]; max lift=1.42",
+    "bar": "0 flagged; |lift-1|<0.3"
+  },
+  {
+    "gate": "4. A distinguished from C by timing features (token-level AUC, A vs C)",
+    "pass": true,
+    "measured": "AUC prec_m=0.996 CI[0.99,1.00]; prec_w=0.999; CV-logit(all timing)=1.000; A-vs-G prec_m=0.861; median prec_m A=+0.028 C=-0.061",
+    "bar": "AUC>=.90, CI lo>.8, sign A>0>C"
+  },
+  {
+    "gate": "4b. A-trained model does not hallucinate edge on C (lift@5%)",
+    "pass": true,
+    "measured": "with timing: lift=0.92 p=0.856, fwd_mean=-0.0098; naive: lift=0.86 p=0.976, fwd_mean=-0.0105 (info)",
+    "bar": "no sig. lift>1.25"
+  },
+  {
+    "gate": "5. Graceful degradation as noise grows (A, +both GB lift@5%) and G stays null at noise=4",
+    "pass": true,
+    "measured": "lift by noise 0.0:6.47, 0.5:5.53, 1.0:5.02, 2.0:4.66, 4.0:3.84; G@noise4 flagged=0",
+    "bar": "monotone(+-.25), each step keeps >=40% of excess, noise4 lift>1.5, G null"
+  },
+  {
+    "gate": "6. Leakage test: injected future-peeking feature is flagged (signal on G only when leaking)",
+    "pass": true,
+    "measured": "G+leak lift@5% gb/lr=[4.03, 4.34] p=[0.003, 0.003]; G clean lift=[1.07, 1.06]; audit flagged=['leak_future_ret']",
+    "bar": "leak lift>1.5 & p<.01; clean G null; audit flags exactly the leak"
+  },
+  {
+    "gate": "7. [info] Survivorship-biased export inflates apparent returns (bias is measurable)",
+    "pass": true,
+    "measured": "pop fwd mean full=-0.0054 surv=+0.0034",
+    "bar": "surv > full"
+  }
+]

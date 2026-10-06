@@ -28,6 +28,7 @@ const { router: stripeRouter } = require('./routes/stripe');
 const snaptradeRouter = require('./routes/snaptrade');
 const portfolioImportRouter = require('./routes/portfolioImport');
 const userRouter = require('./routes/user');
+const memecoinsRouter = require('./routes/memecoins');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const { sessionMiddleware, requireAuth } = require('./middleware/auth');
 const { getBudgetStatus } = require('./services/claude');
@@ -44,6 +45,7 @@ const { startGrpcStreamer } = require('./services/grpcStreamer');
 const { watchRedisForAlpha } = require('./services/executionEngine');
 startGrpcStreamer().catch(err => console.error('[GRPC STREAMER] Init Error:', err));
 watchRedisForAlpha();
+require('./services/snapshotCollector').startSnapshotCollector();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -125,6 +127,8 @@ app.use('/api/stripe', stripeRouter);
 app.use('/api/snaptrade', requireAuth, snaptradeRouter);
 app.use('/api/portfolio-import', requireAuth, portfolioImportRouter);
 app.use('/api/user', requireAuth, userRouter);
+app.use('/api/memecoins', requireAuth, memecoinsRouter);
+app.use('/api/research/eval', requireAuth, require('./routes/researchEval'));
 
 // Health check
 app.get('/health', (_req, res) => {
@@ -134,6 +138,26 @@ app.get('/health', (_req, res) => {
 // Error handlers
 app.use(notFoundHandler);
 app.use(errorHandler);
+
+// ── RESEARCH COLLECTORS (each is off unless its env flag is set) ──────────────
+try {
+  const { getDb: getResearchDb } = require('./db/schema');
+  const rdb = getResearchDb();
+  const { initWalletSchema } = require('./research/wallets/schema');
+  const { initSocialSchema } = require('./research/social/schema');
+  const { initEvalSchema } = require('./research/eval/schema');
+  initWalletSchema(rdb); initSocialSchema(rdb); initEvalSchema(rdb);
+  require('./research/wallets/collector').start(rdb);
+  require('./research/social/collector').start(rdb, {
+    skilledWalletIds: () => rdb.prepare(
+      'SELECT DISTINCT wallet_id FROM wallet_skill_snapshot WHERE passed_holdout = 1'
+    ).all().map((r) => r.wallet_id),
+    knownTokens: () => rdb.prepare('SELECT contract_address AS address, symbol FROM token').all(),
+  });
+  require('./research/eval/report').start(rdb);
+} catch (err) {
+  console.error('[research] failed to start collectors:', err.message);
+}
 
 app.listen(PORT, () => {
   console.log(`Market Intelligence API running on http://localhost:${PORT}`);

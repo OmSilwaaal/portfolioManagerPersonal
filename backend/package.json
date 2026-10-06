@@ -9,6 +9,7 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
+    "test": "node --test test/*.test.js",
     "postinstall": "rm -rf node_modules/rpc-websockets/node_modules/uuid || true"
   },
   "dependencies": {

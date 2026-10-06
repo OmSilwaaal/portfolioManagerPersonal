@@ -1,0 +1,395 @@
+import React, { useState } from 'react'
+import { Activity, AlertTriangle, CheckCircle2, CircleDashed, FlaskConical, Loader2, RefreshCw } from 'lucide-react'
+import {
+  useGetResearchStatusQuery,
+  useGetResearchReportQuery,
+  useRunResearchEvalMutation,
+} from '../api/researchApi'
+
+/* ─── Helpers ────────────────────────────────────────────────────────────── */
+const pct = (x, d = 1) => (x == null || Number.isNaN(x) ? '—' : `${(x * 100).toFixed(d)}%`)
+const num = (x) => (x == null ? '—' : Number(x).toLocaleString())
+const ago = (ts) => {
+  if (!ts) return 'never'
+  const s = Math.max(0, Date.now() / 1000 - ts)
+  if (s < 90) return `${Math.round(s)}s ago`
+  if (s < 5400) return `${Math.round(s / 60)}m ago`
+  if (s < 129600) return `${Math.round(s / 3600)}h ago`
+  return `${Math.round(s / 86400)}d ago`
+}
+const hLabel = (m) => (m >= 60 ? `${m / 60}h` : `${m}m`)
+
+const VERDICTS = {
+  INSUFFICIENT_DATA: { label: 'Insufficient data', cls: 'text-[#a1a1aa] border-[#3f3f46] bg-[#1a1a1a]', Icon: CircleDashed },
+  NO_EDGE: { label: 'No edge detected', cls: 'text-red-400 border-red-500/30 bg-red-500/10', Icon: AlertTriangle },
+  POSSIBLE_EDGE: { label: 'Possible edge (unproven)', cls: 'text-green-400 border-green-500/30 bg-green-500/10', Icon: CheckCircle2 },
+  EDGE_NOT_STABLE: { label: 'Edge not stable', cls: 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10', Icon: AlertTriangle },
+}
+
+function Panel({ title, right, children, className = '' }) {
+  return (
+    <section className={`bg-[#141414] border border-[#1f1f1f] rounded-md min-w-0 ${className}`}>
+      {title && (
+        <header className="flex items-center justify-between px-4 py-2.5 border-b border-[#1f1f1f]">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-[#a1a1aa]">{title}</h2>
+          {right}
+        </header>
+      )}
+      <div className="p-4">{children}</div>
+    </section>
+  )
+}
+
+function Stat({ label, value, sub }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-xs text-[#6b7280]">{label}</p>
+      <p className="text-xl font-semibold text-white tabular-nums">{value}</p>
+      {sub && <p className="text-xs text-[#6b7280] truncate">{sub}</p>}
+    </div>
+  )
+}
+
+/* ─── Sections ───────────────────────────────────────────────────────────── */
+function CollectionStatus({ status }) {
+  const days = status.daysOfData || 0
+  return (
+    <Panel title="Data collection">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
+        <Stat label="Days collected" value={days.toFixed(1)} sub={days < 7 ? 'aim for 7+ days' : 'enough time span'} />
+        <Stat label="Tokens" value={num(status.tokens)} />
+        <Stat label="Market snapshots" value={num(status.snapshots)} />
+        <Stat label="Signals logged" value={num(status.signals)} />
+        <Stat label="Outcomes measured" value={num(status.outcomes)} />
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs text-[#6b7280]">
+              <th className="py-1 pr-4 font-medium">Collector / table</th>
+              <th className="py-1 pr-4 font-medium text-right">Rows</th>
+              <th className="py-1 font-medium text-right">Last write</th>
+            </tr>
+          </thead>
+          <tbody>
+            {status.collectors.map((c) => (
+              <tr key={c.table} className="border-t border-[#1f1f1f]">
+                <td className="py-1.5 pr-4 text-white">
+                  <span className={`inline-block w-2 h-2 rounded-full mr-2 ${c.hasData ? 'bg-green-400' : 'bg-[#3f3f46]'}`} />
+                  {c.table}
+                </td>
+                <td className="py-1.5 pr-4 text-right tabular-nums text-[#a1a1aa]">{num(c.rows)}</td>
+                <td className="py-1.5 text-right text-[#a1a1aa]">{c.hasData ? ago(c.lastTs) : 'no data'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {!status.evalJobEnabled && (
+        <p className="text-xs text-[#6b7280] mt-3">Hourly evaluation job is off (set EVAL_JOB=1 on the server). Reports can still be run manually.</p>
+      )}
+    </Panel>
+  )
+}
+
+function VerdictCard({ report, onRun, running, secret, setSecret, runError }) {
+  const v = VERDICTS[report?.verdict] || VERDICTS.INSUFFICIENT_DATA
+  const Icon = v.Icon
+  return (
+    <Panel
+      title="Does this signal work?"
+      right={report && <span className="text-xs text-[#6b7280]">report {ago(report.created_ts)}</span>}
+    >
+      {report ? (
+        <>
+          <div className={`inline-flex items-center gap-2 px-3 py-1.5 border rounded-md text-sm font-semibold ${v.cls}`}>
+            <Icon size={16} /> {v.label}
+          </div>
+          <p className="text-xs text-[#6b7280] mt-2">
+            Model {report.primaryModel} · {hLabel(report.primaryHorizonMin)} horizon · headline verdict only
+          </p>
+          <p className="text-sm text-[#d4d4d8] mt-3 leading-relaxed">{report.summary}</p>
+        </>
+      ) : (
+        <p className="text-sm text-[#a1a1aa]">No report generated yet. Run an evaluation below, or wait for the hourly job.</p>
+      )}
+      <div className="flex flex-wrap items-center gap-2 mt-4">
+        <input
+          type="password"
+          value={secret}
+          onChange={(e) => setSecret(e.target.value)}
+          placeholder="admin secret (if required)"
+          className="bg-[#0a0a0a] border border-[#1f1f1f] rounded px-2 py-1.5 text-xs text-white placeholder-[#6b7280] w-52"
+        />
+        <button
+          onClick={onRun}
+          disabled={running}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-[#2a2a2a] text-white hover:bg-[#1f1f1f] disabled:opacity-50"
+        >
+          {running ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Run evaluation now
+        </button>
+        {runError && <span className="text-xs text-red-400">{runError}</span>}
+      </div>
+    </Panel>
+  )
+}
+
+function Warnings({ report }) {
+  const items = [...(report?.warnings || []), ...(report?.headline?.reasons || []).filter(() => report?.verdict === 'INSUFFICIENT_DATA')]
+  if (!items.length) return null
+  return (
+    <Panel title="Warnings">
+      <ul className="space-y-1.5">
+        {items.map((w, i) => (
+          <li key={i} className="flex gap-2 text-sm text-yellow-300/90">
+            <AlertTriangle size={14} className="mt-0.5 shrink-0" /> <span>{w}</span>
+          </li>
+        ))}
+      </ul>
+    </Panel>
+  )
+}
+
+function PrecisionTable({ ev }) {
+  if (!ev || !ev.n) return <p className="text-sm text-[#a1a1aa]">No scored outcomes yet.</p>
+  const rows = Object.values(ev.cutoffs || {})
+  const base = ev.baselines
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-left text-xs text-[#6b7280]">
+            <th className="py-1 pr-4 font-medium">Picks</th>
+            <th className="py-1 pr-4 font-medium text-right">N</th>
+            <th className="py-1 pr-4 font-medium text-right">Precision</th>
+            <th className="py-1 pr-4 font-medium text-right">Recall</th>
+            <th className="py-1 pr-4 font-medium text-right">Lift</th>
+            <th className="py-1 font-medium text-right">Mean net return</th>
+          </tr>
+        </thead>
+        <tbody className="tabular-nums">
+          {rows.map((b) => (
+            <tr key={b.frac} className="border-t border-[#1f1f1f]">
+              <td className="py-1.5 pr-4 text-white">Signal top {pct(b.frac, 0)}</td>
+              <td className="py-1.5 pr-4 text-right text-[#a1a1aa]">{b.k}</td>
+              <td className="py-1.5 pr-4 text-right text-white">{pct(b.precision)}</td>
+              <td className="py-1.5 pr-4 text-right text-[#a1a1aa]">{pct(b.recall)}</td>
+              <td className="py-1.5 pr-4 text-right text-white">{b.lift == null ? '—' : `${b.lift.toFixed(2)}x`}</td>
+              <td className={`py-1.5 text-right ${b.meanNet >= 0 ? 'text-green-400' : 'text-red-400'}`}>{pct(b.meanNet)}</td>
+            </tr>
+          ))}
+          {base?.volume5m && (
+            <tr className="border-t border-[#1f1f1f]">
+              <td className="py-1.5 pr-4 text-[#a1a1aa]">Baseline: highest 5m volume</td>
+              <td className="py-1.5 pr-4 text-right text-[#a1a1aa]">{base.volume5m.k}</td>
+              <td className="py-1.5 pr-4 text-right text-[#a1a1aa]">{pct(base.volume5m.precision)}</td>
+              <td className="py-1.5 pr-4 text-right text-[#a1a1aa]">{pct(base.volume5m.recall)}</td>
+              <td className="py-1.5 pr-4 text-right text-[#a1a1aa]">{base.volume5m.lift == null ? '—' : `${base.volume5m.lift.toFixed(2)}x`}</td>
+              <td className="py-1.5 text-right text-[#a1a1aa]">{pct(base.volume5m.meanNet)}</td>
+            </tr>
+          )}
+          {base?.random && (
+            <tr className="border-t border-[#1f1f1f]">
+              <td className="py-1.5 pr-4 text-[#a1a1aa]">Baseline: random picks (95th pct)</td>
+              <td className="py-1.5 pr-4 text-right text-[#a1a1aa]">{base.random.k}</td>
+              <td className="py-1.5 pr-4 text-right text-[#a1a1aa]">{pct(base.random.expectedPrecision)} ({pct(base.random.precisionP95)})</td>
+              <td className="py-1.5 pr-4 text-right text-[#a1a1aa]">—</td>
+              <td className="py-1.5 pr-4 text-right text-[#a1a1aa]">1.00x</td>
+              <td className="py-1.5 text-right text-[#a1a1aa]">{pct(base.random.meanNet)}</td>
+            </tr>
+          )}
+          <tr className="border-t border-[#1f1f1f]">
+            <td className="py-1.5 pr-4 text-[#a1a1aa]">All signals (base rate)</td>
+            <td className="py-1.5 pr-4 text-right text-[#a1a1aa]">{ev.n}</td>
+            <td className="py-1.5 pr-4 text-right text-[#a1a1aa]">{pct(ev.baseRate)}</td>
+            <td className="py-1.5 pr-4 text-right text-[#a1a1aa]">100%</td>
+            <td className="py-1.5 pr-4 text-right text-[#a1a1aa]">1.00x</td>
+            <td className="py-1.5 text-right text-[#a1a1aa]">{pct(ev.returns?.meanNet)}</td>
+          </tr>
+        </tbody>
+      </table>
+      {ev.bootstrap && (
+        <p className="text-xs text-[#6b7280] mt-3">
+          Precision excess over base rate (top {pct(ev.config.primaryFrac, 0)}): {pct(ev.bootstrap.precisionExcess.estimate)}
+          {' '}[95% CI {pct(ev.bootstrap.precisionExcess.ci95[0])} to {pct(ev.bootstrap.precisionExcess.ci95[1])}],
+          {' '}one-sided p = {ev.bootstrap.precisionExcess.pValue.toFixed(3)} (resampling whole tokens, not rows).
+        </p>
+      )}
+      {ev.stability && (
+        <p className="text-xs text-[#6b7280] mt-1">
+          Stability: first half excess {pct(ev.stability.firstHalf.precisionExcess)}, second half {pct(ev.stability.secondHalf.precisionExcess)}
+          {ev.stability.stable ? ' (consistent)' : ' (inconsistent or too thin)'}.
+        </p>
+      )}
+    </div>
+  )
+}
+
+function ReturnDistribution({ ev }) {
+  const r = ev?.returns
+  if (!r) return <p className="text-sm text-[#a1a1aa]">No data.</p>
+  // five-number-ish strip on a shared scale: worst decile, median, mean, best decile
+  const pts = [
+    { k: 'Worst 10%', v: r.worstDecileNet },
+    { k: 'Median', v: r.medianNet },
+    { k: 'Mean', v: r.meanNet },
+    { k: 'Best 10%', v: r.bestDecileNet },
+  ]
+  const lo = Math.min(-1, ...pts.map((p) => p.v))
+  const hi = Math.max(0.5, ...pts.map((p) => p.v))
+  const pos = (v) => `${((v - lo) / (hi - lo)) * 100}%`
+  const zero = pos(0)
+  const top5 = ev.cutoffs?.[String(ev.config.primaryFrac)]
+  return (
+    <div>
+      <div className="relative h-8 bg-[#0a0a0a] border border-[#1f1f1f] rounded mb-3">
+        <div className="absolute top-0 bottom-0 w-px bg-[#52525b]" style={{ left: zero }} title="0%" />
+        {pts.map((p) => (
+          <div key={p.k} className="absolute top-1.5 bottom-1.5 w-1.5 -ml-[3px] rounded-sm bg-white/80" style={{ left: pos(p.v) }} title={`${p.k}: ${pct(p.v)}`} />
+        ))}
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {pts.map((p) => (
+          <Stat key={p.k} label={`${p.k} (net)`} value={pct(p.v)} />
+        ))}
+      </div>
+      <p className="text-xs text-[#6b7280] mt-3">
+        Net of {pct(ev.config.cost, 0)} assumed round-trip cost. Worst-10% average loss: {pct(r.worstDecileMeanNet)}.
+        {top5 && <> Top {pct(ev.config.primaryFrac, 0)} picks: median {pct(top5.medianNet)}, worst decile {pct(top5.worstDecileNet)}.</>}
+        {' '}Dead tokens (scored -100%): {pct(r.deadShare)} of outcomes.
+      </p>
+    </div>
+  )
+}
+
+function HorizonTable({ model, primaryHorizon }) {
+  if (!model) return null
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-left text-xs text-[#6b7280]">
+            <th className="py-1 pr-4 font-medium">Horizon</th>
+            <th className="py-1 pr-4 font-medium text-right">Measured</th>
+            <th className="py-1 pr-4 font-medium text-right">Dead</th>
+            <th className="py-1 pr-4 font-medium text-right">Pending</th>
+            <th className="py-1 pr-4 font-medium text-right">Top-5% lift</th>
+            <th className="py-1 font-medium">Verdict</th>
+          </tr>
+        </thead>
+        <tbody className="tabular-nums">
+          {Object.entries(model.horizons).map(([h, d]) => {
+            const b = d.evaluation.cutoffs?.['0.05']
+            const vd = VERDICTS[d.evaluation.verdict] || VERDICTS.INSUFFICIENT_DATA
+            return (
+              <tr key={h} className="border-t border-[#1f1f1f]">
+                <td className="py-1.5 pr-4 text-white">{hLabel(Number(h))}{Number(h) === primaryHorizon ? ' (headline)' : ''}</td>
+                <td className="py-1.5 pr-4 text-right text-[#a1a1aa]">{d.outcomes.ok + d.outcomes.dead}</td>
+                <td className="py-1.5 pr-4 text-right text-[#a1a1aa]">{d.outcomes.dead}</td>
+                <td className="py-1.5 pr-4 text-right text-[#a1a1aa]">{d.outcomes.pending}</td>
+                <td className="py-1.5 pr-4 text-right text-white">{b?.lift == null ? '—' : `${b.lift.toFixed(2)}x`}</td>
+                <td className="py-1.5 text-xs text-[#a1a1aa]">{vd.label}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+      <p className="text-xs text-[#6b7280] mt-2">Non-headline horizons are exploratory: checking many can produce lucky-looking results.</p>
+    </div>
+  )
+}
+
+/* ─── Page ───────────────────────────────────────────────────────────────── */
+export default function ResearchDashboard() {
+  const status = useGetResearchStatusQuery(undefined, { pollingInterval: 60000 })
+  const reportQ = useGetResearchReportQuery(undefined, { pollingInterval: 60000 })
+  const [run, runState] = useRunResearchEvalMutation()
+  const [secret, setSecret] = useState('')
+  const [runError, setRunError] = useState('')
+
+  const report = reportQ.data
+  const model = report?.models?.[report.primaryModel]
+
+  const onRun = async () => {
+    setRunError('')
+    try {
+      await run(secret).unwrap()
+      reportQ.refetch()
+      status.refetch()
+    } catch (e) {
+      setRunError(e?.status === 403 ? 'Not authorised (admin secret)' : 'Run failed')
+    }
+  }
+
+  return (
+    <div className="max-w-5xl mx-auto px-4 py-6 space-y-4">
+      <div className="flex items-center gap-2">
+        <FlaskConical size={20} className="text-[#a1a1aa]" />
+        <h1 className="text-xl font-semibold text-white">Signal research</h1>
+        <Activity size={14} className="text-[#6b7280]" />
+      </div>
+      <p className="text-sm text-[#a1a1aa]">
+        An honest check of whether the unusual-activity score predicts which memecoins go up. This page never claims a
+        proven edge, and it declines to give a verdict until there is enough data.
+      </p>
+
+      {status.isLoading ? (
+        <div className="flex items-center gap-2 text-sm text-[#a1a1aa]"><Loader2 size={14} className="animate-spin" /> Loading…</div>
+      ) : status.isError ? (
+        <Panel><p className="text-sm text-red-400">Could not load collection status.</p></Panel>
+      ) : (
+        <CollectionStatus status={status.data} />
+      )}
+
+      <VerdictCard report={report} onRun={onRun} running={runState.isLoading} secret={secret} setSecret={setSecret} runError={runError} />
+      <Warnings report={report} />
+
+      {report && (
+        <>
+          <Panel title={`Precision & lift vs baselines (${hLabel(report.primaryHorizonMin)} horizon)`}>
+            <p className="text-xs text-[#6b7280] mb-3">
+              Success = net return above +{pct(report.headline.config.successThreshold, 0)} after {pct(report.headline.config.cost, 0)} round-trip cost.
+            </p>
+            <PrecisionTable ev={report.headline} />
+          </Panel>
+          <Panel title="Forward-return distribution">
+            <ReturnDistribution ev={report.headline} />
+          </Panel>
+          <Panel title="All horizons">
+            <HorizonTable model={model} primaryHorizon={report.primaryHorizonMin} />
+          </Panel>
+          {model && Object.keys(model.components).length > 0 && (
+            <Panel title="Feature-group ablation (exploratory)">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs text-[#6b7280]">
+                      <th className="py-1 pr-4 font-medium">Score used</th>
+                      <th className="py-1 pr-4 font-medium text-right">Top-5% precision</th>
+                      <th className="py-1 pr-4 font-medium text-right">Lift</th>
+                      <th className="py-1 font-medium">Verdict</th>
+                    </tr>
+                  </thead>
+                  <tbody className="tabular-nums">
+                    {Object.entries(model.components).map(([name, c]) => {
+                      const b = c.cutoffs?.['0.05']
+                      return (
+                        <tr key={name} className="border-t border-[#1f1f1f]">
+                          <td className="py-1.5 pr-4 text-white">{name}</td>
+                          <td className="py-1.5 pr-4 text-right text-[#a1a1aa]">{pct(b?.precision)}</td>
+                          <td className="py-1.5 pr-4 text-right text-[#a1a1aa]">{b?.lift == null ? '—' : `${b.lift.toFixed(2)}x`}</td>
+                          <td className="py-1.5 text-xs text-[#a1a1aa]">{(VERDICTS[c.verdict] || VERDICTS.INSUFFICIENT_DATA).label}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </Panel>
+          )}
+          <p className="text-xs text-[#6b7280]">{report.methodology}</p>
+        </>
+      )}
+    </div>
+  )
+}
