@@ -19,7 +19,7 @@
 const ALLOWED_LINK_SOURCES = ['self_declared_bio', 'self_declared_post'];
 const APPEND_ONLY_TABLES = [
   'account', 'account_wallet_link', 'follow_edge_snapshot',
-  'account_post', 'telegram_message', 'account_weight_snapshot',
+  'account_post', 'telegram_message', 'account_weight_snapshot', 'social_post_raw',
 ];
 
 function accountId(platform, handle) {
@@ -76,6 +76,32 @@ function initSocialSchema(db) {
     );
     CREATE UNIQUE INDEX IF NOT EXISTS uq_tg_msg ON telegram_message(message_id, COALESCE(token_address, ''));
     CREATE INDEX IF NOT EXISTS idx_tg_token_ts ON telegram_message(token_address, ts);
+    -- Rolling record of every free-chatter post (4chan / reddit) that carries ANY token candidate (a valid
+    -- address or an unresolved $cashtag), so mentions can be matched later even for tokens we only discover
+    -- afterwards. Append-only and kept forever, but holds NO raw text: just a hash plus the extracted candidates.
+    -- author_id is NULL when the platform gives no identity (4chan without poster ids).
+    CREATE TABLE IF NOT EXISTS social_post_raw (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      post_id TEXT NOT NULL UNIQUE,
+      platform TEXT NOT NULL,
+      source_id TEXT NOT NULL,        -- board ('biz') or subreddit
+      thread_id TEXT,
+      author_id TEXT,
+      ts INTEGER NOT NULL,            -- ms, actual post time
+      text_hash TEXT NOT NULL,
+      addresses_json TEXT NOT NULL,
+      cashtags_json TEXT NOT NULL,
+      ingested_ts INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_social_raw_ts ON social_post_raw(ts);
+    -- Raw text, RETENTION-LIMITED (SOCIAL_TEXT_RETENTION_DAYS, default 30). The only deletable social table.
+    CREATE TABLE IF NOT EXISTS social_post_text (
+      post_id TEXT PRIMARY KEY,
+      ts INTEGER NOT NULL,
+      text TEXT NOT NULL,
+      ingested_ts INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_social_text_ts ON social_post_text(ts);
     CREATE TABLE IF NOT EXISTS account_weight_snapshot (
       account_id TEXT NOT NULL,
       as_of_ts INTEGER NOT NULL,
@@ -97,6 +123,13 @@ function initSocialSchema(db) {
       OR NEW.evidence_url IS NULL OR length(trim(NEW.evidence_url)) = 0
     BEGIN SELECT RAISE(ABORT, 'account_wallet_link accepts only public self-declared links with evidence_url'); END;`);
   return db;
+}
+
+/** Delete raw text older than the retention window (hashes + candidates in social_post_raw are kept forever). */
+function pruneSocialText(db, nowMs, retentionDays = 30) {
+  const days = Number(retentionDays);
+  const cutoff = nowMs - (Number.isFinite(days) && days > 0 ? days : 30) * 86400000;
+  return db.prepare('DELETE FROM social_post_text WHERE ts < ?').run(cutoff).changes;
 }
 
 function ensureAccount(db, platform, handle, ts) {
@@ -124,4 +157,4 @@ function addSelfDeclaredWalletLink(db, { platform = 'x', handle, walletId, sourc
   return id;
 }
 
-module.exports = { initSocialSchema, ensureAccount, accountId, addSelfDeclaredWalletLink, ALLOWED_LINK_SOURCES, APPEND_ONLY_TABLES };
+module.exports = { initSocialSchema, pruneSocialText, ensureAccount, accountId, addSelfDeclaredWalletLink, ALLOWED_LINK_SOURCES, APPEND_ONLY_TABLES };

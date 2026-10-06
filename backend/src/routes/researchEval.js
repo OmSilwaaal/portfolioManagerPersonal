@@ -115,5 +115,29 @@ router.post('/run', adminOnly, (req, res) => {
   }
 });
 
+// "Who mentions winners early?" Latest stored report (404 = none yet). Never exposes post text.
+router.get('/winner-first', (req, res) => {
+  try {
+    const wf = require('../research/eval/winnerFirst');
+    const rep = wf.latestWinnerFirst(db());
+    if (!rep) return res.status(404).json({ error: true, message: 'No winner-first report yet.', jobEnabled: process.env.WINNER_FIRST_JOB === '1' });
+    res.json({ ...rep, jobEnabled: process.env.WINNER_FIRST_JOB === '1' });
+  } catch (e) {
+    console.error('[researchEval] winner-first:', e.message);
+    res.status(500).json({ error: true, message: 'Internal error' });
+  }
+});
+
+router.post('/winner-first/run', adminOnly, (req, res) => {
+  try {
+    const wf = require('../research/eval/winnerFirst');
+    const r = wf.runWinnerFirst(require('../radar/db').getRadarDb(), db());
+    res.status(r.ok ? 200 : 500).json({ ok: r.ok, verdict: r.verdict, counts: r.counts, error: r.error });
+  } catch (e) {
+    console.error('[researchEval] winner-first run:', e.message);
+    res.status(500).json({ error: true, message: 'Internal error' });
+  }
+});
+
 module.exports = router;
 module.exports.buildStatus = buildStatus;

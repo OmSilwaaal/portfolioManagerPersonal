@@ -5,6 +5,8 @@ import {
   useGetResearchCombinedQuery,
   useGetResearchReportQuery,
   useRunResearchEvalMutation,
+  useGetWinnerFirstQuery,
+  useRunWinnerFirstMutation,
 } from '../api/researchApi'
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
@@ -435,11 +437,100 @@ function HorizonTable({ model, primaryHorizon }) {
 }
 
 /* ─── Page ───────────────────────────────────────────────────────────────── */
+/* ─── Who mentions winners early? ───────────────────────────────────────── */
+const dur = (s) => (s == null ? '—' : s >= 3600 ? `${(s / 3600).toFixed(1)}h` : `${Math.round(s / 60)}m`)
+const LEVEL = { platform: 'Platform', community: 'Board / subreddit / channel', thread: 'Thread', account: 'Account' }
+
+function WinnerFirst({ q, onRun, running, secret }) {
+  const rep = q.data
+  const notYet = q.isError && q.error?.status === 404
+  const v = VERDICTS[rep?.verdict] || VERDICTS.INSUFFICIENT_DATA
+  const Icon = v.Icon
+  const shown = (rep?.sources || []).filter((s) => s.verdict !== 'INSUFFICIENT_DATA').slice(0, 15)
+  const thin = (rep?.sources || []).filter((s) => s.verdict === 'INSUFFICIENT_DATA').length
+  return (
+    <Panel
+      title="Who mentions winners early?"
+      right={secret !== undefined && (
+        <button onClick={onRun} disabled={running} className="text-xs text-[#a1a1aa] hover:text-white inline-flex items-center gap-1">
+          {running ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Re-run
+        </button>
+      )}
+    >
+      <p className="text-xs text-[#6b7280] mb-3">
+        Looks back over chatter our own collectors stored (4chan /biz, Reddit, X, Telegram). A winner is a token that rose
+        {rep?.config ? ` ${pct(rep.config.winnerReturn, 0)}+ within ${hLabel((rep.config.horizonSec || 0) / 60)}` : ' a lot'} after a fixed
+        reference point. A mention is "early" only if it was posted strictly before that point and was already in our database.
+      </p>
+      {q.isLoading ? (
+        <div className="flex items-center gap-2 text-sm text-[#a1a1aa]"><Loader2 size={14} className="animate-spin" /> Loading…</div>
+      ) : notYet ? (
+        <p className="text-sm text-[#a1a1aa]">
+          No report yet. {q.error?.data?.jobEnabled ? 'The job is enabled and will run soon.' : 'The job is off (set WINNER_FIRST_JOB=1 on the server, or run it manually).'}
+        </p>
+      ) : q.isError || !rep ? (
+        <p className="text-sm text-red-400">Could not load the report.</p>
+      ) : (
+        <>
+          <div className={`inline-flex items-center gap-2 border rounded-md px-3 py-1.5 text-sm ${v.cls}`}>
+            <Icon size={14} /> {v.label}
+          </div>
+          <p className="text-sm text-[#d4d4d8] mt-3">{rep.summary}</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+            <Stat label="Winners" value={num(rep.counts?.winners)} />
+            <Stat label="Matched non-winners" value={num(rep.counts?.controls)} />
+            <Stat label="Posts scanned" value={num(rep.counts?.postsLoaded)} />
+            <Stat label="Report age" value={ago(rep.created_ts)} />
+          </div>
+          {shown.length > 0 && (
+            <div className="overflow-x-auto mt-4">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-[#6b7280]">
+                    <th className="py-1 pr-3 font-medium">Source</th>
+                    <th className="py-1 pr-3 font-medium text-right">Led winners</th>
+                    <th className="py-1 pr-3 font-medium text-right">Led non-winners</th>
+                    <th className="py-1 pr-3 font-medium text-right">Lead median / 25th pct</th>
+                    <th className="py-1 pr-3 font-medium text-right">Rate gap (95% CI)</th>
+                    <th className="py-1 pr-3 font-medium text-right">p / BH q</th>
+                    <th className="py-1 font-medium">Verdict</th>
+                  </tr>
+                </thead>
+                <tbody className="tabular-nums">
+                  {shown.map((s) => (
+                    <tr key={s.key} className="border-t border-[#1f1f1f] align-top">
+                      <td className="py-1.5 pr-3 text-white break-all">{s.id}<div className="text-[10px] text-[#6b7280]">{LEVEL[s.level] || s.level}</div></td>
+                      <td className="py-1.5 pr-3 text-right text-[#a1a1aa]">{s.winnersPreceded}/{s.nWinners}</td>
+                      <td className="py-1.5 pr-3 text-right text-[#a1a1aa]">{s.controlsPreceded}/{s.nControls}</td>
+                      <td className="py-1.5 pr-3 text-right text-[#a1a1aa]">{dur(s.leadWinners?.medianSec)} / {dur(s.leadWinners?.p25Sec)}</td>
+                      <td className="py-1.5 pr-3 text-right text-[#a1a1aa]">
+                        {s.early ? `${pct(s.early.diff)} (${pct(s.early.ci95[0])} to ${pct(s.early.ci95[1])})` : '—'}
+                      </td>
+                      <td className="py-1.5 pr-3 text-right text-[#a1a1aa]">{s.early ? `${s.early.p.toFixed(3)} / ${s.early.qBH.toFixed(3)}` : '—'}</td>
+                      <td className="py-1.5 text-xs text-[#a1a1aa]">{(VERDICTS[s.verdict] || VERDICTS.INSUFFICIENT_DATA).label}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {thin > 0 && <p className="text-xs text-[#6b7280] mt-2">{thin} more sources have too few tokens to test and are not shown.</p>}
+          <ul className="list-disc pl-5 mt-4 space-y-1 text-xs text-[#6b7280]">
+            {(rep.caveats || []).map((c, i) => <li key={i}>{c}</li>)}
+          </ul>
+        </>
+      )}
+    </Panel>
+  )
+}
+
 export default function ResearchDashboard() {
   const status = useGetResearchStatusQuery(undefined, { pollingInterval: 60000 })
   const reportQ = useGetResearchReportQuery(undefined, { pollingInterval: 60000 })
   const combined = useGetResearchCombinedQuery(undefined, { pollingInterval: 300000 })
   const [run, runState] = useRunResearchEvalMutation()
+  const wfQ = useGetWinnerFirstQuery(undefined, { pollingInterval: 300000 })
+  const [runWf, wfState] = useRunWinnerFirstMutation()
   const [secret, setSecret] = useState('')
   const [runError, setRunError] = useState('')
 
@@ -532,6 +623,13 @@ export default function ResearchDashboard() {
           <p className="text-xs text-[#6b7280]">{report.methodology}</p>
         </>
       )}
+
+      <WinnerFirst
+        q={wfQ}
+        running={wfState.isLoading}
+        secret={secret}
+        onRun={async () => { try { await runWf(secret).unwrap(); wfQ.refetch() } catch (e) { /* surfaced by the empty state */ } }}
+      />
 
       {status.isLoading ? null : status.isError ? (
         <Panel><p className="text-sm text-red-400">Could not load collection status.</p></Panel>

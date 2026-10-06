@@ -14,6 +14,17 @@ export const researchApi = baseApi.injectEndpoints({
       // 404 = no report generated yet; treat as an empty state, not an error
       transformErrorResponse: (res) => res,
     }),
+    getWinnerFirst: builder.query({
+      query: () => '/research/eval/winner-first',
+      transformErrorResponse: (res) => res,   // 404 = no report yet
+    }),
+    runWinnerFirst: builder.mutation({
+      query: (adminSecret) => ({
+        url: '/research/eval/winner-first/run',
+        method: 'POST',
+        headers: adminSecret ? { 'x-admin-secret': adminSecret } : undefined,
+      }),
+    }),
     runResearchEval: builder.mutation({
       query: (adminSecret) => ({
         url: '/research/eval/run',
@@ -29,4 +40,6 @@ export const {
   useGetResearchCombinedQuery,
   useGetResearchReportQuery,
   useRunResearchEvalMutation,
+  useGetWinnerFirstQuery,
+  useRunWinnerFirstMutation,
 } = researchApi

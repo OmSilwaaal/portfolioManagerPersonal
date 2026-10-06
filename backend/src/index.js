@@ -211,6 +211,7 @@ try {
     knownTokens: () => rdb.prepare('SELECT contract_address AS address, symbol FROM token').all(),
   });
   require('./research/eval/report').start(rdb);
+  require('./research/eval/winnerFirst').start(() => require('./radar/db').getRadarDb(), rdb);
 } catch (err) {
   console.error('[research] failed to start collectors:', err.message);
 }

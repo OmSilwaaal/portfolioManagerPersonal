@@ -9,6 +9,7 @@
  *   getUserPosts(handle, {sinceTs,max}) -> [{id, ts(ms, actual post time), text}]
  * Telegram-like provider (telegram, mock):
  *   getChannelMessages(channel, {sinceTs, limit}) -> [{id, ts(ms), text}]
+ * Feed providers (4chan, reddit; see feeds.js): getNewPosts() -> [{id, ts(ms), text, platform, sourceId, threadId, authorId}]
  *
  * All timestamps are epoch ms. Network calls go through a serial rate-limit
  * queue with exponential backoff on 429/5xx.
@@ -193,7 +194,11 @@ function createMockProvider({ users = {}, following = {}, posts = {}, telegram =
 }
 
 function getProviders(env = process.env, opts = {}) {
-  return { x: createXProvider(env, opts), telegram: createTelegramProvider(env, opts) };
+  const feeds = require('./feeds');   // lazy: feeds.js imports createRateLimiter from this file
+  return {
+    x: createXProvider(env, opts), telegram: createTelegramProvider(env, opts),
+    fourchan: feeds.createFourchanProvider(env, opts), reddit: feeds.createRedditProvider(env, opts),
+  };
 }
 
 module.exports = { createRateLimiter, createXProvider, createTelegramProvider, createMockProvider, getProviders, X_VENDORS };
