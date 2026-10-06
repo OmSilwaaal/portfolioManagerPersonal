@@ -8,12 +8,18 @@ function sessionMiddleware(req, res, next) {
 // Verifies the Supabase JWT sent as "Authorization: Bearer <token>"
 // Rejects unauthenticated requests before they can trigger AI calls
 async function requireAuth(req, res, next) {
+  // Routes are mounted behind requireAuth at the app level AND per-route; verify the token only once
+  if (req.user) return next();
+
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: true, message: 'Authentication required.' });
   }
 
-  const token = authHeader.slice(7);
+  const token = authHeader.slice(7).trim();
+  if (!token || token.length > 4096) {
+    return res.status(401).json({ error: true, message: 'Authentication required.' });
+  }
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 
@@ -31,6 +37,9 @@ async function requireAuth(req, res, next) {
       },
       timeout: 5000,
     });
+    if (!data?.id) {
+      return res.status(401).json({ error: true, message: 'Invalid or expired session. Please sign in again.' });
+    }
     req.user = data;
     next();
   } catch {

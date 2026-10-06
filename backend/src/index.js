@@ -8,6 +8,7 @@ if (typeof globalThis.WebSocket === 'undefined') {
 const express = require('express');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
 
 const stocksRouter = require('./routes/stocks');
 const cryptoRouter = require('./routes/crypto');
@@ -30,7 +31,6 @@ const portfolioImportRouter = require('./routes/portfolioImport');
 const userRouter = require('./routes/user');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const { sessionMiddleware, requireAuth } = require('./middleware/auth');
-const { getBudgetStatus } = require('./services/claude');
 
 // Initialize DB on startup
 require('./db/schema').getDb();
@@ -39,16 +39,30 @@ warmCoinList();
 const { startAlertPoller } = require('./services/alertPoller');
 startAlertPoller();
 
-// Initialize High-Speed Solana Pipeline
-const { startGrpcStreamer } = require('./services/grpcStreamer');
-const { watchRedisForAlpha } = require('./services/executionEngine');
-startGrpcStreamer().catch(err => console.error('[GRPC STREAMER] Init Error:', err));
-watchRedisForAlpha();
+// High-speed Solana pipeline — experimental/mock code (random triggers, throwaway keypairs).
+// Opt-in only; never runs unless ENABLE_SOLANA_PIPELINE=true.
+if (process.env.ENABLE_SOLANA_PIPELINE === 'true') {
+  const { startGrpcStreamer } = require('./services/grpcStreamer');
+  const { watchRedisForAlpha } = require('./services/executionEngine');
+  startGrpcStreamer().catch(err => console.error('[GRPC STREAMER] Init Error:', err));
+  watchRedisForAlpha();
+}
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const isProd = process.env.NODE_ENV === 'production';
+
+// Behind Railway/Vercel proxies: trust the first hop so rate limiting keys on the real client IP
+app.set('trust proxy', 1);
+app.disable('x-powered-by');
+app.use(helmet({
+  // This is a JSON API — lock down everything; nothing here should ever be framed or script-executed
+  contentSecurityPolicy: { directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] } },
+  crossOriginResourcePolicy: { policy: 'cross-origin' }, // frontend (different origin) must read responses
+}));
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
+// Explicit allow-list. Add more origins via CORS_EXTRA_ORIGINS (comma-separated).
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
@@ -56,28 +70,29 @@ const allowedOrigins = [
   process.env.FRONTEND_URL_WWW,
   'https://travauxus.com',
   'https://www.travauxus.com',
+  ...(process.env.CORS_EXTRA_ORIGINS || '').split(',').map((o) => o.trim()),
 ].filter(Boolean);
 
-// Also allow any Railway or Vercel preview deployment
-const allowedPatterns = [
+// Wildcard preview-deployment origins are only allowed outside production —
+// anyone can host an app on *.vercel.app / *.railway.app.
+const previewPatterns = isProd ? [] : [
   /^https:\/\/.*\.railway\.app$/,
   /^https:\/\/.*\.vercel\.app$/,
 ];
 
 app.use(cors({
-  credentials: true,
   origin: (origin, callback) => {
-    // Allow requests with no origin (curl, Postman, server-to-server)
+    // No Origin header = curl / server-to-server / Stripe webhooks (auth is via Bearer token or signature)
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
-    if (allowedPatterns.some(re => re.test(origin))) return callback(null, true);
-    callback(new Error(`CORS: origin ${origin} not allowed`));
+    if (previewPatterns.some(re => re.test(origin))) return callback(null, true);
+    callback(null, false); // omit CORS headers rather than throwing a 500
   },
 }));
 // Raw body for webhook signature verification — MUST come before express.json()
 app.use('/api/paper-trading/webhook', express.raw({ type: 'application/json' }))
 app.use('/api/stripe/pro-webhook', express.raw({ type: 'application/json' }))
-app.use(express.json({ limit: '50kb' })); // cap request body size
+app.use(express.json({ limit: '60kb' })); // cap request body size (profile avatars are ~45KB max)
 app.use(sessionMiddleware);
 
 // ── RATE LIMITERS ─────────────────────────────────────────────────────────────
@@ -97,7 +112,19 @@ const aiLimiter = makeLimiter(60 * 1000, 10, 'Too many requests. Please wait a m
 // Commodities: 3 per minute (each call triggers multiple Claude requests)
 const commoditiesLimiter = makeLimiter(60 * 1000, 3, 'Too many commodities requests. Please wait a moment.');
 
+// Brute-force / abuse targets
+const joinLimiter = makeLimiter(15 * 60 * 1000, 20, 'Too many attempts. Please try again later.');
+const promoLimiter = makeLimiter(15 * 60 * 1000, 10, 'Too many attempts. Please try again later.');
+const destructiveLimiter = makeLimiter(60 * 60 * 1000, 5, 'Too many requests. Please try again later.');
+const tradeLimiter = makeLimiter(60 * 1000, 30, 'Too many trade requests. Please slow down.');
+
 app.use('/api', globalLimiter);
+app.use('/api/groups/join', joinLimiter);
+app.use('/api/stripe/redeem-code', promoLimiter);
+app.use('/api/user', destructiveLimiter);
+app.use('/api/paper-trading/buy', tradeLimiter);
+app.use('/api/paper-trading/sell', tradeLimiter);
+app.use('/api/paper-trading/purchase-cash', tradeLimiter);
 
 // ── ROUTES ────────────────────────────────────────────────────────────────────
 
@@ -128,7 +155,7 @@ app.use('/api/user', requireAuth, userRouter);
 
 // Health check
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString(), budget: getBudgetStatus() });
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 // Error handlers
