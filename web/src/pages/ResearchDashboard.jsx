@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { Activity, AlertTriangle, CheckCircle2, CircleDashed, FlaskConical, Loader2, RefreshCw } from 'lucide-react'
 import {
   useGetResearchStatusQuery,
+  useGetResearchCombinedQuery,
   useGetResearchReportQuery,
   useRunResearchEvalMutation,
 } from '../api/researchApi'
@@ -23,6 +24,7 @@ const VERDICTS = {
   INSUFFICIENT_DATA: { label: 'Insufficient data', cls: 'text-[#a1a1aa] border-[#3f3f46] bg-[#1a1a1a]', Icon: CircleDashed },
   NO_EDGE: { label: 'No edge detected', cls: 'text-red-400 border-red-500/30 bg-red-500/10', Icon: AlertTriangle },
   POSSIBLE_EDGE: { label: 'Possible edge (unproven)', cls: 'text-green-400 border-green-500/30 bg-green-500/10', Icon: CheckCircle2 },
+  MOSTLY_REACTIVE: { label: 'Mostly reactive (chasing moves)', cls: 'text-orange-400 border-orange-500/30 bg-orange-500/10', Icon: AlertTriangle },
   EDGE_NOT_STABLE: { label: 'Edge not stable', cls: 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10', Icon: AlertTriangle },
 }
 
@@ -47,6 +49,139 @@ function Stat({ label, value, sub }) {
       <p className="text-xl font-semibold text-white tabular-nums">{value}</p>
       {sub && <p className="text-xs text-[#6b7280] truncate">{sub}</p>}
     </div>
+  )
+}
+
+/* ─── Combined (radar + baseline) sections ───────────────────────────────── */
+// What is missing/disabled, and the exact env setting that fixes each.
+function buildFixes(c) {
+  const flags = c?.collectors?.flags || {}
+  const keys = c?.collectors?.keys || {}
+  const fixes = []
+  if (!c?.radarStatus?.enabled) fixes.push({ what: 'Radar (the main signal engine) is off', fix: 'Set ENABLE_RADAR=true' })
+  else if (c.radarStatus.error) fixes.push({ what: `Radar is on but failing: ${c.radarStatus.error}`, fix: 'Check server logs and RADAR_DB_PATH' })
+  if (!flags.SNAPSHOT_COLLECTOR) fixes.push({ what: 'Market snapshot collector is off (needed for the activity-v0 baseline)', fix: 'Set SNAPSHOT_COLLECTOR=1' })
+  if (!flags.SMART_MONEY_COLLECTOR) fixes.push({ what: 'Smart-money wallet collector is off', fix: 'Set SMART_MONEY_COLLECTOR=1 and HELIUS_API_KEY or BIRDEYE_API_KEY' })
+  else if (!keys.walletProvider) fixes.push({ what: 'Smart-money collector has no data provider', fix: 'Set HELIUS_API_KEY or BIRDEYE_API_KEY' })
+  if (!flags.SOCIAL_COLLECTOR) fixes.push({ what: 'Social collector is off', fix: 'Set SOCIAL_COLLECTOR=1 and X_BEARER_TOKEN (or TWITTERAPI_IO_KEY)' })
+  else if (!keys.x && !keys.telegram) fixes.push({ what: 'Social collector has no X or Telegram key', fix: 'Set X_BEARER_TOKEN (or TWITTERAPI_IO_KEY)' })
+  if (!flags.EVAL_JOB) fixes.push({ what: 'Hourly baseline evaluation is off', fix: 'Set EVAL_JOB=1' })
+  return fixes
+}
+
+function OverallCard({ combined }) {
+  const o = combined.overall
+  const v = VERDICTS[o?.verdict] || VERDICTS.INSUFFICIENT_DATA
+  const Icon = v.Icon
+  const days = combined.radarStatus?.daysOfData ?? 0
+  const f = o?.facts || {}
+  const fixes = buildFixes(combined)
+  return (
+    <Panel title="Does it work yet?">
+      <div className={`inline-flex items-center gap-2 px-3 py-1.5 border rounded-md text-sm font-semibold ${v.cls}`}>
+        <Icon size={16} /> {v.label}
+      </div>
+      <p className="text-sm text-[#d4d4d8] mt-3 leading-relaxed">{o?.headline}</p>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+        <Stat label="Days collected" value={days.toFixed(1)} sub={`need ${f.minDays ?? 7}+`} />
+        <Stat label="Tokens with history" value={num(f.tokens)} sub={`need ${f.minTokens ?? 100}+`} />
+        <Stat label="Test-slice trades" value={f.testSlice ? num(f.testSlice.n) : '—'} sub="held-out, never tuned on" />
+        <Stat label="Signals chasing a pump" value={pct(f.shareReactive, 0)} sub="lower is better" />
+      </div>
+      {o?.reasons?.length > 0 && (
+        <ul className="mt-4 space-y-1 text-sm text-[#a1a1aa] list-disc pl-5">
+          {o.reasons.map((r, i) => <li key={i}>{r}</li>)}
+        </ul>
+      )}
+      <p className="text-xs text-[#6b7280] mt-3">
+        Beats the simple "highest volume" pick: {f.beatsVolumeBaseline == null ? 'unknown yet' : f.beatsVolumeBaseline ? 'yes' : 'no'}.
+        This page never reports a proven edge; the best it can say is "possible, unproven".
+      </p>
+      {fixes.length > 0 && (
+        <div className="mt-4 border-t border-[#1f1f1f] pt-3">
+          <p className="text-xs font-semibold uppercase tracking-wider text-[#a1a1aa] mb-2">What is missing or switched off</p>
+          <ul className="space-y-1.5">
+            {fixes.map((x) => (
+              <li key={x.what} className="flex gap-2 text-sm text-yellow-300/90">
+                <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                <span>{x.what}. <code className="text-white bg-[#0a0a0a] border border-[#1f1f1f] rounded px-1.5 py-0.5 text-xs">{x.fix}</code></span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </Panel>
+  )
+}
+
+function RadarResults({ radar }) {
+  if (!radar || radar.enabled === false) {
+    return <Panel title="Radar results"><p className="text-sm text-[#a1a1aa]">Radar is off, so there are no results. Set ENABLE_RADAR=true on the server.</p></Panel>
+  }
+  if (radar.error) {
+    return <Panel title="Radar results"><p className="text-sm text-red-400">Radar report failed: {radar.error}</p></Panel>
+  }
+  const rows = [...(radar.results || [])].sort((a, b) => (a.window === b.window ? 0 : a.window === 'test' ? -1 : 1))
+  const cell = 'py-1.5 pr-4 text-right'
+  return (
+    <Panel title="Radar results (forward returns, paper trades)">
+      <p className="text-xs text-[#6b7280] mb-3">
+        Paper trades after fees and slippage, one entry per token. "test" rows are the held-out final slice and are the only fair
+        read for the fitted model; "all" rows are hand-set models. A check mark means it beat random picks even after correcting for
+        how many things were tried ({radar.comparisons} comparisons). Reactive % is how many signals fired after a 20%+ run-up.
+        {radar.fit?.status && radar.fit.status !== 'ok' && <> Fitted model: {radar.fit.status}{radar.fit.reason ? ` (${radar.fit.reason})` : ''}.</>}
+      </p>
+      {rows.length === 0 ? <p className="text-sm text-[#a1a1aa]">No results yet.</p> : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs text-[#6b7280]">
+                {['Window', 'Model', 'Hold', 'Trades', 'Win %', 'Mean', 'Median', 'Worst 10%', 'Rug %', 'Random mean', 'p', 'Reactive %'].map((h, i) => (
+                  <th key={h} className={`py-1 pr-4 font-medium ${i > 2 ? 'text-right' : ''}`}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="tabular-nums">
+              {rows.map((r, i) => (
+                <tr key={i} className="border-t border-[#1f1f1f]">
+                  <td className="py-1.5 pr-4 text-white">{r.window}</td>
+                  <td className="py-1.5 pr-4 text-white">{r.model}</td>
+                  <td className="py-1.5 pr-4 text-[#a1a1aa]">{r.strategy}</td>
+                  <td className={`${cell} text-[#a1a1aa]`}>{r.n}</td>
+                  <td className={`${cell} text-[#a1a1aa]`}>{pct(r.winRate, 0)}</td>
+                  <td className={`${cell} ${r.mean >= 0 ? 'text-green-400' : 'text-red-400'}`}>{pct(r.mean)}</td>
+                  <td className={`${cell} text-[#a1a1aa]`}>{pct(r.median)}</td>
+                  <td className={`${cell} text-[#a1a1aa]`}>{pct(r.p10, 0)}</td>
+                  <td className={`${cell} text-[#a1a1aa]`}>{pct(r.rugRate, 0)}</td>
+                  <td className={`${cell} text-[#a1a1aa]`}>{pct(r.baseline?.meanOfMeans)}</td>
+                  <td className={`${cell} text-[#a1a1aa]`}>{r.pVsRandom == null ? '—' : r.pVsRandom.toFixed(3)}{r.significantAfterCorrection ? ' ✓' : ''}</td>
+                  <td className={`${cell} text-[#a1a1aa]`}>{r.precedence ? pct(r.precedence.shareReactive, 0) : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {radar.caveats?.length > 0 && (
+        <ul className="mt-3 space-y-1 text-xs text-[#6b7280] list-disc pl-5">
+          {radar.caveats.map((c, i) => <li key={i}>{c}</li>)}
+        </ul>
+      )}
+    </Panel>
+  )
+}
+
+function CollectorCounts({ collectors }) {
+  const tables = collectors?.tables
+  if (!tables) return null
+  return (
+    <Panel title="Wallet and social collectors (row counts)">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        {Object.entries(tables).map(([t, v]) => (
+          <Stat key={t} label={t} value={num(v.rows)} sub={v.exists ? (v.rows ? 'collecting' : 'empty') : 'not created / collector never ran'} />
+        ))}
+      </div>
+    </Panel>
   )
 }
 
@@ -303,6 +438,7 @@ function HorizonTable({ model, primaryHorizon }) {
 export default function ResearchDashboard() {
   const status = useGetResearchStatusQuery(undefined, { pollingInterval: 60000 })
   const reportQ = useGetResearchReportQuery(undefined, { pollingInterval: 60000 })
+  const combined = useGetResearchCombinedQuery(undefined, { pollingInterval: 300000 })
   const [run, runState] = useRunResearchEvalMutation()
   const [secret, setSecret] = useState('')
   const [runError, setRunError] = useState('')
@@ -316,6 +452,7 @@ export default function ResearchDashboard() {
       await run(secret).unwrap()
       reportQ.refetch()
       status.refetch()
+      combined.refetch()
     } catch (e) {
       setRunError(e?.status === 403 ? 'Not authorised (admin secret)' : 'Run failed')
     }
@@ -333,13 +470,18 @@ export default function ResearchDashboard() {
         proven edge, and it declines to give a verdict until there is enough data.
       </p>
 
-      {status.isLoading ? (
-        <div className="flex items-center gap-2 text-sm text-[#a1a1aa]"><Loader2 size={14} className="animate-spin" /> Loading…</div>
-      ) : status.isError ? (
-        <Panel><p className="text-sm text-red-400">Could not load collection status.</p></Panel>
+      {combined.isLoading ? (
+        <div className="flex items-center gap-2 text-sm text-[#a1a1aa]"><Loader2 size={14} className="animate-spin" /> Running the radar report (can take a moment)…</div>
+      ) : combined.isError ? (
+        <Panel><p className="text-sm text-red-400">Could not load the combined research view.</p></Panel>
       ) : (
-        <CollectionStatus status={status.data} />
+        <>
+          <OverallCard combined={combined.data} />
+          <RadarResults radar={combined.data.radar} />
+        </>
       )}
+
+      <h2 className="text-sm font-semibold text-white pt-2">Baseline: activity-v0 score (comparison only)</h2>
 
       <VerdictCard report={report} onRun={onRun} running={runState.isLoading} secret={secret} setSecret={setSecret} runError={runError} />
       <Warnings report={report} />
@@ -390,6 +532,13 @@ export default function ResearchDashboard() {
           <p className="text-xs text-[#6b7280]">{report.methodology}</p>
         </>
       )}
+
+      {status.isLoading ? null : status.isError ? (
+        <Panel><p className="text-sm text-red-400">Could not load collection status.</p></Panel>
+      ) : (
+        <CollectionStatus status={status.data} />
+      )}
+      {combined.data && <CollectorCounts collectors={combined.data.collectors} />}
     </div>
   )
 }

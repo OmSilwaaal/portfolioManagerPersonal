@@ -6,6 +6,9 @@ export const researchApi = baseApi.injectEndpoints({
     getResearchStatus: builder.query({
       query: () => '/research/eval/status',
     }),
+    getResearchCombined: builder.query({
+      query: () => '/research/eval/combined',
+    }),
     getResearchReport: builder.query({
       query: () => '/research/eval/report/latest',
       // 404 = no report generated yet; treat as an empty state, not an error
@@ -23,6 +26,7 @@ export const researchApi = baseApi.injectEndpoints({
 
 export const {
   useGetResearchStatusQuery,
+  useGetResearchCombinedQuery,
   useGetResearchReportQuery,
   useRunResearchEvalMutation,
 } = researchApi

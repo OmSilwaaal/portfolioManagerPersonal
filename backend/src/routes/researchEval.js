@@ -68,9 +68,29 @@ function buildStatus(d) {
 }
 
 router.get('/status', (req, res) => {
-  try { res.json(buildStatus(db())); } catch (e) {
+  try {
+    const d = db();
+    const cb = require('../research/eval/combined');
+    res.json({ ...buildStatus(d), radar: cb.radarStatus(), collectorStatus: cb.collectorStatus(d) });
+  } catch (e) {
     console.error('[researchEval] status:', e.message);
     res.status(500).json({ error: true, message: 'Internal error' });
+  }
+});
+
+// Radar (primary) + activity-v0 baseline + collector status + conservative overall verdict. Never throws.
+router.get('/combined', (req, res) => {
+  try {
+    res.json(require('../research/eval/combined').buildCombined(db(), {
+      refresh: req.query.refresh === '1',
+      latestReport: require('../research/eval/report').latestReport,
+    }));
+  } catch (e) {
+    console.error('[researchEval] combined:', e.message);
+    res.json({
+      overall: { verdict: 'INSUFFICIENT_DATA', headline: 'Status unavailable.', reasons: [e.message], missing: [], facts: {} },
+      radarStatus: { enabled: false }, radar: { enabled: false }, baseline: null, collectors: {},
+    });
   }
 });
 

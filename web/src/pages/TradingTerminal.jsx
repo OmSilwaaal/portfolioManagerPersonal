@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { usePrivy } from '@privy-io/react-auth'
 import {
   Zap, Wallet, LogIn, LogOut, Search, Copy, Check, RefreshCw, AlertTriangle,
-  ArrowUpRight, ArrowDownRight, Flame, Sparkles, Rocket, X, Loader2,
+  ArrowUpRight, ArrowDownRight, Flame, Sparkles, Rocket, X, Loader2, Radar,
 } from 'lucide-react'
 import MemeChart from '../components/MemeChart'
 import { useGetPortfolioQuery } from '../api/paperTradingApi'
@@ -16,6 +16,7 @@ import {
   useGetMemecoinTradesQuery,
   useGetMemecoinSignalsQuery,
   useGetMemecoinSignalQuery,
+  useGetRadarSignalsQuery,
   useQuoteMemecoinMutation,
   useTradeMemecoinMutation,
   isMockData,
@@ -247,6 +248,10 @@ function TopBar({ onSelect, solAddress, solBalance, paperCash }) {
 
 /* ─── Unusual-activity signal (not a prediction) ─────────────────────────── */
 const SIGNAL_CAPTION = 'Unusual-activity score from price/volume. Not a prediction or financial advice.'
+const RADAR_CAPTION = 'Radar activity/risk score (hand-set model, not validated). Not a prediction or financial advice.'
+const SOURCE_LABEL = { radar: 'Radar', 'activity-v0': 'Activity v0' }
+const captionFor = (sig) => (sig?.source === 'radar' ? RADAR_CAPTION : SIGNAL_CAPTION)
+const RADAR_OFF_HINT = 'Radar is off. Set ENABLE_RADAR=true on the backend to see new launches.'
 const LEVEL_STYLE = {
   QUIET: { text: 'text-[#a39d8d]', border: 'border-[#555143]', bar: 'bg-[#555143]' },
   WARMING: { text: 'text-[#d6b87a]', border: 'border-[#d6b87a]/50', bar: 'bg-[#d6b87a]' },
@@ -259,6 +264,30 @@ const COMPONENT_LABELS = {
   buy_sell_imbalance: 'Buy/sell imbalance',
   realized_vol: 'Realized volatility',
   liquidity_delta: 'Liquidity change',
+  rank_vs_cohort: 'Rank vs new launches',
+  buy_pressure: 'Buy pressure',
+  txn_accel: 'Transaction acceleration',
+  price_momentum: 'Price momentum (15m)',
+  curve_progress: 'Bonding-curve progress',
+  market_regime: 'Market buy pressure',
+  calm_price: 'Price calmness',
+}
+
+function SourceTag({ source }) {
+  if (!source) return null
+  return (
+    <span className={`shrink-0 text-[9px] px-1 border uppercase tracking-wider ${source === 'radar' ? 'text-[#9eae84] border-[#9eae84]/40' : 'text-[#555143] border-[#25231d]'}`}
+      title={`Score source: ${SOURCE_LABEL[source] || source}`}>{source === 'radar' ? 'radar' : 'v0'}</span>
+  )
+}
+
+function FlagBadge({ f }) {
+  const danger = f.severity === 'danger'
+  return (
+    <span title={f.detail} className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 border ${danger ? 'border-[#d35c4a]/60 text-[#d35c4a] bg-[#d35c4a]/10' : 'border-[#d6b87a]/40 text-[#d6b87a]'}`}>
+      <AlertTriangle className="w-3 h-3" />{f.label}
+    </span>
+  )
 }
 
 function SignalBadge({ sig }) {
@@ -267,7 +296,7 @@ function SignalBadge({ sig }) {
   const low = sig.confidence != null && sig.confidence < 0.5
   return (
     <span
-      title={`Unusual-activity score ${sig.score} (${sig.level})${low ? ', low confidence' : ''}. Not a prediction.`}
+      title={`${SOURCE_LABEL[sig.source] || 'Activity'} score ${sig.score} (${sig.level})${low ? ', low confidence' : ''}. Not a prediction.`}
       className={`shrink-0 min-w-[26px] text-center px-1 text-[10px] font-bold border ${st.text} ${st.border} ${low ? 'opacity-60 border-dashed' : ''}`}
     >{Math.round(sig.score)}</span>
   )
@@ -281,6 +310,7 @@ function SignalPanel({ address }) {
     <div className="px-3 py-2 border-t border-[#1f1f1f]">
       <div className="flex items-center gap-2 mb-1">
         <span className="text-[10px] text-[#555143] uppercase">Activity signal</span>
+        <SourceTag source={sig?.source} />
         {q.isFetching && !q.isLoading && <Loader2 className="w-3 h-3 animate-spin text-[#555143]" />}
       </div>
       {q.isLoading ? (
@@ -293,6 +323,12 @@ function SignalPanel({ address }) {
             <div className={`text-2xl font-bold leading-none ${st.text}`}>{Math.round(sig.score)}<span className="text-[10px] text-[#555143]">/100</span></div>
             <div className={`text-[10px] font-bold tracking-wider ${st.text}`}>{sig.level}</div>
             <div className="text-[10px] text-[#555143]">confidence {Math.round((sig.confidence ?? 0) * 100)}%{sig.mode === 'list-only' ? ' (list data only)' : ''}</div>
+            {sig.source === 'radar' && sig.radar && (
+              <div className="text-[10px] text-[#555143]">
+                {sig.radar.launch?.state}{sig.radar.launch?.ageMin != null ? ` · ${fmtAge(sig.radar.launch.ageMin)}` : ''}
+                {sig.radar.passesSafetyGate ? ' · gate ok' : ' · gate failed'}
+              </div>
+            )}
           </div>
           <div className="flex-1 min-w-[180px] space-y-1">
             {Object.entries(sig.components || {}).map(([k, c]) => (
@@ -307,16 +343,12 @@ function SignalPanel({ address }) {
           </div>
           {sig.riskFlags?.length > 0 && (
             <div className="w-full flex flex-wrap gap-1.5">
-              {sig.riskFlags.map((f) => (
-                <span key={f.code} title={f.detail} className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 border border-[#d35c4a]/40 text-[#d35c4a]">
-                  <AlertTriangle className="w-3 h-3" />{f.label}
-                </span>
-              ))}
+              {sig.riskFlags.map((f) => <FlagBadge key={f.code} f={{ severity: 'danger', ...f }} />)}
             </div>
           )}
         </div>
       ) : null}
-      <div className="mt-1.5 text-[10px] text-[#555143] italic">{SIGNAL_CAPTION}</div>
+      <div className="mt-1.5 text-[10px] text-[#555143] italic">{captionFor(sig)}</div>
     </div>
   )
 }
@@ -334,7 +366,7 @@ function TokenRow({ t, active, onSelect, sig }) {
             {t.image ? <img src={t.image} alt="" className="w-full h-full object-cover" loading="lazy" /> : (t.symbol || '?').slice(0, 2)}
           </div>
           <div className="min-w-0">
-            <div className="text-xs font-bold text-white flex items-center gap-1.5"><SignalBadge sig={sig} /><span className="truncate">{t.symbol} <span className="font-normal text-[#a39d8d]">{t.name}</span></span></div>
+            <div className="text-xs font-bold text-white flex items-center gap-1.5"><SignalBadge sig={sig} /><SourceTag source={sig?.source} /><span className="truncate">{t.symbol} <span className="font-normal text-[#a39d8d]">{t.name}</span></span></div>
             <div className="text-[10px] text-[#555143]">{short(t.address)}{t.ageMinutes != null && ` · ${fmtAge(t.ageMinutes)}`}</div>
           </div>
         </div>
@@ -353,8 +385,84 @@ function TokenRow({ t, active, onSelect, sig }) {
   )
 }
 
+function RadarRow({ s, active, onSelect }) {
+  const flags = s.riskFlags || []
+  const danger = flags.filter((f) => f.severity === 'danger')
+  const warn = flags.filter((f) => f.severity !== 'danger')
+  const p = s.promo || {}
+  const l = s.launch || {}
+  const sig = s.score != null ? s : null
+  return (
+    <button
+      onClick={() => onSelect(s.address)}
+      className={`w-full text-left px-3 py-2 border-b border-[#1a1a1a] hover:bg-[#1a1a1a] transition ${active ? 'bg-[#1f2910]/40 border-l-2 border-l-[#9eae84]' : ''}`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-xs font-bold text-white flex items-center gap-1.5">
+            {sig ? <SignalBadge sig={sig} /> : <span className="shrink-0 min-w-[26px] text-center px-1 text-[10px] border border-dashed border-[#555143] text-[#555143]" title="No market snapshot yet">new</span>}
+            <SourceTag source="radar" />
+            <span className="truncate">{s.symbol || '?'} <span className="font-normal text-[#a39d8d]">{s.name}</span></span>
+          </div>
+          <div className="text-[10px] text-[#555143]">{short(s.address)} · {fmtAge(l.ageMin)} · {l.state}{l.curveProgress != null ? ` ${Math.round(Math.min(l.curveProgress, 1) * 100)}%` : ''}</div>
+        </div>
+        <div className="text-right shrink-0">
+          <div className="text-xs text-white">{fmtUsd(s.market?.fdv)}</div>
+          <div className={`text-[10px] ${pctColor(s.features?.price_chg_15m != null ? s.features.price_chg_15m * 100 : null)}`}>{s.features?.price_chg_15m != null ? `${fmtPct(s.features.price_chg_15m * 100)} 15m` : '--'}</div>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-1 mt-1">
+        {danger.map((f) => <FlagBadge key={f.code} f={f} />)}
+        {warn.map((f) => <FlagBadge key={f.code} f={f} />)}
+        {s.passesSafetyGate && <span className="text-[10px] px-1.5 py-0.5 border border-[#7ea968]/40 text-[#7ea968]" title="Passed the radar safety gate (authorities, holder concentration, insiders, creator history)">vetted</span>}
+        {p.boostTotal > 0 && <span className="text-[10px] px-1.5 py-0.5 border border-[#d6b87a]/40 text-[#d6b87a]" title="Paid DexScreener boost">boost</span>}
+        {p.hasProfile && <span className="text-[10px] px-1.5 py-0.5 border border-[#25231d] text-[#a39d8d]" title="Paid DexScreener profile">profile</span>}
+        {p.cto && <span className="text-[10px] px-1.5 py-0.5 border border-[#25231d] text-[#a39d8d]" title="Community takeover">CTO</span>}
+        {p.twitter && <span className="text-[10px] px-1.5 py-0.5 border border-[#25231d] text-[#555143]">X</span>}
+        {p.telegram && <span className="text-[10px] px-1.5 py-0.5 border border-[#25231d] text-[#555143]">TG</span>}
+        {p.website && <span className="text-[10px] px-1.5 py-0.5 border border-[#25231d] text-[#555143]">web</span>}
+      </div>
+    </button>
+  )
+}
+
+function RadarList({ selected, onSelect }) {
+  const [sort, setSort] = useState('new')
+  const q = useGetRadarSignalsQuery({ sort, limit: 40 }, { pollingInterval: 10000 })
+  const d = q.data
+  return (
+    <>
+      <div className="px-3 py-1 border-b border-[#1f1f1f] flex items-center gap-2 text-[10px] text-[#a39d8d]" title={RADAR_CAPTION}>
+        <span>Radar</span>
+        <select value={sort} onChange={(e) => setSort(e.target.value)} className="bg-[#0d0d0d] border border-[#25231d] text-[10px] px-1 py-0.5">
+          <option value="new">Newest launches</option>
+          <option value="score">Top score</option>
+        </select>
+        {q.isFetching && !q.isLoading && <Loader2 className="w-3 h-3 animate-spin text-[#555143]" />}
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {q.isLoading ? (
+          Array.from({ length: 6 }).map((_, i) => <div key={i} className="px-3 py-2 border-b border-[#1a1a1a] space-y-1.5"><Skel className="h-7 w-full" /><Skel className="h-2 w-2/3" /></div>)
+        ) : q.isError ? (
+          <ErrorBox error={q.error} onRetry={q.refetch} label="Radar feed unavailable" />
+        ) : d && d.enabled === false ? (
+          <div className="p-4 text-xs text-[#a39d8d] text-center space-y-1">
+            <div>{RADAR_OFF_HINT}</div>
+            {d.reason && <div className="text-[10px] text-[#555143]">{d.reason}</div>}
+          </div>
+        ) : !d?.signals?.length ? (
+          <div className="p-4 text-xs text-[#a39d8d] text-center">No radar tokens yet.</div>
+        ) : (
+          d.signals.map((s) => <RadarRow key={s.address} s={s} active={s.address === selected} onSelect={onSelect} />)
+        )}
+      </div>
+      <div className="px-3 py-1 border-t border-[#1f1f1f] text-[10px] text-[#555143] italic">{RADAR_CAPTION}</div>
+    </>
+  )
+}
+
 function DiscoveryPanel({ selected, onSelect }) {
-  const [tab, setTab] = useState('new')
+  const [tab, setTab] = useState('radar')
   const trending = useGetTrendingMemecoinsQuery(undefined, { pollingInterval: 15000 })
   const fresh = useGetNewMemecoinsQuery(undefined, { pollingInterval: 15000 })
 
@@ -393,6 +501,7 @@ function DiscoveryPanel({ selected, onSelect }) {
           value={tab}
           onChange={setTab}
           tabs={[
+            { id: 'radar', label: 'Radar', icon: <Radar className="w-3 h-3" /> },
             { id: 'new', label: 'New Pairs', icon: <Sparkles className="w-3 h-3" /> },
             { id: 'final', label: 'Final Stretch', icon: <Rocket className="w-3 h-3" /> },
             { id: 'trending', label: 'Trending', icon: <Flame className="w-3 h-3" /> },
@@ -400,6 +509,7 @@ function DiscoveryPanel({ selected, onSelect }) {
         />
         {isMockData(q.data) && <span className="text-[9px] px-1 border border-[#d6b87a]/40 text-[#d6b87a] shrink-0">MOCK</span>}
       </div>
+      {tab === 'radar' ? <RadarList selected={selected} onSelect={onSelect} /> : (<>
       <div className="px-3 py-1 border-b border-[#1f1f1f] flex items-center gap-2 text-[10px] text-[#a39d8d]" title={SIGNAL_CAPTION}>
         <span>Activity</span>
         <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="bg-[#0d0d0d] border border-[#25231d] text-[10px] px-1 py-0.5">
@@ -428,6 +538,7 @@ function DiscoveryPanel({ selected, onSelect }) {
           list.map((t) => <TokenRow key={t.address} t={t} active={t.address === selected} onSelect={onSelect} sig={sigMap.get(t.address)} />)
         )}
       </div>
+      </>)}
     </Panel>
   )
 }

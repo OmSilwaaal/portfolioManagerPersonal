@@ -1,5 +1,6 @@
 const { isEligible } = require('./features');
 const { execute, DEFAULTS } = require('./simulator');
+const { GROUPS } = require('./extraFeatures');
 
 // Walk-forward logistic regression. Train on the past, pick the firing threshold on a later validation slice, and let
 // the report judge it only on a still-later TEST slice. An embargo between slices stops a token's multi-hour outcome
@@ -20,8 +21,10 @@ const STRIDE_SEC = 300;            // one training row per token per 5 min: cons
 const slog = (x) => Math.sign(x) * Math.log1p(Math.abs(x));
 const sigmoid = (z) => 1 / (1 + Math.exp(-Math.max(-30, Math.min(30, z))));
 
-function rawVector(f) {
-  const v = NUMERIC.map((k) => (f[k] === null || f[k] === undefined ? null : slog(f[k])));
+// Optional feature groups ('smartmoney', 'social') are appended as extra numeric columns only when named in
+// overrides.featureGroups; with none (the default) the column set, and so the fit, is exactly as before.
+function rawVector(f, numeric = NUMERIC) {
+  const v = numeric.map((k) => (f[k] === null || f[k] === undefined ? null : slog(f[k])));
   const inter = INTERACTIONS.map(([a, b]) => (f[a] == null || f[b] == null ? null : slog(f[a]) * slog(f[b])));
   const bin = BINARY.map((k) => (f[k] ? 1 : 0));
   return { v: [...v, ...inter], bin, onCurve: f.curve_progress != null ? 1 : 0 };
@@ -53,6 +56,7 @@ function labelledRows(universe, pick, opt) {
 
 function fitModel(universe, overrides = {}) {
   const opt = { ...DEFAULTS, ...overrides };
+  const numeric = [...NUMERIC, ...(overrides.featureGroups || []).flatMap((g) => GROUPS[g] || [])];
   const cut = splitTokens(universe);
   if (!cut) return { status: 'insufficient_data', reason: 'need at least ~40 tokens with history' };
   const { t1, t2 } = cut;
@@ -65,7 +69,7 @@ function fitModel(universe, overrides = {}) {
   }
 
   // Standardise on TRAIN only. Missing → 0 after standardising (= "average"), plus an explicit missing flag per column.
-  const raw = train.map((r) => rawVector(r.f));
+  const raw = train.map((r) => rawVector(r.f, numeric));
   const dim = raw[0].v.length;
   const mu = new Array(dim).fill(0), sd = new Array(dim).fill(1), missRate = new Array(dim).fill(0);
   for (let j = 0; j < dim; j++) {
@@ -78,10 +82,10 @@ function fitModel(universe, overrides = {}) {
     }
   }
   const flagCols = missRate.map((m, j) => (m > 0.05 ? j : -1)).filter((j) => j >= 0);
-  const names = [...NUMERIC, ...INTERACTIONS.map(([a, b]) => `${a}*${b}`), ...BINARY, 'on_curve', ...flagCols.map((j) => `missing:${j < NUMERIC.length ? NUMERIC[j] : 'interaction' + (j - NUMERIC.length)}`)];
+  const names = [...numeric, ...INTERACTIONS.map(([a, b]) => `${a}*${b}`), ...BINARY, 'on_curve', ...flagCols.map((j) => `missing:${j < numeric.length ? numeric[j] : 'interaction' + (j - numeric.length)}`)];
 
   const vectorize = (f) => {
-    const { v, bin, onCurve } = rawVector(f);
+    const { v, bin, onCurve } = rawVector(f, numeric);
     return [...v.map((x, j) => (x === null ? 0 : (x - mu[j]) / sd[j])), ...bin, onCurve, ...flagCols.map((j) => (v[j] === null ? 1 : 0))];
   };
 

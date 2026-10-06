@@ -213,3 +213,67 @@ test('end to end: planted signal in DB -> outcomes -> report POSSIBLE_EDGE; stor
   const comp = loadPairs(db, { modelVersion: 'activity-v0', horizonMin: 60, scoreKey: 'component:volume' });
   assert.equal(comp.length, 320);
 });
+
+// ---------- overall (radar + baseline) verdict ----------
+const { overallVerdict, collectorStatus } = require('../src/research/eval/combined');
+
+const testRow = (o = {}) => ({
+  window: 'test', model: 'fitted_lr', strategy: '60m', n: 80, mean: 0.12, median: 0.02, winRate: 0.4,
+  pVsRandom: 0.0004, significantAfterCorrection: true,
+  precedence: { shareReactive: 0.1 },
+  perDayMean: { a: { n: 10, mean: 0.1 }, b: { n: 10, mean: 0.2 }, c: { n: 10, mean: 0.05 } },
+  ...o,
+});
+const goodBaseline = (o = {}) => ({
+  verdict: 'POSSIBLE_EDGE',
+  headline: { config: { primaryFrac: 0.05 }, cutoffs: { '0.05': { precision: 0.4 } }, baselines: { volume5m: { precision: 0.2 } } },
+  ...o,
+});
+const base = (o = {}) => ({ radarEnabled: true, daysOfData: 10, tokens: 500, radar: { results: [testRow()] }, baseline: goodBaseline(), ...o });
+
+test('overall: insufficient data until both days and tokens are enough', () => {
+  assert.equal(overallVerdict(base({ daysOfData: 2 })).verdict, 'INSUFFICIENT_DATA');
+  assert.equal(overallVerdict(base({ tokens: 20 })).verdict, 'INSUFFICIENT_DATA');
+  assert.equal(overallVerdict(base({ radarEnabled: false })).verdict, 'INSUFFICIENT_DATA');
+  assert.equal(overallVerdict(base({ radar: { results: [] } })).verdict, 'INSUFFICIENT_DATA');
+  assert.equal(overallVerdict(base({ radar: { results: [testRow({ n: 5 })] } })).verdict, 'INSUFFICIENT_DATA');
+  assert.equal(overallVerdict({}).verdict, 'INSUFFICIENT_DATA');
+});
+
+test('overall: reactive signal is flagged, not called an edge', () => {
+  const v = overallVerdict(base({ radar: { results: [testRow({ precedence: { shareReactive: 0.8 } })] } }));
+  assert.equal(v.verdict, 'MOSTLY_REACTIVE');
+});
+
+test('overall: no edge when the test slice does not beat random', () => {
+  const v = overallVerdict(base({ radar: { results: [testRow({ significantAfterCorrection: false, mean: -0.05 })] } }));
+  assert.equal(v.verdict, 'NO_EDGE');
+});
+
+test('overall: no edge when it does not beat the highest-volume baseline', () => {
+  const b = goodBaseline(); b.headline.baselines.volume5m.precision = 0.5;
+  assert.equal(overallVerdict(base({ baseline: b })).verdict, 'NO_EDGE');
+});
+
+test('overall: unstable edge never becomes possible/proven', () => {
+  const unstableDays = testRow({ perDayMean: { a: { n: 9, mean: 0.5 }, b: { n: 9, mean: -0.1 }, c: { n: 9, mean: -0.2 }, d: { n: 9, mean: -0.1 } } });
+  assert.equal(overallVerdict(base({ radar: { results: [unstableDays] } })).verdict, 'EDGE_NOT_STABLE');
+  assert.equal(overallVerdict(base({ baseline: goodBaseline({ verdict: 'EDGE_NOT_STABLE' }) })).verdict, 'EDGE_NOT_STABLE');
+});
+
+test('overall: strongest outcome is POSSIBLE_EDGE, needs a known baseline comparison', () => {
+  assert.equal(overallVerdict(base()).verdict, 'POSSIBLE_EDGE');
+  assert.equal(overallVerdict(base({ baseline: null })).verdict, 'INSUFFICIENT_DATA');
+  const all = [base(), base({ daysOfData: 1 }), base({ baseline: null })].map((i) => overallVerdict(i).verdict);
+  assert.ok(all.every((x) => !/PROVEN/i.test(x)));
+});
+
+test('collectorStatus tolerates missing tables and reports flags without secrets', () => {
+  const d = new DatabaseSync(':memory:');
+  const s = collectorStatus(d, { SNAPSHOT_COLLECTOR: '1', HELIUS_API_KEY: 'secret' });
+  assert.equal(s.tables.smart_money_event.rows, 0);
+  assert.equal(s.tables.smart_money_event.exists, false);
+  assert.equal(s.flags.SNAPSHOT_COLLECTOR, true);
+  assert.equal(s.keys.walletProvider, true);
+  assert.ok(!JSON.stringify(s).includes('secret'));
+});

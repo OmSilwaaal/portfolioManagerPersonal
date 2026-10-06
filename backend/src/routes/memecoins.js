@@ -3,6 +3,17 @@ const router = express.Router();
 const data = require('../services/memecoinData');
 
 const { computeSignal, MODEL_VERSION } = require('../services/signalScore');
+const radarSignals = require('../services/radarSignals');
+
+// The radar is the primary signal engine: tokens it tracks get the radar score; others fall back to activity-v0.
+// Radar problems (disabled, empty, DB error) always degrade to an empty result, never an error.
+function radarLookup(addresses) {
+  try { return radarSignals.lookupMany(addresses); } catch (_) { return new Map(); }
+}
+// Radar score + radar risk flags merged with the activity-v0 flags computed from list data.
+function radarShape(token, r, mineSig) {
+  return radarSignals.toMemecoinSignal({ ...r, symbol: r.symbol || token.symbol }, mineSig);
+}
 
 // DB persistence is best-effort and loaded lazily so a DB problem never breaks the API.
 function persistSignal(...a) {
@@ -182,6 +193,7 @@ function shape(token, sig) {
   return {
     address: token.address, symbol: token.symbol,
     score: sig.score, level: sig.level, confidence: sig.confidence, mode: sig.mode,
+    source: sig.source || 'activity-v0', model: sig.model || MODEL_VERSION, radar: sig.radar,
     components: sig.components, riskFlags: sig.riskFlags, asOf: sig.asOf,
     modelVersion: sig.modelVersion, notes: sig.notes,
   };
@@ -212,8 +224,15 @@ router.get('/signals', h(async (req, res) => {
   const now = Date.now();
   const out = new Array(tokens.length);
   const todo = [];
+  const radarMap = radarLookup(tokens.map((t) => t.address));
 
   tokens.forEach((t, i) => {
+    const rs = radarMap.get(t.address);
+    if (rs) {
+      // radar-tracked: no OHLCV spend; activity-v0 on list data only contributes its risk flags
+      out[i] = shape(t, radarShape(t, rs, computeSignal({ token: t, now })));
+      return;
+    }
     const hit = signalCache.get(t.address);
     if (hit && hit.exp > now) { out[i] = shape(t, hit.sig); return; }
     if (i < LIST_OHLCV_TOP) { todo.push(i); return; }
@@ -254,6 +273,8 @@ router.get('/:address/signal', h(async (req, res) => {
   const address = needAddress(req);
   const hit = signalCache.get(address);
   const token = await data.getToken(address);
+  const rs = radarLookup([address]).get(address);
+  if (rs) return res.json(shape(token, radarShape(token, rs, computeSignal({ token, now: Date.now() }))));
   if (hit && hit.exp > Date.now() && hit.sig.mode === 'full') return res.json(shape(token, hit.sig));
   res.json(shape(token, await fullSignal(token)));
 }));

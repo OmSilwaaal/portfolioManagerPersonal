@@ -64,6 +64,10 @@ export const memecoinApi = baseApi.injectEndpoints({
     getMemecoinSignal: builder.query({
       query: (address) => `/memecoins/${address}/signal`,
     }),
+    // Radar discovery feed (PumpPortal launches + model score + security flags). Answers {enabled:false, reason} when off.
+    getRadarSignals: builder.query({
+      query: ({ sort = 'new', limit = 40 } = {}) => `/radar/signals?sort=${sort}&limit=${limit}`,
+    }),
     quoteMemecoin: builder.mutation({
       queryFn: withMock((body) => ({ url: '/memecoins/quote', method: 'POST', body }), mockQuote),
     }),
@@ -83,6 +87,7 @@ export const {
   useGetMemecoinTradesQuery,
   useGetMemecoinSignalsQuery,
   useGetMemecoinSignalQuery,
+  useGetRadarSignalsQuery,
   useQuoteMemecoinMutation,
   useTradeMemecoinMutation,
 } = memecoinApi
