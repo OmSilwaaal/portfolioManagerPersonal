@@ -101,43 +101,215 @@ function wrapWords(text, width) {
   return out
 }
 
+/* ── illustrations: tiny canvas drawings rasterised into the ASCII grid ───── */
+const TAU = Math.PI * 2
+const ILLUS = {
+  globe(ctx, { cx, cy, R }) {
+    const g = ctx.createRadialGradient(cx - R * 0.35, cy - R * 0.35, R * 0.1, cx, cy, R * 1.05)
+    g.addColorStop(0, 'rgba(0,0,0,0.12)')
+    g.addColorStop(1, 'rgba(0,0,0,0.95)')
+    ctx.fillStyle = g
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, TAU); ctx.fill()
+    ctx.globalCompositeOperation = 'destination-out'
+    ctx.lineWidth = R * 0.05
+    ctx.strokeStyle = 'rgba(0,0,0,0.95)'
+    for (const k of [0.38, 0.72]) { ctx.beginPath(); ctx.ellipse(cx, cy, R * k, R, 0, 0, TAU); ctx.stroke() }
+    ctx.beginPath(); ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R); ctx.stroke()
+    for (const lat of [-0.55, 0, 0.55]) {
+      const w = Math.sqrt(1 - lat * lat) * R
+      ctx.beginPath(); ctx.moveTo(cx - w, cy + R * lat); ctx.lineTo(cx + w, cy + R * lat); ctx.stroke()
+    }
+    ctx.globalCompositeOperation = 'source-over'
+    ctx.lineWidth = R * 0.06
+    ctx.strokeStyle = '#000'
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, TAU); ctx.stroke()
+  },
+  bars(ctx, { U, V, cy }) {
+    const n = 5, h = V * 0.1, gap = V * 0.07
+    const y0 = cy - (n * h + (n - 1) * gap) / 2, x0 = U * 0.08, W = U * 0.84
+    const lens = [1, 0.78, 0.55, 0.4, 0.25], alphas = [0.95, 0.8, 0.6, 0.45, 0.3]
+    for (let i = 0; i < n; i++) {
+      ctx.fillStyle = `rgba(0,0,0,${alphas[i]})`
+      ctx.fillRect(x0, y0 + i * (h + gap), W * lens[i], h)
+    }
+  },
+  chart(ctx, { U, V }) {
+    const pts = [0.15, 0.3, 0.22, 0.45, 0.38, 0.62, 0.55, 0.88]
+    const X = (i) => U * 0.08 + (i / (pts.length - 1)) * U * 0.84
+    const Y = (v) => V * 0.86 - v * V * 0.7
+    const g = ctx.createLinearGradient(0, V * 0.15, 0, V * 0.86)
+    g.addColorStop(0, 'rgba(0,0,0,0.6)'); g.addColorStop(1, 'rgba(0,0,0,0.06)')
+    ctx.fillStyle = g
+    ctx.beginPath(); ctx.moveTo(X(0), V * 0.86)
+    pts.forEach((v, i) => ctx.lineTo(X(i), Y(v)))
+    ctx.lineTo(X(pts.length - 1), V * 0.86); ctx.closePath(); ctx.fill()
+    ctx.lineWidth = V * 0.05; ctx.strokeStyle = '#000'
+    ctx.beginPath(); pts.forEach((v, i) => (i ? ctx.lineTo(X(i), Y(v)) : ctx.moveTo(X(i), Y(v)))); ctx.stroke()
+    ctx.lineWidth = V * 0.03
+    ctx.beginPath(); ctx.moveTo(U * 0.06, V * 0.89); ctx.lineTo(U * 0.94, V * 0.89); ctx.stroke()
+  },
+  arrow(ctx, { U, V }) {
+    const w = U * 0.12, gap = U * 0.045, base = V * 0.88
+    for (let i = 0; i < 5; i++) {
+      const h = V * (0.18 + i * 0.11)
+      ctx.fillStyle = `rgba(0,0,0,${0.14 + i * 0.09})`
+      ctx.fillRect(U * 0.1 + i * (w + gap), base - h, w, h)
+    }
+    const shaft = () => { ctx.beginPath(); ctx.moveTo(U * 0.12, V * 0.6); ctx.lineTo(U * 0.74, V * 0.22); ctx.stroke() }
+    const head = () => { ctx.beginPath(); ctx.moveTo(U * 0.92, V * 0.1); ctx.lineTo(U * 0.6, V * 0.15); ctx.lineTo(U * 0.82, V * 0.4); ctx.closePath() }
+    ctx.globalCompositeOperation = 'destination-out'
+    ctx.strokeStyle = '#000'; ctx.fillStyle = '#000'; ctx.lineWidth = V * 0.17
+    shaft(); head(); ctx.fill(); ctx.stroke()
+    ctx.globalCompositeOperation = 'source-over'
+    ctx.lineWidth = V * 0.085
+    shaft(); head(); ctx.fill()
+  },
+  dome(ctx, { U, V, cx }) {
+    ctx.fillStyle = 'rgba(0,0,0,0.9)'
+    ctx.fillRect(U * 0.1, V * 0.86, U * 0.8, V * 0.05)
+    ctx.fillRect(U * 0.14, V * 0.81, U * 0.72, V * 0.05)
+    ctx.fillRect(U * 0.16, V * 0.4, U * 0.68, V * 0.06)
+    ctx.fillStyle = 'rgba(0,0,0,0.6)'
+    for (let i = 0; i < 6; i++) ctx.fillRect(U * 0.2 + i * U * 0.115, V * 0.46, U * 0.07, V * 0.35)
+    ctx.fillStyle = 'rgba(0,0,0,0.88)'
+    ctx.beginPath(); ctx.arc(cx, V * 0.4, U * 0.25, Math.PI, TAU); ctx.closePath(); ctx.fill()
+    ctx.fillRect(cx - U * 0.012, V * 0.08, U * 0.024, V * 0.12)
+    ctx.beginPath(); ctx.arc(cx, V * 0.2, U * 0.025, 0, TAU); ctx.fill()
+  },
+  ingots(ctx, { U, V }) {
+    const w = U * 0.4, h = V * 0.21
+    const bar = (x, y) => {
+      ctx.fillStyle = 'rgba(0,0,0,0.92)'
+      ctx.beginPath()
+      ctx.moveTo(x + h * 0.45, y); ctx.lineTo(x + w - h * 0.45, y); ctx.lineTo(x + w, y + h); ctx.lineTo(x, y + h)
+      ctx.closePath(); ctx.fill()
+      ctx.globalCompositeOperation = 'destination-out'
+      ctx.fillStyle = 'rgba(0,0,0,0.5)'
+      ctx.fillRect(x + h * 0.5, y + h * 0.3, w - h, h * 0.12)
+      ctx.globalCompositeOperation = 'source-over'
+    }
+    bar(U * 0.08, V * 0.7); bar(U * 0.52, V * 0.7); bar(U * 0.3, V * 0.46)
+  },
+  hex(ctx, { cx, cy, R }) {
+    ctx.strokeStyle = '#000'; ctx.lineJoin = 'miter'
+    const poly = (r) => { ctx.beginPath(); for (let k = 0; k < 6; k++) { const a = Math.PI / 6 + (k * TAU) / 6; ctx[k ? 'lineTo' : 'moveTo'](cx + r * Math.cos(a), cy + r * Math.sin(a)) } ctx.closePath() }
+    ctx.lineWidth = R * 0.1; poly(R * 0.95); ctx.stroke()
+    ctx.fillStyle = 'rgba(0,0,0,0.12)'; poly(R * 0.8); ctx.fill()
+    ctx.lineWidth = R * 0.11
+    ctx.beginPath(); ctx.arc(cx, cy, R * 0.46, 0, TAU); ctx.stroke()
+    ctx.beginPath(); ctx.moveTo(cx, cy - R * 0.62); ctx.lineTo(cx, cy + R * 0.62); ctx.stroke()
+  },
+}
+
+function rasterIllustration(kind, wCols, hRows, r) {
+  const S = 3
+  const cv = document.createElement('canvas')
+  cv.width = Math.max(1, Math.floor(wCols * S))
+  cv.height = Math.max(1, Math.floor(hRows * S))
+  const ctx = cv.getContext('2d', { willReadFrequently: true })
+  ctx.setTransform(S, 0, 0, S / r, 0, 0)
+  ctx.lineCap = 'round'
+  const U = wCols, V = hRows * r
+  const draw = ILLUS[kind] || ILLUS.globe
+  draw(ctx, { U, V, cx: U / 2, cy: V / 2, R: Math.min(U, V) * 0.46 })
+  const data = ctx.getImageData(0, 0, cv.width, cv.height).data
+  const cov = new Float32Array(wCols * hRows)
+  for (let rr = 0; rr < hRows; rr++) {
+    for (let cc = 0; cc < wCols; cc++) {
+      let sum = 0
+      for (let sy = 0; sy < S; sy++) for (let sx = 0; sx < S; sx++) sum += data[((rr * S + sy) * cv.width + (cc * S + sx)) * 4 + 3]
+      cov[rr * wCols + cc] = sum / (S * S * 255)
+    }
+  }
+  return cov
+}
+
+// Mark every cell touched (or neighbouring) by art coverage as "dynamic" so noise can drift it
+function finishArt(L, g) {
+  const { cols, rows } = g
+  L.dyn = new Uint8Array(cols * rows)
+  const cells = []
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (L.cov[r * cols + c] <= 0.03) continue
+      for (let dy = -2; dy <= 2; dy++) {
+        for (let dx = -2; dx <= 2; dx++) {
+          const y = r + dy, x = c + dx
+          if (y < 0 || y >= rows || x < 0 || x >= cols) continue
+          const i = y * cols + x
+          if (!L.dyn[i]) { L.dyn[i] = 1; cells.push(i) }
+        }
+      }
+    }
+  }
+  L.artCells = Int32Array.from(cells)
+  for (const i of cells) {
+    const idx = clamp(Math.floor(L.cov[i] * 9.99), 0, 9)
+    L.code[i] = RAMP.charCodeAt(idx)
+    L.tone[i] = toneForIndex(idx)
+    L.bold[i] = 1
+  }
+}
+
+function blockLines(b, width) {
+  return [
+    { t: '-'.repeat(width), tone: 5, bold: 0 },
+    { t: '', tone: 3, bold: 0 },
+    ...wrapWords(b.h, width).map((t) => ({ t, tone: 0, bold: 1 })),
+    { t: b.tag, tone: 4, bold: 0 },
+    { t: '', tone: 3, bold: 0 },
+    ...wrapWords(b.p, width).map((t) => ({ t, tone: 1, bold: 0 })),
+  ]
+}
+
 function buildText(def, g) {
   const L = newLayout(g.cols * g.rows)
-  const { cols, rows, mx, mt, mb } = g
+  const { cols, rows, mx, mt, mb, r, narrow } = g
+  L.kind = 'text'
+  L.illus = true
+  L.cov = new Float32Array(cols * rows)
+
   const n = def.blocks.length
-  const wide = cols >= 104 && n > 1
-  const gap = 8
-  const bw = wide
-    ? Math.min(60, Math.floor((cols - 2 * mx - gap * (n - 1)) / n))
-    : Math.min(n > 1 ? 64 : 70, cols - 2 * mx)
+  const usable = rows - mt - mb - 2
+  const gapR = 3
+  const gapC = 6
+  let artW = narrow ? Math.min(cols - 2 * mx, 30) : clamp(Math.floor(cols * 0.2), 22, 36)
+  let plan
+  for (;;) {
+    const artH = Math.max(6, Math.round(artW / r))
+    const tw = narrow ? cols - 2 * mx : Math.min(54, cols - 2 * mx - artW - gapC)
+    const lines = def.blocks.map((b) => blockLines(b, tw))
+    const heights = lines.map((l) => (narrow ? artH + 1 + l.length : Math.max(artH, l.length)))
+    const total = heights.reduce((a, b) => a + b, 0) + (n - 1) * gapR
+    plan = { artH, tw, lines, heights, total }
+    if (total <= usable || artW <= 14) break
+    artW -= 2
+  }
 
-  const blockLines = def.blocks.map((b) => {
-    const lines = [
-      { t: '-'.repeat(bw), tone: 5, bold: 0 },
-      { t: '', tone: 3, bold: 0 },
-      ...wrapWords(b.h, bw).map((t) => ({ t, tone: 0, bold: 1 })),
-      { t: b.tag, tone: 4, bold: 0 },
-      { t: '', tone: 3, bold: 0 },
-      ...wrapWords(b.p, bw).map((t) => ({ t, tone: 1, bold: 0 })),
-    ]
-    return lines
+  const { artH, tw, lines, heights, total } = plan
+  const groupW = narrow ? tw : artW + gapC + tw
+  const c0 = narrow ? mx : Math.floor((cols - groupW) / 2)
+  let row = mt + 1 + Math.max(0, Math.floor((usable - total) / 2))
+
+  def.blocks.forEach((b, k) => {
+    const artLeft = k % 2 === 0
+    const artCol = narrow ? mx : artLeft ? c0 : c0 + tw + gapC
+    const textCol = narrow ? mx : artLeft ? c0 + artW + gapC : c0
+    const artRow = narrow ? row : row + Math.floor((heights[k] - artH) / 2)
+    const textRow = narrow ? row + artH + 1 : row + Math.floor((heights[k] - lines[k].length) / 2)
+
+    const cov = rasterIllustration(b.art, artW, artH, r)
+    for (let rr = 0; rr < artH; rr++) {
+      for (let cc = 0; cc < artW; cc++) {
+        const R = artRow + rr, C = artCol + cc
+        if (R >= 0 && R < rows && C >= 0 && C < cols) L.cov[R * cols + C] = cov[rr * artW + cc]
+      }
+    }
+    lines[k].forEach((ln, j) => put(L, g, textRow + j, textCol, ln.t, ln.tone, ln.bold))
+    row += heights[k] + gapR
   })
 
-  const heights = blockLines.map((l) => l.length)
-  const total = wide ? Math.max(...heights) : heights.reduce((a, b) => a + b, 0) + (n - 1) * 3
-  const usable = rows - mt - mb
-  const start = clamp(mt + Math.floor((usable - total) / 2), mt + 1, rows)
-  const totalW = wide ? n * bw + (n - 1) * gap : bw
-  const c0 = wide ? Math.floor((cols - totalW) / 2) : mx
-
-  let row = start
-  blockLines.forEach((lines, bi) => {
-    const col = wide ? c0 + bi * (bw + gap) : c0
-    if (!wide && bi > 0) row += 3
-    const r0 = wide ? start : row
-    lines.forEach((ln, k) => put(L, g, r0 + k, col, ln.t, ln.tone, ln.bold))
-    if (!wide) row += lines.length
-  })
+  finishArt(L, g)
   return L
 }
 
@@ -228,8 +400,8 @@ function buildArt(def, g) {
   const hRows = Math.max(4, bottom - top)
   const cov = rasterWord(lines, wCols, hRows, r, ys)
 
+  L.kind = 'art'
   L.cov = new Float32Array(cols * rows)
-  L.dyn = new Uint8Array(cols * rows)
   let minR = hRows, maxR = 0
   for (let rr = 0; rr < hRows; rr++) {
     for (let cc = 0; cc < wCols; cc++) {
@@ -238,30 +410,7 @@ function buildArt(def, g) {
       L.cov[(top + rr) * cols + c0 + cc] = v
     }
   }
-  // dilate so noise-warped edges may grow outwards
-  const cells = []
-  for (let rr = -2; rr < hRows + 2; rr++) {
-    for (let cc = -2; cc < wCols + 2; cc++) {
-      const R = top + rr, C = c0 + cc
-      if (R < 0 || R >= rows || C < 0 || C >= cols) continue
-      let hit = false
-      for (let dy = -2; dy <= 2 && !hit; dy++) {
-        for (let dx = -2; dx <= 2; dx++) {
-          const y = rr + dy, x = cc + dx
-          if (y >= 0 && y < hRows && x >= 0 && x < wCols && cov[y * wCols + x] > 0.03) { hit = true; break }
-        }
-      }
-      if (hit) { const i = R * cols + C; L.dyn[i] = 1; cells.push(i) }
-    }
-  }
-  L.artCells = Int32Array.from(cells)
-  // static fallback (used while morphing)
-  for (const i of cells) {
-    const idx = clamp(Math.floor(L.cov[i] * 9.99), 0, 9)
-    L.code[i] = RAMP.charCodeAt(idx)
-    L.tone[i] = toneForIndex(idx)
-    L.bold[i] = 1
-  }
+  finishArt(L, g)
 
   const artRowsUsed = Math.max(1, maxR - minR + 1)
   const artMidRow = top + minR + artRowsUsed / 2
@@ -299,6 +448,7 @@ export function createEngine({ canvas, getProgress, onFrame, onIntroDone, skipIn
   let resizeTimer = 0
 
   const out = { code: 32, tone: 3, bold: 0 }
+  let artScale = 1 // <1 thins the art while it dissolves in or out
   const charCache = []
   const ch = (c) => charCache[c] || (charCache[c] = String.fromCharCode(c))
 
@@ -340,7 +490,7 @@ export function createEngine({ canvas, getProgress, onFrame, onIntroDone, skipIn
       const tn = time * 0.00026
       const dx = (noise3(c * 0.06, r * 0.1, tn) - 0.5) * 2.0
       const dy = (noise3(c * 0.06 + 31.7, r * 0.1 + 17.3, tn + 9.1) - 0.5) * 1.2
-      let v = sampleCov(L.cov, c + dx, r + dy)
+      let v = sampleCov(L.cov, c + dx, r + dy) * artScale
       if (v > 0.45) v *= 0.84 + (noise3(c * 0.15, r * 0.22, tn * 1.7 + 4.2) - 0.5) * 0.3
       const idx = clamp(Math.floor(v * 9.99), 0, 9)
       out.code = RAMP.charCodeAt(idx)
@@ -393,23 +543,44 @@ export function createEngine({ canvas, getProgress, onFrame, onIntroDone, skipIn
     }
   }
 
-  function drawBlend(A, B, tt, time) {
+  function drawBlend(A, B, tt, time, style) {
     const { cols, rows } = g
     const n = cols * rows
     const D = 0.7
     for (let i = 0; i < n; i++) {
       const r = (i / cols) | 0
-      const delay = 0.58 * (r / rows) + 0.12 * hash2(i, 5)
+      const c = i - r * cols
+      const artA = A.dyn && A.dyn[i] === 1
+      const artB = B.dyn && B.dyn[i] === 1
+
+      // illustrations dissolve through a dithered fade: old art thins out, new art develops
+      if ((artA && A.illus) || (artB && B.illus)) {
+        const delay = 0.5 * hash2(i, 21)
+        const p = clamp((tt * 1.5 - delay) * 2.2)
+        const src = p < 0.5 ? A : B
+        const s = p < 0.5 ? 1 - 2 * p : 2 * p - 1
+        if (src.dyn && src.dyn[i]) {
+          artScale = s; settled(src, i, time); artScale = 1
+          if (out.code !== 32) push(i, out.code, Math.min(7, out.tone + (s < 0.5 ? 1 : 0)), out.bold)
+        } else if (src.code[i] !== 32 && hash2(i, 31) < s) {
+          push(i, src.code[i], src.tone[i], src.bold[i])
+        }
+        continue
+      }
+
+      const delay = style === 'diag'
+        ? 0.58 * (0.5 * (c / cols) + 0.5 * (r / rows)) + 0.12 * hash2(i, 5)
+        : 0.58 * (r / rows) + 0.12 * hash2(i, 5)
       const local = clamp((tt * (1 + D) - delay) * 2.2)
       if (local <= 0) {
-        if (A.code[i] === 32 && !(A.dyn && A.dyn[i])) continue
+        if (A.code[i] === 32 && !artA) continue
         settled(A, i, time); push(i, out.code, out.tone, out.bold)
       } else if (local >= 1) {
-        if (B.code[i] === 32 && !(B.dyn && B.dyn[i])) continue
+        if (B.code[i] === 32 && !artB) continue
         settled(B, i, time); push(i, out.code, out.tone, out.bold)
       } else {
         const fc = A.code[i], tc = B.code[i]
-        if (fc === 32 && tc === 32 && !(A.dyn && A.dyn[i]) && !(B.dyn && B.dyn[i])) continue
+        if (fc === 32 && tc === 32 && !artA && !artB) continue
         scrambleCell(i, local, time, fc, A.tone[i], A.bold[i], tc, B.tone[i], B.bold[i])
       }
     }
@@ -507,7 +678,7 @@ export function createEngine({ canvas, getProgress, onFrame, onIntroDone, skipIn
       if (reduced) drawSettled(layouts[f >= 0.5 ? b : a], now)
       else if (tt <= 0) drawSettled(layouts[a], now)
       else if (tt >= 1) drawSettled(layouts[b], now)
-      else drawBlend(layouts[a], layouts[b], tt, now)
+      else drawBlend(layouts[a], layouts[b], tt, now, layouts[a].kind === 'text' && layouts[b].kind === 'text' ? 'diag' : 'wave')
     }
 
     flush()
