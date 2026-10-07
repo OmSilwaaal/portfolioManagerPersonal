@@ -72,7 +72,7 @@ function loadFills() {
 }
 
 /* ─── Small UI primitives ────────────────────────────────────────────────── */
-const Skel = ({ className = '' }) => <div className={`bg-[#1a1a1a] animate-pulse ${className}`} />
+const Skel = ({ className = '' }) => <div className={`bg-white/[0.06] animate-pulse rounded-lg ${className}`} />
 
 function ErrorBox({ error, onRetry, label = 'Failed to load' }) {
   return (
@@ -81,7 +81,7 @@ function ErrorBox({ error, onRetry, label = 'Failed to load' }) {
       <div>{label}</div>
       <div className="text-[10px] text-[#555143] break-words max-w-full">{errMsg(error)}</div>
       {onRetry && (
-        <button onClick={onRetry} className="flex items-center gap-1 px-2 py-1 border border-[#25231d] hover:border-[#9eae84] text-[#9eae84]">
+        <button onClick={onRetry} className="flex items-center gap-1 px-3 py-1.5 rounded-full border border-white/10 bg-white/5 hover:border-[#9eae84]/60 hover:bg-[#9eae84]/10 text-[#9eae84] transition">
           <RefreshCw className="w-3 h-3" /> Retry
         </button>
       )}
@@ -89,24 +89,50 @@ function ErrorBox({ error, onRetry, label = 'Failed to load' }) {
   )
 }
 
+/* Glass panel: translucent surface, soft lift shadow, hairline top highlight */
 function Panel({ className = '', children }) {
-  return <section className={`bg-[#141414] border border-[#1f1f1f] min-w-0 ${className}`}>{children}</section>
+  return (
+    <section
+      className={`relative min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-[#121212]/70 backdrop-blur-xl shadow-[0_24px_60px_-28px_rgba(0,0,0,0.85)] before:content-[''] before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/25 before:to-transparent ${className}`}
+    >
+      {children}
+    </section>
+  )
 }
 
 function Tabs({ tabs, value, onChange }) {
   return (
-    <div className="flex items-center gap-4 overflow-x-auto no-scrollbar">
+    <div className="flex items-center gap-1 overflow-x-auto no-scrollbar rounded-full bg-black/30 border border-white/5 p-1">
       {tabs.map((t) => (
         <button
           key={t.id}
           onClick={() => onChange(t.id)}
-          className={`flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider pb-1 border-b-2 whitespace-nowrap transition ${
-            value === t.id ? 'border-[#9eae84] text-[#9eae84]' : 'border-transparent text-[#a39d8d] hover:text-white'
+          className={`flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full whitespace-nowrap transition-all ${
+            value === t.id
+              ? 'bg-[#3e4d26]/70 text-[#dce8c9] shadow-[0_0_0_1px_rgba(158,174,132,0.35),0_4px_14px_-4px_rgba(158,174,132,0.55)]'
+              : 'text-[#a39d8d] hover:text-white hover:bg-white/5'
           }`}
         >
           {t.icon}{t.label}
         </button>
       ))}
+    </div>
+  )
+}
+
+/* Ambient backdrop: slow drifting color blobs + hairline scan texture behind the glass panels */
+function GlassBackground() {
+  return (
+    <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
+      <div className="absolute inset-0 bg-[#070706]" />
+      <div className="absolute -top-1/4 -left-1/4 w-[60vw] h-[60vw] rounded-full bg-[#3e4d26]/25 blur-[120px] animate-[auroraDriftA_24s_ease-in-out_infinite]" />
+      <div className="absolute top-1/4 -right-1/4 w-[55vw] h-[55vw] rounded-full bg-[#a88847]/12 blur-[130px] animate-[auroraDriftB_28s_ease-in-out_infinite]" />
+      <div className="absolute -bottom-1/3 left-1/4 w-[50vw] h-[50vw] rounded-full bg-[#803e26]/15 blur-[120px] animate-[auroraDriftC_32s_ease-in-out_infinite]" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,#050504_88%)]" />
+      <div
+        className="absolute inset-0 opacity-[0.035] mix-blend-overlay"
+        style={{ backgroundImage: 'repeating-linear-gradient(0deg, rgba(255,255,255,0.5) 0px, rgba(255,255,255,0.5) 1px, transparent 1px, transparent 3px)' }}
+      />
     </div>
   )
 }
@@ -156,24 +182,24 @@ function TokenSearch({ onSelect }) {
   return (
     <div ref={boxRef} className="relative w-full md:max-w-md">
       <form onSubmit={(e) => { e.preventDefault(); if (isAddr) pick(dq); else if (results[0]) pick(results[0].address) }}>
-        <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-[#555143]" />
+        <Search className="w-3.5 h-3.5 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#555143]" />
         <input
           value={q}
           onChange={(e) => { setQ(e.target.value); setOpen(true) }}
           onFocus={() => setOpen(true)}
           placeholder="Search name, symbol or contract address"
-          className="w-full bg-[#0b0b0b] border border-[#25231d] pl-8 pr-8 py-1.5 text-xs text-white placeholder-[#555143] focus:outline-none focus:border-[#9eae84] focus:ring-0"
+          className="w-full rounded-full bg-black/30 border border-white/10 backdrop-blur-md pl-9 pr-9 py-2 text-xs text-white placeholder-[#6b6657] focus:outline-none focus:border-[#9eae84]/60 focus:ring-2 focus:ring-[#9eae84]/15 transition"
         />
         {q && (
-          <button type="button" onClick={() => { setQ(''); setDq('') }} className="absolute right-2 top-1/2 -translate-y-1/2 text-[#555143] hover:text-white">
+          <button type="button" onClick={() => { setQ(''); setDq('') }} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#555143] hover:text-white">
             <X className="w-3.5 h-3.5" />
           </button>
         )}
       </form>
       {open && dq.length >= 2 && (
-        <div className="absolute z-30 mt-1 w-full bg-[#141414] border border-[#25231d] shadow-2xl max-h-80 overflow-y-auto">
+        <div className="absolute z-30 mt-2 w-full rounded-2xl bg-[#141414]/90 border border-white/10 backdrop-blur-2xl shadow-[0_24px_60px_-20px_rgba(0,0,0,0.8)] max-h-80 overflow-y-auto overflow-hidden">
           {isAddr && (
-            <button onClick={() => pick(dq)} className="w-full text-left px-3 py-2 text-xs hover:bg-[#1f1f1f] border-b border-[#1f1f1f] text-[#d6b87a]">
+            <button onClick={() => pick(dq)} className="w-full text-left px-3.5 py-2.5 text-xs hover:bg-white/5 border-b border-white/5 text-[#d6b87a]">
               Open contract {short(dq, 6)}
             </button>
           )}
@@ -183,7 +209,7 @@ function TokenSearch({ onSelect }) {
             <div className="p-3 text-xs text-[#a39d8d]">No tokens found for "{dq}"</div>
           )}
           {!isFetching && results.map((t) => (
-            <button key={t.address} onClick={() => pick(t.address)} className="w-full flex items-center justify-between gap-2 px-3 py-2 text-xs hover:bg-[#1f1f1f] text-left">
+            <button key={t.address} onClick={() => pick(t.address)} className="w-full flex items-center justify-between gap-2 px-3.5 py-2.5 text-xs hover:bg-white/5 text-left">
               <span className="truncate"><span className="font-bold text-white">{t.symbol}</span> <span className="text-[#a39d8d]">{t.name}</span></span>
               <span className="text-[#555143] shrink-0">{fmtUsd(t.marketCap)}</span>
             </button>
@@ -204,28 +230,30 @@ function TopBar({ onSelect, solAddress, solBalance, paperCash }) {
   }
 
   return (
-    <header className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4 px-3 py-2 bg-[#0f0f0f] border-b border-[#1f1f1f]">
-      <div className="flex items-center gap-2 shrink-0">
-        <div className="p-1.5 bg-[#1f2910] border border-[#3e4d26] text-[#9eae84]"><Zap className="w-4 h-4" /></div>
+    <header className="relative z-10 flex flex-col md:flex-row md:items-center gap-2.5 md:gap-4 px-4 py-3 bg-black/30 backdrop-blur-xl border-b border-white/10">
+      <div className="flex items-center gap-2.5 shrink-0">
+        <div className="p-2 rounded-xl bg-gradient-to-br from-[#3e4d26] to-[#1f2910] border border-[#9eae84]/30 text-[#9eae84] shadow-[0_0_20px_-4px_rgba(158,174,132,0.6)]">
+          <Zap className="w-4 h-4" />
+        </div>
         <h1 className="text-sm font-bold font-display tracking-tight text-white">AXIOM TERMINAL</h1>
-        <span className="text-[10px] px-1.5 py-0.5 bg-[#d6b87a]/10 text-[#d6b87a] border border-[#d6b87a]/30 uppercase tracking-wider">Paper</span>
+        <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#d6b87a]/10 text-[#d6b87a] border border-[#d6b87a]/30 uppercase tracking-wider">Paper</span>
       </div>
 
       <TokenSearch onSelect={onSelect} />
 
       <div className="flex items-center gap-2 md:ml-auto text-xs flex-wrap">
-        <div className="px-2 py-1 bg-[#141414] border border-[#25231d]" title="Paper-trading cash balance">
+        <div className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 backdrop-blur-md" title="Paper-trading cash balance">
           <span className="text-[#555143] mr-1">PAPER</span>
           <span className="text-white font-bold">{paperCash == null ? '--' : fmtUsd(paperCash)}</span>
         </div>
         {!ready ? (
-          <Skel className="h-7 w-28" />
+          <Skel className="h-8 w-28 rounded-full" />
         ) : !authenticated ? (
-          <button onClick={login} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#3e4d26] hover:bg-[#566838] text-white font-semibold border border-[#9eae84]/30">
+          <button onClick={login} className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-gradient-to-r from-[#3e4d26] to-[#566838] hover:brightness-110 text-white font-semibold border border-[#9eae84]/40 shadow-[0_8px_24px_-8px_rgba(158,174,132,0.5)] transition">
             <LogIn className="w-3.5 h-3.5" /> Connect Wallet
           </button>
         ) : (
-          <div className="flex items-center gap-2 bg-[#141414] border border-[#25231d] px-2 py-1">
+          <div className="flex items-center gap-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-md px-3 py-1.5">
             <Wallet className="w-3.5 h-3.5 text-[#9eae84]" />
             {solAddress ? (
               <>
@@ -276,7 +304,7 @@ const COMPONENT_LABELS = {
 function SourceTag({ source }) {
   if (!source) return null
   return (
-    <span className={`shrink-0 text-[9px] px-1 border uppercase tracking-wider ${source === 'radar' ? 'text-[#9eae84] border-[#9eae84]/40' : 'text-[#555143] border-[#25231d]'}`}
+    <span className={`shrink-0 text-[9px] px-1.5 py-0.5 rounded-full border uppercase tracking-wider ${source === 'radar' ? 'text-[#9eae84] border-[#9eae84]/40 bg-[#9eae84]/5' : 'text-[#555143] border-white/10'}`}
       title={`Score source: ${SOURCE_LABEL[source] || source}`}>{source === 'radar' ? 'radar' : 'v0'}</span>
   )
 }
@@ -284,7 +312,7 @@ function SourceTag({ source }) {
 function FlagBadge({ f }) {
   const danger = f.severity === 'danger'
   return (
-    <span title={f.detail} className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 border ${danger ? 'border-[#d35c4a]/60 text-[#d35c4a] bg-[#d35c4a]/10' : 'border-[#d6b87a]/40 text-[#d6b87a]'}`}>
+    <span title={f.detail} className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border backdrop-blur-sm ${danger ? 'border-[#d35c4a]/50 text-[#d35c4a] bg-[#d35c4a]/10' : 'border-[#d6b87a]/40 text-[#d6b87a] bg-[#d6b87a]/5'}`}>
       <AlertTriangle className="w-3 h-3" />{f.label}
     </span>
   )
@@ -297,7 +325,7 @@ function SignalBadge({ sig }) {
   return (
     <span
       title={`${SOURCE_LABEL[sig.source] || 'Activity'} score ${sig.score} (${sig.level})${low ? ', low confidence' : ''}. Not a prediction.`}
-      className={`shrink-0 min-w-[26px] text-center px-1 text-[10px] font-bold border ${st.text} ${st.border} ${low ? 'opacity-60 border-dashed' : ''}`}
+      className={`shrink-0 min-w-[28px] text-center px-1.5 py-0.5 rounded-full text-[10px] font-bold border ${st.text} ${st.border} ${low ? 'opacity-60 border-dashed' : ''}`}
     >{Math.round(sig.score)}</span>
   )
 }
@@ -307,8 +335,8 @@ function SignalPanel({ address }) {
   const sig = q.data
   const st = LEVEL_STYLE[sig?.level] || LEVEL_STYLE.QUIET
   return (
-    <div className="px-3 py-2 border-t border-[#1f1f1f]">
-      <div className="flex items-center gap-2 mb-1">
+    <div className="px-4 py-3 border-t border-white/10">
+      <div className="flex items-center gap-2 mb-1.5">
         <span className="text-[10px] text-[#555143] uppercase">Activity signal</span>
         <SourceTag source={sig?.source} />
         {q.isFetching && !q.isLoading && <Loader2 className="w-3 h-3 animate-spin text-[#555143]" />}
@@ -330,12 +358,12 @@ function SignalPanel({ address }) {
               </div>
             )}
           </div>
-          <div className="flex-1 min-w-[180px] space-y-1">
+          <div className="flex-1 min-w-[180px] space-y-1.5">
             {Object.entries(sig.components || {}).map(([k, c]) => (
               <div key={k} className="flex items-center gap-2 text-[10px] text-[#a39d8d]">
                 <span className="w-36 shrink-0 truncate">{COMPONENT_LABELS[k] || k}</span>
-                <div className="flex-1 h-1.5 bg-[#25231d]">
-                  {c.score != null && <div className={`h-full ${st.bar}`} style={{ width: `${c.score}%` }} />}
+                <div className="flex-1 h-1.5 rounded-full bg-white/10 overflow-hidden">
+                  {c.score != null && <div className={`h-full rounded-full ${st.bar}`} style={{ width: `${c.score}%` }} />}
                 </div>
                 <span className="w-7 text-right text-[#555143]">{c.score != null ? Math.round(c.score) : 'n/a'}</span>
               </div>
@@ -358,11 +386,11 @@ function TokenRow({ t, active, onSelect, sig }) {
   return (
     <button
       onClick={() => onSelect(t.address)}
-      className={`w-full text-left px-3 py-2 border-b border-[#1a1a1a] hover:bg-[#1a1a1a] transition ${active ? 'bg-[#1f2910]/40 border-l-2 border-l-[#9eae84]' : ''}`}
+      className={`block text-left mx-2 my-1 px-3 py-2.5 rounded-xl transition w-[calc(100%-1rem)] ${active ? 'bg-[#9eae84]/10 ring-1 ring-[#9eae84]/40' : 'hover:bg-white/5'}`}
     >
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0 flex items-center gap-2">
-          <div className="w-7 h-7 shrink-0 bg-[#25231d] text-[10px] flex items-center justify-center font-bold text-[#9eae84] overflow-hidden">
+          <div className="w-8 h-8 shrink-0 rounded-full bg-white/5 ring-1 ring-white/10 text-[10px] flex items-center justify-center font-bold text-[#9eae84] overflow-hidden">
             {t.image ? <img src={t.image} alt="" className="w-full h-full object-cover" loading="lazy" /> : (t.symbol || '?').slice(0, 2)}
           </div>
           <div className="min-w-0">
@@ -375,11 +403,11 @@ function TokenRow({ t, active, onSelect, sig }) {
           <div className={`text-[10px] ${pctColor(t.change24h ?? t.change1h)}`}>{fmtPct(t.change24h ?? t.change1h)}</div>
         </div>
       </div>
-      <div className="flex gap-3 mt-1 text-[10px] text-[#555143]">
+      <div className="flex gap-3 mt-1.5 text-[10px] text-[#555143]">
         <span>V {fmtUsd(t.volume24h)}</span><span>L {fmtUsd(t.liquidity)}</span>{t.holders != null && <span>H {fmtNum(t.holders)}</span>}
       </div>
       {t.bondingProgress != null && (
-        <div className="mt-1 h-0.5 bg-[#25231d]"><div className="h-full bg-[#9eae84]" style={{ width: `${Math.min(100, t.bondingProgress)}%` }} /></div>
+        <div className="mt-1.5 h-1 rounded-full bg-white/10 overflow-hidden"><div className="h-full rounded-full bg-[#9eae84]" style={{ width: `${Math.min(100, t.bondingProgress)}%` }} /></div>
       )}
     </button>
   )
@@ -395,12 +423,12 @@ function RadarRow({ s, active, onSelect }) {
   return (
     <button
       onClick={() => onSelect(s.address)}
-      className={`w-full text-left px-3 py-2 border-b border-[#1a1a1a] hover:bg-[#1a1a1a] transition ${active ? 'bg-[#1f2910]/40 border-l-2 border-l-[#9eae84]' : ''}`}
+      className={`block text-left mx-2 my-1 px-3 py-2.5 rounded-xl transition w-[calc(100%-1rem)] ${active ? 'bg-[#9eae84]/10 ring-1 ring-[#9eae84]/40' : 'hover:bg-white/5'}`}
     >
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
           <div className="text-xs font-bold text-white flex items-center gap-1.5">
-            {sig ? <SignalBadge sig={sig} /> : <span className="shrink-0 min-w-[26px] text-center px-1 text-[10px] border border-dashed border-[#555143] text-[#555143]" title="No market snapshot yet">new</span>}
+            {sig ? <SignalBadge sig={sig} /> : <span className="shrink-0 min-w-[28px] text-center px-1.5 py-0.5 rounded-full text-[10px] border border-dashed border-[#555143] text-[#555143]" title="No market snapshot yet">new</span>}
             <SourceTag source="radar" />
             <span className="truncate">{s.symbol || '?'} <span className="font-normal text-[#a39d8d]">{s.name}</span></span>
           </div>
@@ -411,16 +439,16 @@ function RadarRow({ s, active, onSelect }) {
           <div className={`text-[10px] ${pctColor(s.features?.price_chg_15m != null ? s.features.price_chg_15m * 100 : null)}`}>{s.features?.price_chg_15m != null ? `${fmtPct(s.features.price_chg_15m * 100)} 15m` : '--'}</div>
         </div>
       </div>
-      <div className="flex flex-wrap gap-1 mt-1">
+      <div className="flex flex-wrap gap-1.5 mt-1.5">
         {danger.map((f) => <FlagBadge key={f.code} f={f} />)}
         {warn.map((f) => <FlagBadge key={f.code} f={f} />)}
-        {s.passesSafetyGate && <span className="text-[10px] px-1.5 py-0.5 border border-[#7ea968]/40 text-[#7ea968]" title="Passed the radar safety gate (authorities, holder concentration, insiders, creator history)">vetted</span>}
-        {p.boostTotal > 0 && <span className="text-[10px] px-1.5 py-0.5 border border-[#d6b87a]/40 text-[#d6b87a]" title="Paid DexScreener boost">boost</span>}
-        {p.hasProfile && <span className="text-[10px] px-1.5 py-0.5 border border-[#25231d] text-[#a39d8d]" title="Paid DexScreener profile">profile</span>}
-        {p.cto && <span className="text-[10px] px-1.5 py-0.5 border border-[#25231d] text-[#a39d8d]" title="Community takeover">CTO</span>}
-        {p.twitter && <span className="text-[10px] px-1.5 py-0.5 border border-[#25231d] text-[#555143]">X</span>}
-        {p.telegram && <span className="text-[10px] px-1.5 py-0.5 border border-[#25231d] text-[#555143]">TG</span>}
-        {p.website && <span className="text-[10px] px-1.5 py-0.5 border border-[#25231d] text-[#555143]">web</span>}
+        {s.passesSafetyGate && <span className="text-[10px] px-2 py-0.5 rounded-full border border-[#7ea968]/40 text-[#7ea968] bg-[#7ea968]/5" title="Passed the radar safety gate (authorities, holder concentration, insiders, creator history)">vetted</span>}
+        {p.boostTotal > 0 && <span className="text-[10px] px-2 py-0.5 rounded-full border border-[#d6b87a]/40 text-[#d6b87a] bg-[#d6b87a]/5" title="Paid DexScreener boost">boost</span>}
+        {p.hasProfile && <span className="text-[10px] px-2 py-0.5 rounded-full border border-white/10 text-[#a39d8d]" title="Paid DexScreener profile">profile</span>}
+        {p.cto && <span className="text-[10px] px-2 py-0.5 rounded-full border border-white/10 text-[#a39d8d]" title="Community takeover">CTO</span>}
+        {p.twitter && <span className="text-[10px] px-2 py-0.5 rounded-full border border-white/10 text-[#555143]">X</span>}
+        {p.telegram && <span className="text-[10px] px-2 py-0.5 rounded-full border border-white/10 text-[#555143]">TG</span>}
+        {p.website && <span className="text-[10px] px-2 py-0.5 rounded-full border border-white/10 text-[#555143]">web</span>}
       </div>
     </button>
   )
@@ -432,9 +460,9 @@ function RadarList({ selected, onSelect }) {
   const d = q.data
   return (
     <>
-      <div className="px-3 py-1 border-b border-[#1f1f1f] flex items-center gap-2 text-[10px] text-[#a39d8d]" title={RADAR_CAPTION}>
+      <div className="px-3 py-2 border-b border-white/10 flex items-center gap-2 text-[10px] text-[#a39d8d]" title={RADAR_CAPTION}>
         <span>Radar</span>
-        <select value={sort} onChange={(e) => setSort(e.target.value)} className="bg-[#0d0d0d] border border-[#25231d] text-[10px] px-1 py-0.5">
+        <select value={sort} onChange={(e) => setSort(e.target.value)} className="rounded-full bg-black/30 border border-white/10 text-[10px] px-2.5 py-1">
           <option value="new">Newest launches</option>
           <option value="score">Top score</option>
         </select>
@@ -442,7 +470,7 @@ function RadarList({ selected, onSelect }) {
       </div>
       <div className="flex-1 overflow-y-auto min-h-0">
         {q.isLoading ? (
-          Array.from({ length: 6 }).map((_, i) => <div key={i} className="px-3 py-2 border-b border-[#1a1a1a] space-y-1.5"><Skel className="h-7 w-full" /><Skel className="h-2 w-2/3" /></div>)
+          Array.from({ length: 6 }).map((_, i) => <div key={i} className="mx-2 my-1 px-3 py-2.5 space-y-1.5"><Skel className="h-7 w-full" /><Skel className="h-2 w-2/3" /></div>)
         ) : q.isError ? (
           <ErrorBox error={q.error} onRetry={q.refetch} label="Radar feed unavailable" />
         ) : d && d.enabled === false ? (
@@ -456,7 +484,7 @@ function RadarList({ selected, onSelect }) {
           d.signals.map((s) => <RadarRow key={s.address} s={s} active={s.address === selected} onSelect={onSelect} />)
         )}
       </div>
-      <div className="px-3 py-1 border-t border-[#1f1f1f] text-[10px] text-[#555143] italic">{RADAR_CAPTION}</div>
+      <div className="px-3 py-2 border-t border-white/10 text-[10px] text-[#555143] italic">{RADAR_CAPTION}</div>
     </>
   )
 }
@@ -496,7 +524,7 @@ function DiscoveryPanel({ selected, onSelect }) {
 
   return (
     <Panel className="flex flex-col h-[420px] lg:h-full lg:min-h-0">
-      <div className="px-3 pt-2 pb-1 border-b border-[#1f1f1f] flex items-center justify-between gap-2">
+      <div className="px-3 pt-3 pb-2 border-b border-white/10 flex items-center justify-between gap-2">
         <Tabs
           value={tab}
           onChange={setTab}
@@ -507,16 +535,16 @@ function DiscoveryPanel({ selected, onSelect }) {
             { id: 'trending', label: 'Trending', icon: <Flame className="w-3 h-3" /> },
           ]}
         />
-        {isMockData(q.data) && <span className="text-[9px] px-1 border border-[#d6b87a]/40 text-[#d6b87a] shrink-0">MOCK</span>}
+        {isMockData(q.data) && <span className="text-[9px] px-2 py-0.5 rounded-full border border-[#d6b87a]/40 text-[#d6b87a] shrink-0">MOCK</span>}
       </div>
       {tab === 'radar' ? <RadarList selected={selected} onSelect={onSelect} /> : (<>
-      <div className="px-3 py-1 border-b border-[#1f1f1f] flex items-center gap-2 text-[10px] text-[#a39d8d]" title={SIGNAL_CAPTION}>
+      <div className="px-3 py-2 border-b border-white/10 flex items-center gap-2 text-[10px] text-[#a39d8d]" title={SIGNAL_CAPTION}>
         <span>Activity</span>
-        <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="bg-[#0d0d0d] border border-[#25231d] text-[10px] px-1 py-0.5">
+        <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="rounded-full bg-black/30 border border-white/10 text-[10px] px-2.5 py-1">
           <option value="default">Default order</option>
           <option value="score">Sort by score</option>
         </select>
-        <select value={minLevel} onChange={(e) => setMinLevel(Number(e.target.value))} className="bg-[#0d0d0d] border border-[#25231d] text-[10px] px-1 py-0.5">
+        <select value={minLevel} onChange={(e) => setMinLevel(Number(e.target.value))} className="rounded-full bg-black/30 border border-white/10 text-[10px] px-2.5 py-1">
           <option value={0}>All</option>
           <option value={25}>Warming+ (25)</option>
           <option value={50}>Active+ (50)</option>
@@ -528,7 +556,7 @@ function DiscoveryPanel({ selected, onSelect }) {
       <div className="flex-1 overflow-y-auto min-h-0">
         {q.isLoading ? (
           Array.from({ length: 7 }).map((_, i) => (
-            <div key={i} className="px-3 py-2 border-b border-[#1a1a1a] space-y-1.5"><Skel className="h-7 w-full" /><Skel className="h-2 w-2/3" /></div>
+            <div key={i} className="mx-2 my-1 px-3 py-2.5 space-y-1.5"><Skel className="h-7 w-full" /><Skel className="h-2 w-2/3" /></div>
           ))
         ) : q.isError ? (
           <ErrorBox error={q.error} onRetry={q.refetch} label="Could not load tokens" />
@@ -560,7 +588,7 @@ function TokenHeader({ q }) {
   if (!t) return null
   const ch = t.change24h ?? t.change1h
   return (
-    <div className="p-3 flex flex-wrap items-center gap-x-5 gap-y-2">
+    <div className="p-4 flex flex-wrap items-center gap-x-6 gap-y-2">
       <div className="min-w-0">
         <div className="text-sm font-bold text-white font-display">{t.symbol} <span className="text-[#a39d8d] font-normal text-xs">{t.name}</span></div>
         <div className="text-[10px] text-[#555143]">{short(t.address, 6)}</div>
@@ -576,7 +604,7 @@ function TokenHeader({ q }) {
       <Stat label="Volume 24h" value={fmtUsd(t.volume24h)} />
       <Stat label="Holders" value={fmtNum(t.holders)} />
       {t.change1h != null && <Stat label="1h" value={fmtPct(t.change1h)} className={pctColor(t.change1h)} />}
-      {isMockData(t) && <span className="text-[9px] px-1 border border-[#d6b87a]/40 text-[#d6b87a]">MOCK DATA</span>}
+      {isMockData(t) && <span className="text-[9px] px-2 py-0.5 rounded-full border border-[#d6b87a]/40 text-[#d6b87a]">MOCK DATA</span>}
     </div>
   )
 }
@@ -588,16 +616,18 @@ function ChartPanel({ address }) {
 
   return (
     <div className="flex flex-col h-[340px] lg:h-full lg:min-h-0">
-      <div className="flex items-center gap-1 px-3 py-1.5 border-y border-[#1f1f1f]">
-        {TIMEFRAMES.map((x) => (
-          <button
-            key={x}
-            onClick={() => setTf(x)}
-            className={`px-2 py-0.5 text-[11px] font-bold border transition ${tf === x ? 'bg-[#3e4d26] text-white border-[#9eae84]/50' : 'text-[#a39d8d] border-transparent hover:text-white'}`}
-          >{x}</button>
-        ))}
-        {q.isFetching && !q.isLoading && <Loader2 className="w-3 h-3 ml-2 animate-spin text-[#555143]" />}
-        {isMockData(q.data) && <span className="ml-auto text-[9px] px-1 border border-[#d6b87a]/40 text-[#d6b87a]">MOCK</span>}
+      <div className="flex items-center gap-2 px-3 py-2 border-y border-white/10">
+        <div className="flex items-center gap-1 rounded-full bg-black/30 border border-white/5 p-1">
+          {TIMEFRAMES.map((x) => (
+            <button
+              key={x}
+              onClick={() => setTf(x)}
+              className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-all ${tf === x ? 'bg-[#3e4d26]/70 text-white shadow-[0_0_0_1px_rgba(158,174,132,0.35),0_4px_14px_-4px_rgba(158,174,132,0.55)]' : 'text-[#a39d8d] hover:text-white hover:bg-white/5'}`}
+            >{x}</button>
+          ))}
+        </div>
+        {q.isFetching && !q.isLoading && <Loader2 className="w-3 h-3 ml-1 animate-spin text-[#555143]" />}
+        {isMockData(q.data) && <span className="ml-auto text-[9px] px-2 py-0.5 rounded-full border border-[#d6b87a]/40 text-[#d6b87a]">MOCK</span>}
       </div>
       <div className="relative flex-1 min-h-0">
         {!address ? (
@@ -675,41 +705,45 @@ function OrderTicket({ token, position, onFilled }) {
   const buy = side === 'buy'
   return (
     <Panel className="flex flex-col">
-      <div className="grid grid-cols-2">
+      <div className="grid grid-cols-2 gap-1 m-3 mb-0 p-1 rounded-full bg-black/30 border border-white/5">
         {['buy', 'sell'].map((s) => (
           <button
             key={s}
             onClick={() => { setSide(s); setStatus(null) }}
-            className={`py-2 text-xs font-bold uppercase tracking-wider border-b-2 transition ${
-              side === s ? (s === 'buy' ? 'border-[#7ea968] text-[#7ea968] bg-[#7ea968]/10' : 'border-[#d35c4a] text-[#d35c4a] bg-[#d35c4a]/10') : 'border-[#1f1f1f] text-[#a39d8d] hover:text-white'
+            className={`py-2 rounded-full text-xs font-bold uppercase tracking-wider transition-all ${
+              side === s
+                ? (s === 'buy'
+                    ? 'bg-gradient-to-r from-[#3e4d26] to-[#566838] text-white shadow-[0_6px_20px_-6px_rgba(126,169,104,0.6)]'
+                    : 'bg-gradient-to-r from-[#803e26] to-[#a4583c] text-white shadow-[0_6px_20px_-6px_rgba(211,92,74,0.6)]')
+                : 'text-[#a39d8d] hover:text-white'
             }`}
           >{s}</button>
         ))}
       </div>
 
-      <div className="p-3 space-y-3">
+      <div className="p-4 space-y-3.5">
         <div className="text-[11px] text-[#a39d8d] truncate">
           {token ? <>Trading <span className="text-white font-bold">{token.symbol}</span> @ {fmtPrice(token.price)}</> : 'Select a token to trade'}
         </div>
 
         <div className="space-y-1.5">
           <label className="text-[10px] text-[#555143] uppercase">Amount (SOL)</label>
-          <div className="grid grid-cols-5 gap-1">
+          <div className="grid grid-cols-5 gap-1.5">
             {SOL_PRESETS.map((v) => (
               <button key={v} onClick={() => setAmount(String(v))}
-                className={`py-1 text-[11px] font-bold border transition ${amountNum === v ? 'bg-[#3e4d26] text-white border-[#9eae84]' : 'bg-[#0b0b0b] text-[#a39d8d] border-[#25231d] hover:border-[#555143]'}`}>
+                className={`py-1.5 rounded-lg text-[11px] font-bold border transition ${amountNum === v ? 'bg-[#3e4d26]/70 text-white border-[#9eae84]/50 shadow-[0_0_0_1px_rgba(158,174,132,0.3)]' : 'bg-black/30 text-[#a39d8d] border-white/10 hover:border-white/25'}`}>
                 {v}
               </button>
             ))}
           </div>
           <input type="number" min="0" step="any" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Custom amount"
-            className="w-full bg-[#0b0b0b] border border-[#25231d] px-2 py-1.5 text-xs text-white focus:outline-none focus:border-[#9eae84] focus:ring-0" />
+            className="w-full rounded-xl bg-black/30 border border-white/10 backdrop-blur-md px-3 py-2 text-xs text-white focus:outline-none focus:border-[#9eae84]/60 focus:ring-2 focus:ring-[#9eae84]/15 transition" />
           {!buy && (
-            <div className="grid grid-cols-4 gap-1">
+            <div className="grid grid-cols-4 gap-1.5">
               {SELL_PCTS.map((p) => (
                 <button key={p} disabled={!positionValueSol}
                   onClick={() => setAmount(String(+(positionValueSol * p / 100).toFixed(4)))}
-                  className="py-1 text-[11px] border border-[#25231d] text-[#a39d8d] hover:border-[#d35c4a] disabled:opacity-40 disabled:hover:border-[#25231d]">
+                  className="py-1.5 rounded-lg text-[11px] border border-white/10 text-[#a39d8d] hover:border-[#d35c4a]/60 hover:text-white disabled:opacity-40 disabled:hover:border-white/10 disabled:hover:text-[#a39d8d] transition">
                   {p}%
                 </button>
               ))}
@@ -717,21 +751,21 @@ function OrderTicket({ token, position, onFilled }) {
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2.5">
           <div>
             <label className="text-[10px] text-[#555143] uppercase">Slippage (%)</label>
             <input type="number" min="0" max="100" step="0.5" value={slippage} onChange={(e) => setSlippage(e.target.value)}
-              className={`w-full bg-[#0b0b0b] border px-2 py-1 text-xs text-[#9eae84] focus:outline-none focus:ring-0 ${validSlip ? 'border-[#25231d] focus:border-[#9eae84]' : 'border-[#d35c4a]'}`} />
+              className={`w-full rounded-xl bg-black/30 border backdrop-blur-md px-3 py-1.5 text-xs text-[#9eae84] focus:outline-none focus:ring-2 focus:ring-[#9eae84]/15 transition ${validSlip ? 'border-white/10 focus:border-[#9eae84]/60' : 'border-[#d35c4a]/60'}`} />
           </div>
           <div>
             <label className="text-[10px] text-[#555143] uppercase">Priority fee (SOL)</label>
             <input type="number" min="0" step="0.0005" value={priority} onChange={(e) => setPriority(e.target.value)}
-              className="w-full bg-[#0b0b0b] border border-[#25231d] px-2 py-1 text-xs text-[#d6b87a] focus:outline-none focus:border-[#9eae84] focus:ring-0" />
+              className="w-full rounded-xl bg-black/30 border border-white/10 backdrop-blur-md px-3 py-1.5 text-xs text-[#d6b87a] focus:outline-none focus:border-[#9eae84]/60 focus:ring-2 focus:ring-[#9eae84]/15 transition" />
           </div>
         </div>
 
         {/* Quote */}
-        <div className="bg-[#0b0b0b] border border-[#25231d] p-2 text-[11px] space-y-1 min-h-[68px]">
+        <div className="rounded-xl bg-black/30 border border-white/10 backdrop-blur-md p-3 text-[11px] space-y-1.5 min-h-[68px]">
           {quoting ? (
             <><Skel className="h-3 w-full" /><Skel className="h-3 w-2/3" /><Skel className="h-3 w-1/2" /></>
           ) : quoteErr ? (
@@ -752,8 +786,10 @@ function OrderTicket({ token, position, onFilled }) {
         <button
           onClick={submit}
           disabled={!token || !validAmount || !validSlip || trading}
-          className={`w-full py-2.5 text-xs font-bold uppercase tracking-wider border flex items-center justify-center gap-2 transition disabled:opacity-40 disabled:cursor-not-allowed ${
-            buy ? 'bg-[#3e4d26] hover:bg-[#566838] border-[#9eae84]/40 text-white' : 'bg-[#803e26] hover:bg-[#a4583c] border-[#c2785a]/40 text-white'
+          className={`w-full py-3 rounded-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none ${
+            buy
+              ? 'bg-gradient-to-r from-[#3e4d26] to-[#566838] hover:brightness-110 text-white shadow-[0_10px_30px_-10px_rgba(126,169,104,0.7)]'
+              : 'bg-gradient-to-r from-[#803e26] to-[#a4583c] hover:brightness-110 text-white shadow-[0_10px_30px_-10px_rgba(211,92,74,0.7)]'
           }`}
         >
           {trading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
@@ -761,7 +797,7 @@ function OrderTicket({ token, position, onFilled }) {
         </button>
 
         {status && (
-          <div className={`p-2 text-[11px] border break-words ${status.ok ? 'text-[#7ea968] border-[#3e4d26] bg-[#1f2910]/40' : 'text-[#d35c4a] border-[#803e26] bg-[#803e26]/10'}`}>
+          <div className={`p-2.5 rounded-xl text-[11px] border backdrop-blur-md break-words ${status.ok ? 'text-[#7ea968] border-[#3e4d26]/60 bg-[#1f2910]/40' : 'text-[#d35c4a] border-[#803e26]/60 bg-[#803e26]/10'}`}>
             {status.msg}
           </div>
         )}
@@ -780,10 +816,10 @@ function Table({ head, children, empty }) {
   return (
     <div className="overflow-auto h-full">
       <table className="w-full text-[11px] min-w-[480px]">
-        <thead className="sticky top-0 bg-[#141414] text-[#555143] uppercase">
-          <tr>{head.map((h) => <th key={h} className="text-left font-normal px-3 py-1.5 whitespace-nowrap">{h}</th>)}</tr>
+        <thead className="sticky top-0 bg-[#141414]/90 backdrop-blur-md text-[#555143] uppercase">
+          <tr>{head.map((h) => <th key={h} className="text-left font-normal px-3 py-2 whitespace-nowrap">{h}</th>)}</tr>
         </thead>
-        <tbody>{children}</tbody>
+        <tbody className="divide-y divide-white/5">{children}</tbody>
       </table>
       {empty}
     </div>
@@ -798,7 +834,7 @@ function BottomPanel({ address, positions, fills, onSelect, priceMap }) {
 
   return (
     <Panel className="flex flex-col h-[300px] lg:h-full lg:min-h-0">
-      <div className="px-3 pt-2 pb-1 border-b border-[#1f1f1f]">
+      <div className="px-3 pt-3 pb-2 border-b border-white/10">
         <Tabs
           value={tab}
           onChange={setTab}
@@ -818,7 +854,7 @@ function BottomPanel({ address, positions, fills, onSelect, priceMap }) {
               const value = cur && p.avgPrice > 0 ? p.costSol * (cur / p.avgPrice) : null
               const pnl = value != null && p.costSol > 0 ? ((value - p.costSol) / p.costSol) * 100 : null
               return (
-                <tr key={p.address} onClick={() => onSelect(p.address)} className="border-t border-[#1a1a1a] hover:bg-[#1a1a1a] cursor-pointer">
+                <tr key={p.address} onClick={() => onSelect(p.address)} className="hover:bg-white/5 cursor-pointer transition-colors">
                   <td className="px-3 py-1.5 font-bold text-white">{p.symbol}</td>
                   <td className="px-3 py-1.5">{fmtNum(p.qty)}</td>
                   <td className="px-3 py-1.5">{fmtPrice(p.avgPrice)}</td>
@@ -834,7 +870,7 @@ function BottomPanel({ address, positions, fills, onSelect, priceMap }) {
         {tab === 'history' && (
           <Table head={['Time', 'Token', 'Side', 'SOL', 'Price']} empty={fills.length === 0 && <Empty text="No trades yet this device." />}>
             {fills.map((f) => (
-              <tr key={f.id} className="border-t border-[#1a1a1a]">
+              <tr key={f.id} className="hover:bg-white/5 transition-colors">
                 <td className="px-3 py-1.5 text-[#a39d8d]">{timeAgo(f.ts)} ago</td>
                 <td className="px-3 py-1.5 font-bold text-white">{f.symbol}{f.mock && <span className="ml-1 text-[9px] text-[#d6b87a]">MOCK</span>}</td>
                 <td className={`px-3 py-1.5 uppercase ${f.side === 'buy' ? 'text-[#7ea968]' : 'text-[#d35c4a]'}`}>{f.side}</td>
@@ -851,7 +887,7 @@ function BottomPanel({ address, positions, fills, onSelect, priceMap }) {
           : (
             <Table head={['Age', 'Side', 'SOL', 'Price', 'Maker']} empty={list.length === 0 && <Empty text="No trades yet for this token." />}>
               {list.map((t, i) => (
-                <tr key={t.id ?? t.signature ?? i} className="border-t border-[#1a1a1a]">
+                <tr key={t.id ?? t.signature ?? i} className="hover:bg-white/5 transition-colors">
                   <td className="px-3 py-1 text-[#a39d8d]">{t.timestamp ? timeAgo(t.timestamp) : '--'}</td>
                   <td className={`px-3 py-1 uppercase font-bold ${t.side === 'buy' ? 'text-[#7ea968]' : 'text-[#d35c4a]'}`}>{t.side}</td>
                   <td className="px-3 py-1">{fmtNum(t.amountSol)}</td>
@@ -927,10 +963,12 @@ export default function TradingTerminal() {
   const position = positions.find((p) => p.address === address)
 
   return (
-    <div className="flex flex-col bg-[#0b0b0b] text-[#f0ebe0] font-mono lg:h-screen lg:overflow-hidden">
+    <div className="relative flex flex-col text-[#f0ebe0] font-mono lg:h-screen lg:overflow-hidden">
+      <GlassBackground />
+
       <TopBar onSelect={select} solAddress={solAddress} solBalance={solBalance} paperCash={portfolio?.cashBalance ?? null} />
 
-      <div className="flex-1 min-h-0 grid gap-1.5 p-1.5 grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)_300px] lg:grid-rows-[minmax(0,1fr)_260px]">
+      <div className="relative z-10 flex-1 min-h-0 grid gap-3 p-3 grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)_300px] lg:grid-rows-[minmax(0,1fr)_260px]">
         {/* Order ticket first on mobile so it is reachable without scrolling past the chart */}
         <div className="order-3 lg:order-none lg:col-start-1 lg:row-span-2">
           <DiscoveryPanel selected={address} onSelect={select} />
