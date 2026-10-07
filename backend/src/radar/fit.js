@@ -143,6 +143,10 @@ function fitModel(universe, overrides = {}) {
       valBaseWinRate: baseWin, valTopBucketWinRate: topWin, valLift: topWin && baseWin ? topWin / baseWin : null,
       valTopBucketMeanRet: best.m, valChosenQuantile: best.q, valTopBucketRows: best.sel.length,
       splitTimes: { trainBefore: t1 - EMBARGO_SEC, valBefore: t2 - EMBARGO_SEC, testFrom: t2 },
+      ...((overrides.featureGroups || []).length ? {
+        featureGroups: [...overrides.featureGroups],
+        groupWeights: names.map((n, j) => [n, +w[j].toFixed(3)]).filter(([n]) => overrides.featureGroups.some((g) => (GROUPS[g] || []).includes(n))),
+      } : {}),
       topWeights: names.map((n, j) => [n, +w[j].toFixed(3)]).sort((a, c) => Math.abs(c[1]) - Math.abs(a[1])).slice(0, 10),
     },
   };

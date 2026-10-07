@@ -9,6 +9,11 @@ const { loadPairs, listModelVersions, listComponents } = require('./pairs');
 const PRIMARY_HORIZON_MIN = 60;      // the ONE horizon the headline verdict uses (fixed in advance,
                                      // so we do not pick the best of 5 horizons after the fact)
 const DEFAULT_MODEL = 'activity-v0';
+const RADAR_PREFIX = 'radar-';       // live radar scores persisted by services/signalStore ('radar-market_v2', ...)
+// A radar token is scored every few minutes, so its signals are far more numerous and more strongly autocorrelated than
+// activity-v0's. Same evaluate() machinery, but at most one radar signal per token per 15 min goes into it (keeps the
+// hourly job's token-level bootstrap fast and stops one token's near-duplicates posing as independent evidence).
+const RADAR_EVAL_DEFAULTS = { dedupeGapSec: 900 };
 
 const pct = (x, d = 1) => (x == null ? 'n/a' : `${(x * 100).toFixed(d)}%`);
 const hLabel = (m) => (m >= 60 ? `${m / 60}h` : `${m}m`);
@@ -79,18 +84,34 @@ function generateReport(db, o = {}) {
   const models = {};
   for (const v of versions) {
     const mv = v.model_version;
+    const vOpts = String(mv).startsWith(RADAR_PREFIX) ? { ...RADAR_EVAL_DEFAULTS, ...evalOpts } : evalOpts;
     const horizons = {};
     for (const h of HORIZONS_MIN) {
       const pairs = loadPairs(db, { modelVersion: mv, horizonMin: h });
-      horizons[h] = { evaluation: evaluate(pairs, evalOpts), outcomes: outcomeCounts(db, mv, h) };
+      horizons[h] = { evaluation: evaluate(pairs, vOpts), outcomes: outcomeCounts(db, mv, h) };
     }
     const components = {};
     for (const name of listComponents(db, mv)) {
       const pairs = loadPairs(db, { modelVersion: mv, horizonMin: primaryHorizon, scoreKey: `component:${name}` });
-      components[name] = trim(evaluate(pairs, evalOpts));
+      components[name] = trim(evaluate(pairs, vOpts));
     }
     models[mv] = { signals: v.n, firstTs: v.first_ts, lastTs: v.last_ts, horizons, components };
   }
+
+  // every model version side by side at the primary horizon (activity-v0 next to radar-*): same evaluator, same gates
+  const comparison = Object.entries(models).map(([mv, m]) => {
+    const d = m.horizons[primaryHorizon];
+    const ev = d && d.evaluation;
+    const top = ev && ev.cutoffs ? ev.cutoffs[String(ev.config.primaryFrac)] : null;
+    return {
+      modelVersion: mv, kind: mv.startsWith(RADAR_PREFIX) ? 'radar' : 'baseline', signals: m.signals,
+      measured: d ? d.outcomes.ok + d.outcomes.dead : 0, pending: d ? d.outcomes.pending : 0,
+      n: ev ? ev.n : 0, nTokens: ev ? ev.nTokens : 0, verdict: ev ? ev.verdict : 'INSUFFICIENT_DATA',
+      baseRate: ev ? ev.baseRate : null, topPrecision: top ? top.precision : null, topLift: top ? top.lift : null,
+      topMeanNet: top ? top.meanNet : null, meanNet: ev && ev.returns ? ev.returns.meanNet : null,
+      firstTs: m.firstTs, lastTs: m.lastTs,
+    };
+  }).sort((a, b) => (a.modelVersion === primaryModel ? -1 : b.modelVersion === primaryModel ? 1 : b.signals - a.signals));
 
   const headline = models[primaryModel] && models[primaryModel].horizons[primaryHorizon]
     ? models[primaryModel].horizons[primaryHorizon].evaluation
@@ -104,7 +125,7 @@ function generateReport(db, o = {}) {
     created_ts: nowSec,
     primaryModel, primaryHorizonMin: primaryHorizon,
     verdict: headline.verdict, summary, warnings,
-    headline, models,
+    headline, models, comparison,
     methodology: 'Outcomes use only market_snapshot rows at/after the signal time, computed after the horizon elapsed. Tokens whose liquidity collapsed or whose snapshots stopped are scored -100% (survivorship rule). Confidence intervals resample whole tokens, not rows.',
   };
   db.prepare('INSERT INTO eval_report (created_ts, model_version, json) VALUES (?, ?, ?)')

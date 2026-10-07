@@ -678,6 +678,46 @@ function WalletDiscovery({ q }) {
   )
 }
 
+/* --- Model versions side by side (activity-v0 baseline next to the persisted radar-* live scores) --- */
+function ModelComparison({ report }) {
+  const rows = report?.comparison || []
+  if (rows.length < 2) return null
+  return (
+    <Panel title={`Model versions side by side (${hLabel(report.primaryHorizonMin)} horizon)`}>
+      <p className="text-xs text-[#6b7280] mb-3">
+        Same evaluator and gates for every row. radar-* rows are the live radar score, stored at most once per token every few minutes.
+        Precision and lift are for the top {pct(report.headline.config.primaryFrac, 0)} of scores.
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs text-[#6b7280]">
+              <th className="py-1 pr-4 font-medium">Model</th>
+              <th className="py-1 pr-4 font-medium text-right">Signals</th>
+              <th className="py-1 pr-4 font-medium text-right">Measured</th>
+              <th className="py-1 pr-4 font-medium text-right">Top precision</th>
+              <th className="py-1 pr-4 font-medium text-right">Lift</th>
+              <th className="py-1 font-medium">Verdict</th>
+            </tr>
+          </thead>
+          <tbody className="tabular-nums">
+            {rows.map((r) => (
+              <tr key={r.modelVersion} className="border-t border-[#1f1f1f]">
+                <td className="py-1.5 pr-4 text-white">{r.modelVersion}{r.kind === 'baseline' ? ' (baseline)' : ''}</td>
+                <td className="py-1.5 pr-4 text-right text-[#a1a1aa]">{num(r.signals)}</td>
+                <td className="py-1.5 pr-4 text-right text-[#a1a1aa]">{num(r.measured)}</td>
+                <td className="py-1.5 pr-4 text-right text-[#a1a1aa]">{pct(r.topPrecision)}</td>
+                <td className="py-1.5 pr-4 text-right text-white">{r.topLift == null ? '-' : `${r.topLift.toFixed(2)}x`}</td>
+                <td className="py-1.5 text-xs text-[#a1a1aa]">{(VERDICTS[r.verdict] || VERDICTS.INSUFFICIENT_DATA).label}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Panel>
+  )
+}
+
 export default function ResearchDashboard() {
   const status = useGetResearchStatusQuery(undefined, { pollingInterval: 60000 })
   const reportQ = useGetResearchReportQuery(undefined, { pollingInterval: 60000 })
@@ -731,6 +771,7 @@ export default function ResearchDashboard() {
 
       <VerdictCard report={report} onRun={onRun} running={runState.isLoading} secret={secret} setSecret={setSecret} runError={runError} />
       <Warnings report={report} />
+      <ModelComparison report={report} />
 
       {report && (
         <>

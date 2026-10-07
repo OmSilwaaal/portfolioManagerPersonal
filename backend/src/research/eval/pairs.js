@@ -25,6 +25,15 @@ function parseComponents(json) {
   try { return JSON.parse(json); } catch (_) { return null; }
 }
 
+// Radar tokens are usually absent from the main-DB market_snapshot, so their "highest 5m volume" baseline reads the raw
+// 5m volume stored with the score (taken from the market snapshot the features came from, i.e. known at signal time).
+function radarVolume(row) {
+  if (!String(row.model_version || '').startsWith('radar-')) return null;
+  const c = parseComponents(row.component_scores);
+  const v = c && c.features ? c.features.vol_m5 : null;
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
 function loadPairs(db, { modelVersion, horizonMin = 60, scoreKey = 'composite_score', volumeTolSec = 600,
   sinceTs = null, untilTs = null } = {}) {
   const scoreFn = makeScoreFn(scoreKey);
@@ -52,7 +61,7 @@ function loadPairs(db, { modelVersion, horizonMin = 60, scoreKey = 'composite_sc
     out.push({
       signal_id: r.signal_id, token_id: r.token_id, as_of_ts: r.as_of_ts, score: Number(score),
       forward_return: r.forward_return, max_drawdown: r.max_drawdown, max_runup: r.max_runup,
-      volume_5m: r.volume_5m, dead: r.status === 'dead',
+      volume_5m: r.volume_5m != null ? r.volume_5m : radarVolume(r), dead: r.status === 'dead',
     });
   }
   return out;

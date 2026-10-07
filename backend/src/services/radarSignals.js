@@ -257,13 +257,22 @@ function computeForTokens(db, feat, tokens, nowSec) {
         if (series.length) {
           const peak = peakStmt.get(t.token_address) || { price: series[series.length - 1].price_usd, ts: series[series.length - 1].ts };
           f = feat.marketFeatures(series, series.length - 1, t, peak);
+          f.vol_m5 = series[series.length - 1].vol_m5 ?? null;   // raw 5m volume: only used as the evaluator's volume baseline
           attachContext(f, {
             sec: secStmt.get(t.token_address, nowSec),
             launch: launchStmt.get(t.token_address),
             promos: promoStmt.all(t.token_address),
           });
           // no wallet-flow window here: trades-based features stay null (flow_v1 is not the radar score)
-          if (extraSrc) extraMod.attachExtraFeatures([f], t.token_address, extraSrc.provider, extraSrc.groups);
+          if (extraSrc) {
+            // smart-money / social features are evaluated at NOW (everything we have already stored is knowable now), not at
+            // the last market snapshot, so a skilled buy ingested after that snapshot is not hidden until the next one.
+            // Still point-in-time: knownAt() requires event ts <= now and ingested_ts <= now.
+            const g = { ts: nowSec };
+            extraMod.attachExtraFeatures([g], t.token_address, extraSrc.provider, extraSrc.groups);
+            delete g.ts;
+            Object.assign(f, g);
+          }
           score = model(f);
         }
       }
@@ -280,6 +289,8 @@ function computeForTokens(db, feat, tokens, nowSec) {
       sig.notes = [...sig.notes, `Score includes optional ${extraSrc.groups.join(' + ')} bonus (${modelName}); unvalidated.`];
     }
     out.push(sig);
+    // append-only copy of the live score for the research evaluator (buffered, deduped, never throws, never blocks)
+    if (f && score !== null) { try { require('./signalStore').queueRadarSignal(sig, f, nowSec); } catch { /* best effort */ } }
   }
   return out;
 }

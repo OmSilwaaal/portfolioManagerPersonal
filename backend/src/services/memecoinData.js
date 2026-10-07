@@ -76,13 +76,48 @@ function isValidAddress(a) {
   return typeof a === 'string' && ADDR_RE.test(a);
 }
 
+// ── untrusted text hardening ────────────────────────────────────────────────
+// Token names/symbols are attacker-controlled. Strip control/format chars (bidi overrides, zero-width, BOM, tag chars),
+// invisible "filler" glyphs used for padding/spoofing, variation selectors and combining-mark stacks; NFKC-normalise
+// (folds fullwidth/compat homoglyphs), collapse whitespace and cap length by code point.
+const FILLER_CHARS = [0x115F, 0x1160, 0x3164, 0xFFA0, 0x2800, 0x17B4, 0x17B5].map((c) => String.fromCharCode(c)).join('');
+const INVISIBLE_RE = new RegExp(String.raw`[\p{Cc}\p{Cf}\p{Co}\p{Cs}\p{Zl}\p{Zp}\p{Variation_Selector}${FILLER_CHARS}]`, 'gu');
+const BREAK_CHARS = [9, 10, 11, 12, 13, 0x85, 0x2028, 0x2029].map((c) => String.fromCharCode(c)).join(''); // tab/newline-like controls
+const BREAK_RE = new RegExp(`[${BREAK_CHARS}]+`, 'g');
+const SYMBOL_MAX = 32;
+const NAME_MAX = 48;
+
+function shortMint(address) {
+  return typeof address === 'string' && address.length > 10 ? `${address.slice(0, 4)}...${address.slice(-4)}` : (address || '?');
+}
+
+function sanitizeText(value, max, fallback = '') {
+  if (typeof value !== 'string' && typeof value !== 'number') return fallback;
+  let s = String(value).slice(0, 4 * max + 64); // bound work on huge inputs
+  // whitespace (tab/newline/etc. are control chars) becomes a single space BEFORE control chars are stripped,
+  // otherwise "a\nb" would fuse into "ab"
+  s = s.replace(BREAK_RE, ' ').replace(INVISIBLE_RE, '').normalize('NFKC').replace(INVISIBLE_RE, '');
+  s = s.replace(/(\p{M}{2})\p{M}+/gu, '$1').replace(/\s+/gu, ' ').trim();
+  s = Array.from(s).slice(0, max).join('').trim();
+  return s || fallback;
+}
+const cleanSymbol = (v, address) => sanitizeText(v, SYMBOL_MAX, shortMint(address));
+const cleanName = (v, address, symbol) => sanitizeText(v, NAME_MAX, symbol || shortMint(address));
+// Only plain http(s) URLs are passed through to <img src>/links (no javascript:, data:, etc.)
+const cleanUrl = (u) => (typeof u === 'string' && /^https?:\/\/[^\s]{1,500}$/i.test(u) ? u : null);
+const cleanLinks = (list) => (Array.isArray(list) ? list : []).slice(0, 10)
+  .map((x) => ({ ...x, url: cleanUrl(x?.url), type: sanitizeText(x?.type, 24), label: sanitizeText(x?.label, 32) }))
+  .filter((x) => x.url);
+
 // ── normalisers ─────────────────────────────────────────────────────────────
 function fromDexPair(p) {
   if (!p) return null;
+  const address = p.baseToken?.address;
+  const symbol = cleanSymbol(p.baseToken?.symbol, address);
   return {
-    address: p.baseToken?.address,
-    symbol: p.baseToken?.symbol,
-    name: p.baseToken?.name,
+    address,
+    symbol,
+    name: cleanName(p.baseToken?.name, address, symbol),
     price: num(p.priceUsd),
     price_native: num(p.priceNative),
     mcap: num(p.marketCap) ?? num(p.fdv),
@@ -104,14 +139,14 @@ function fromDexPair(p) {
     pair: {
       pair_address: p.pairAddress,
       dex: p.dexId,
-      quote_symbol: p.quoteToken?.symbol,
+      quote_symbol: sanitizeText(p.quoteToken?.symbol, SYMBOL_MAX),
       quote_address: p.quoteToken?.address,
       created_at: p.pairCreatedAt || null,
-      url: p.url,
+      url: cleanUrl(p.url),
     },
-    image: p.info?.imageUrl || null,
-    websites: p.info?.websites || [],
-    socials: p.info?.socials || [],
+    image: cleanUrl(p.info?.imageUrl),
+    websites: cleanLinks(p.info?.websites),
+    socials: cleanLinks(p.info?.socials),
   };
 }
 
@@ -120,13 +155,13 @@ function fromGeckoPool(pool, included) {
   const baseId = pool.relationships?.base_token?.data?.id; // solana_<addr>
   const address = baseId ? baseId.replace(/^solana_/, '') : null;
   const tok = (included || []).find((i) => i.id === baseId)?.attributes;
-  const name = a.name || '';
-  const symbol = tok?.symbol || name.split('/')[0].trim();
+  const poolName = typeof a.name === 'string' ? a.name : '';
+  const symbol = cleanSymbol(tok?.symbol || poolName.split('/')[0], address);
   const t = a.transactions || {};
   return {
     address,
     symbol,
-    name: tok?.name || symbol,
+    name: cleanName(tok?.name, address, symbol),
     price: num(a.base_token_price_usd),
     mcap: num(a.market_cap_usd) ?? num(a.fdv_usd),
     fdv: num(a.fdv_usd),
@@ -149,7 +184,7 @@ function fromGeckoPool(pool, included) {
       dex: pool.relationships?.dex?.data?.id,
       created_at: a.pool_created_at ? Date.parse(a.pool_created_at) : null,
     },
-    image: tok?.image_url || null,
+    image: cleanUrl(tok?.image_url),
   };
 }
 
@@ -239,7 +274,7 @@ async function getTokenInfo(address) {
     try {
       const d = await getJson(`${GECKO}/networks/solana/tokens/${address}/info`);
       const a = d.data?.attributes || {};
-      return { holders: num(a.holders?.count), decimals: num(a.decimals), image: a.image_url || null };
+      return { holders: num(a.holders?.count), decimals: num(a.decimals), image: cleanUrl(a.image_url) };
     } catch (_) {
       return { holders: null, decimals: null, image: null };
     }
@@ -348,11 +383,14 @@ async function getQuote({ address, side, amountSol, amountTokens, slippageBps })
 
   let usd;
   let tokensIn = null;
-  if (side === 'sell' && Number(amountTokens) > 0) {
+  if (side === 'sell' && amountTokens !== undefined && amountTokens !== null && amountTokens !== '') {
     tokensIn = Number(amountTokens);
+    if (typeof amountTokens === 'boolean' || !Number.isFinite(tokensIn) || tokensIn <= 0 || tokensIn > 1e21) {
+      throw new MemecoinDataError('amountTokens must be a positive number', 400);
+    }
     usd = tokensIn * token.price;
   } else {
-    const sol = Number(amountSol);
+    const sol = typeof amountSol === 'boolean' ? NaN : Number(amountSol);
     if (!Number.isFinite(sol) || sol <= 0) throw new MemecoinDataError('amountSol must be a positive number', 400);
     if (sol > 1000) throw new MemecoinDataError('amountSol too large', 400);
     usd = sol * solPrice;
@@ -408,4 +446,5 @@ async function getQuote({ address, side, amountSol, amountTokens, slippageBps })
 module.exports = {
   MemecoinDataError, isValidAddress, getTrending, getNew, search, getToken,
   getOhlcv, getTrades, getSolPrice, getQuote, SOL_MINT,
+  sanitizeText, cleanSymbol, cleanName, shortMint, fromDexPair, fromGeckoPool,
 };

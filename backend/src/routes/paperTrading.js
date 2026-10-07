@@ -43,6 +43,13 @@ async function casCash(userId, expected, next) {
 
 async function fetchQuoteSafe(ticker) {
   try {
+    // Memecoin positions (ticker = Solana mint, case-sensitive) are priced from the memecoin data service; Finnhub
+    // would upper-case the mint and return nothing, leaving a null-price row.
+    const memecoinData = require('../services/memecoinData');
+    if (memecoinData.isValidAddress(ticker)) {
+      const t = await memecoinData.getToken(ticker);
+      return t && t.price ? { ticker, price: t.price } : null;
+    }
     const q = await getStockQuote(ticker)
     if (!q || q.price == null || q.price === 0) return null
     return q

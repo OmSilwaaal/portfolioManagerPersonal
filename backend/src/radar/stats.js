@@ -49,4 +49,23 @@ function permutationP(modelMean, baselineMeans) {
   return (1 + baselineMeans.filter((m) => m >= modelMean).length) / (1 + baselineMeans.length);
 }
 
-module.exports = { summarize, mean, quantile, blockBootstrapCI, permutationP };
+// Paired comparison of two models' trades (A = candidate, B = baseline) with the same day-block resampling as above:
+// delta = mean(A) - mean(B) in each resample. p = one-sided P(delta <= 0) (+1 smoothing). Needs >=2 days and >=1 trade each.
+function blockBootstrapDiff(tradesA, tradesB, iters = 1000) {
+  const byDay = new Map();
+  const put = (t, k) => { if (!byDay.has(t.day)) byDay.set(t.day, { a: [], b: [] }); byDay.get(t.day)[k].push(t.netReturn); };
+  for (const t of tradesA) put(t, 'a');
+  for (const t of tradesB) put(t, 'b');
+  const days = [...byDay.values()];
+  if (days.length < 2 || !tradesA.length || !tradesB.length) return { lo: null, hi: null, p: null, note: 'need >=2 days and trades from both models' };
+  const out = [];
+  for (let k = 0; k < iters; k++) {
+    const a = [], b = [];
+    for (let d = 0; d < days.length; d++) { const g = days[Math.floor(Math.random() * days.length)]; a.push(...g.a); b.push(...g.b); }
+    if (a.length && b.length) out.push(mean(a) - mean(b));
+  }
+  if (!out.length) return { lo: null, hi: null, p: null, note: 'degenerate resamples' };
+  return { lo: quantile(out, 0.025), hi: quantile(out, 0.975), p: (out.filter((x) => x <= 0).length + 1) / (out.length + 1) };
+}
+
+module.exports = { blockBootstrapDiff, summarize, mean, quantile, blockBootstrapCI, permutationP };

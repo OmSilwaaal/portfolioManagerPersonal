@@ -57,6 +57,44 @@ function prepare(db) {
   };
 }
 
+// Live RADAR scores (model_version 'radar-*') are about brand-new pump.fun/pumpswap tokens that the main-DB snapshot
+// collector (trending lists) usually does not cover, so their outcomes are measured on the radar's own market_snapshot
+// (radar.sqlite, keyed by mint address, 1-minute resolution while the token lives). Same statements, same leak rule
+// (every read is bounded below by the signal's as_of_ts), only the price source differs. The main-DB token_id is mapped to
+// the mint address (token.contract_address) and cached.
+const RADAR_PREFIX = 'radar-';
+
+function prepareRadar(radarDb, mainDb) {
+  const addrOf = mainDb.prepare('SELECT contract_address AS a FROM token WHERE token_id = ?');
+  const cache = new Map();
+  const addr = (id) => {
+    if (!cache.has(id)) { const r = addrOf.get(id); cache.set(id, r ? r.a : null); }
+    return cache.get(id);
+  };
+  const wrap = (sql) => {
+    const st = radarDb.prepare(sql);
+    return { get: (tokenId, ...rest) => { const a = addr(tokenId); return a ? st.get(a, ...rest) : undefined; } };
+  };
+  return {
+    firstAtOrAfter: wrap(`SELECT ts, price_usd AS price, liquidity_usd FROM market_snapshot
+      WHERE token_address = ? AND ts >= ? AND ts <= ? AND price_usd IS NOT NULL ORDER BY ts ASC LIMIT 1`),
+    exitRow: wrap(`SELECT ts, price_usd AS price, liquidity_usd FROM market_snapshot
+      WHERE token_address = ? AND ts >= ? AND ts <= ? ORDER BY ts ASC LIMIT 1`),
+    path: wrap(`SELECT MIN(price_usd) AS lo, MAX(price_usd) AS hi FROM market_snapshot
+      WHERE token_address = ? AND ts >= ? AND ts <= ? AND price_usd IS NOT NULL AND price_usd > 0`),
+    lastTs: wrap('SELECT MAX(ts) AS ts FROM market_snapshot WHERE token_address = ?'),
+    lastRow: wrap('SELECT ts, price_usd AS price, liquidity_usd FROM market_snapshot WHERE token_address = ? ORDER BY ts DESC LIMIT 1'),
+    deadInfo: wrap('SELECT dead_ts, dead_reason FROM token WHERE token_address = ?'),
+  };
+}
+
+// The radar DB, only when it exists (never creates one just for evaluation unless the radar is enabled).
+function resolveRadarDb(o) {
+  if (o.radarDb) return o.radarDb;
+  if (o.radarDb === null || process.env.ENABLE_RADAR !== 'true') return null;
+  try { return require('../../radar/db').getRadarDb(); } catch (_) { return null; }
+}
+
 /**
  * Compute one outcome. Returns null if it cannot be decided yet (retry later), else an outcome
  * object {status, forward_return, max_drawdown, max_runup, entry_*, exit_*}.
@@ -101,6 +139,24 @@ function computeOutcome(stmts, sig, horizonMin, nowSec, o = {}) {
     return { ...base, status: 'missing', forward_return: null, max_drawdown: null, max_runup: null,
       exit_ts: null, exit_price: null };
   }
+  // Radar tokens that went 'inactive' (volume/liquidity dried up) are retired from tracking on purpose: that is not a rug
+  // and not a collection gap. Their outcome is the last observed price (a real, if illiquid, mark); 'gone' tokens fall
+  // through to the dead rule below. Only the radar statement set provides these two hooks.
+  if (stmts.deadInfo && stmts.lastRow && lastTs !== null) {
+    const di = stmts.deadInfo.get(sig.token_id);
+    if (di && di.dead_reason === 'inactive' && di.dead_ts != null && di.dead_ts <= target + stale) {
+      const lr = stmts.lastRow.get(sig.token_id);
+      if (lr && lr.price > 0 && lr.ts >= entry.ts) {
+        const isDead = lr.liquidity_usd != null && (lr.liquidity_usd <= opts.deadLiqUsd
+          || (entry.liquidity_usd > 0 && lr.liquidity_usd < opts.deadLiqFrac * entry.liquidity_usd));
+        const p2 = stmts.path.get(sig.token_id, entry.ts, lr.ts);
+        if (isDead) return { ...base, status: 'dead', forward_return: -1, max_drawdown: -1, max_runup: runupOf(p2), exit_ts: lr.ts, exit_price: lr.price };
+        const lo2 = Math.min(p2 && p2.lo != null ? p2.lo : lr.price, lr.price), hi2 = Math.max(p2 && p2.hi != null ? p2.hi : lr.price, lr.price);
+        return { ...base, status: 'ok', forward_return: lr.price / entry.price - 1, max_drawdown: Math.min(0, lo2 / entry.price - 1),
+          max_runup: Math.max(0, hi2 / entry.price - 1), exit_ts: lr.ts, exit_price: lr.price };
+      }
+    }
+  }
   const silentSince = lastTs === null ? entry.ts : lastTs;
   if (nowSec - silentSince < opts.deadGapSec) return null; // may still resume; decide later
   const p = stmts.path.get(sig.token_id, entry.ts, Math.max(entry.ts, silentSince));
@@ -114,8 +170,11 @@ function runOutcomes(db, o = {}) {
   const opts = { ...DEFAULTS, ...o };
   const nowSec = opts.nowSec != null ? opts.nowSec : Math.floor(Date.now() / 1000);
   const stmts = prepare(db);
+  let rstmts = null;
+  const radarDb = resolveRadarDb(opts);
+  if (radarDb) { try { rstmts = prepareRadar(radarDb, db); } catch (_) { rstmts = null; } }
   const pending = db.prepare(
-    `SELECT s.signal_id, s.token_id, s.as_of_ts FROM signal_snapshot s
+    `SELECT s.signal_id, s.token_id, s.as_of_ts, s.model_version FROM signal_snapshot s
      WHERE s.as_of_ts <= ?
        AND NOT EXISTS (SELECT 1 FROM outcome_window o
                        WHERE o.signal_snapshot_id = s.signal_id AND o.horizon_min = ?)
@@ -132,7 +191,7 @@ function runOutcomes(db, o = {}) {
     const rows = pending.all(nowSec - h * 60 - stale, h, opts.batchLimit);
     inTransaction(db, () => {
       for (const sig of rows) {
-        const out = computeOutcome(stmts, sig, h, nowSec, opts);
+        const out = computeOutcome(rstmts && String(sig.model_version).startsWith(RADAR_PREFIX) ? rstmts : stmts, sig, h, nowSec, opts);
         if (!out) { res.undecided++; continue; }
         ins.run(sig.token_id, sig.signal_id, h, out.forward_return, out.max_drawdown, out.max_runup,
           nowSec, out.status, out.entry_ts, out.entry_price, out.exit_ts, out.exit_price);
@@ -144,4 +203,4 @@ function runOutcomes(db, o = {}) {
   return res;
 }
 
-module.exports = { runOutcomes, computeOutcome, prepare, stalenessSec, HORIZONS_MIN, DEFAULTS };
+module.exports = { runOutcomes, computeOutcome, prepare, prepareRadar, stalenessSec, HORIZONS_MIN, DEFAULTS };

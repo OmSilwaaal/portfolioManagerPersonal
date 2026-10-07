@@ -1,7 +1,8 @@
-const { loadUniverse, MODELS, MODEL_THRESHOLD } = require('./features');
+const { loadUniverse, MODELS, MODEL_THRESHOLD, getExtraSource } = require('./features');
+const { normalizeGroups } = require('./extraFeatures');
 const { simulate, buildRandomPool, randomMeans, DEFAULTS } = require('./simulator');
 const { fitModel } = require('./fit');
-const { summarize, mean, quantile, blockBootstrapCI, permutationP } = require('./stats');
+const { summarize, mean, quantile, blockBootstrapCI, blockBootstrapDiff, permutationP } = require('./stats');
 const { getRadarDb } = require('./db');
 
 const HORIZONS = [5, 15, 60, 240];
@@ -43,11 +44,12 @@ function subset(universe, pick) {
   return new Map([...universe].filter(([, u]) => pick(u.token)));
 }
 
-function evaluate(universe, pool, model, strategy, opt, comparisons) {
+function evaluate(universe, pool, model, strategy, opt, comparisons, keep) {
   // The smallest p a permutation test can report is 1/(draws+1); it must sit well below the corrected alpha or
   // nothing could ever pass. 10/alpha draws gives ~10x headroom.
   const draws = Math.max(1000, Math.ceil(10 / (0.05 / comparisons)));
   const sim = simulate(universe, { model, strategy, ...opt });
+  if (keep) keep.trades = sim.trades;
   const rets = sim.trades.map((t) => t.netReturn);
   const s = summarize(rets);
   let baseline = null, p = null;
@@ -70,7 +72,15 @@ function evaluate(universe, pool, model, strategy, opt, comparisons) {
   };
 }
 
-function runReport({ models, horizons = HORIZONS, sinceHours = null, includeTpsl = true, ...rawOpt } = {}) {
+// Optional "fitted + extra group" variants, judged on the SAME walk-forward slices as the plain fitted model.
+// Only when a smart-money / social group is enabled (RADAR_EXTRA_FEATURES / collector flags, or opts.featureGroups).
+const FITTED_EXTRA = [
+  { name: 'fitted_lr+smartmoney', label: 'fitted + smartmoney', groups: ['smartmoney'] },
+  { name: 'fitted_lr+social', label: 'fitted + social', groups: ['social'] },
+  { name: 'fitted_lr+both', label: 'fitted + both', groups: ['smartmoney', 'social'] },
+];
+
+function runReport({ models, horizons = HORIZONS, sinceHours = null, includeTpsl = true, featureGroups, ...rawOpt } = {}) {
   // Drop unset overrides so an absent query param can't clobber a default (undefined would disable the threshold)
   const opt = Object.fromEntries(Object.entries(rawOpt).filter(([, v]) => v !== undefined && !Number.isNaN(v)));
   const sinceTs = sinceHours ? Math.floor(Date.now() / 1000) - sinceHours * 3600 : 0;
@@ -79,27 +89,70 @@ function runReport({ models, horizons = HORIZONS, sinceHours = null, includeTpsl
   const strategies = horizons.map((m) => ({ type: 'horizon', minutes: m, label: `${m}m` }));
   if (includeTpsl) strategies.push({ type: 'tpsl', label: 'tpsl' });
 
-  const fit = fitModel(universe, opt);
+  // groups on = explicit opts.featureGroups, else whatever the configured extra source enables (none by default)
+  let groups = [];
+  try { groups = normalizeGroups(featureGroups !== undefined ? featureGroups : ((getExtraSource() || {}).groups || [])); } catch { groups = []; }
+
+  const fit = fitModel(universe, opt);                       // plain fitted model: market + security + flow features only
+  const extraFits = [];                                      // fitted+extra variants that fitted OK on the same split
+  const extraFitStatus = {};
+  if (fit.status === 'ok') {
+    for (const v of FITTED_EXTRA) {
+      if (!v.groups.every((g) => groups.includes(g))) continue;   // 'both' only exists when both groups are on
+      let f;
+      try { f = fitModel(universe, { ...opt, featureGroups: v.groups }); } catch (e) { f = { status: 'error', reason: e.message }; }
+      extraFitStatus[v.name] = f.status === 'ok' ? { status: 'ok', threshold: f.threshold, ...f.meta } : { status: f.status, reason: f.reason };
+      if (f.status === 'ok' && f.testFromTs === fit.testFromTs) extraFits.push({ ...v, fit: f });
+    }
+  }
   const hand = models || Object.keys(MODELS);
-  const names = fit.status === 'ok' ? [...hand, 'fitted_lr'] : hand;
-  const fn = (name) => (name === 'fitted_lr' ? fit.score : name);
+  const names = fit.status === 'ok' ? [...hand, 'fitted_lr', ...extraFits.map((v) => v.name)] : hand;
+  const fitFor = (name) => (name === 'fitted_lr' ? fit : (extraFits.find((v) => v.name === name) || {}).fit);
+  const fn = (name) => (fitFor(name) ? fitFor(name).score : name);
 
   // Window 'all' = every token (hand-set models only, they never saw the data). Window 'test' = the held-out final
-  // slice, the only place the fitted model may be judged. Compare models within a window, never across.
+  // slice, the only place the fitted models may be judged. Compare models within a window, never across.
   const windows = [{ name: 'all', universe, names: hand }];
   if (fit.status === 'ok') windows.push({ name: 'test', universe: subset(universe, (t) => t.pool_created_ts >= fit.testFromTs), names });
-  const comparisons = windows.reduce((a, w) => a + w.names.length, 0) * strategies.length;
+  // Bonferroni family: every (window, model, strategy) cell (this already includes the fitted+extra variants in the test
+  // window) PLUS one paired "variant vs plain fitted" test per variant and strategy. With groups off both extras are 0.
+  const baseComparisons = windows.reduce((a, w) => a + w.names.length - (w.name === 'test' ? extraFits.length : 0), 0) * strategies.length;
+  const extraVsRandom = extraFits.length * strategies.length;
+  const extraPaired = extraFits.length * strategies.length;
+  const comparisons = baseComparisons + extraVsRandom + extraPaired;
 
   const results = [];
+  const kept = {};                                           // `${strategy}|${model}` -> test-window trades (for the paired tests)
   for (const w of windows) {
     for (const strategy of strategies) {
       const pool = buildRandomPool(w.universe, { strategy, ...opt });
       for (const name of w.names) {
-        const o = name === 'fitted_lr' ? { ...opt, threshold: fit.threshold }
+        const fitted = w.name === 'test' ? fitFor(name) : null;
+        const o = fitted ? { ...opt, threshold: fitted.threshold }
           : opt.threshold === undefined && MODEL_THRESHOLD[name] ? { ...opt, threshold: MODEL_THRESHOLD[name] } : opt;
+        const keep = fitted ? {} : null;
         results.push({ window: w.name, model: name, strategy: strategy.label, tokens: w.universe.size,
-          ...evaluate(w.universe, pool, fn(name), strategy, o, comparisons) });
+          ...evaluate(w.universe, pool, fn(name), strategy, o, comparisons, keep) });
+        if (keep) kept[`${strategy.label}|${name}`] = keep.trades || [];
       }
+    }
+  }
+  // fitted+extra vs the plain fitted model on the same test slice (day-block bootstrap of the mean-return difference)
+  for (const v of extraFits) {
+    for (const strategy of strategies) {
+      const row = results.find((r) => r.window === 'test' && r.model === v.name && r.strategy === strategy.label);
+      if (!row) continue;
+      const a = kept[`${strategy.label}|${v.name}`] || [], b = kept[`${strategy.label}|fitted_lr`] || [];
+      const enough = a.length >= 10 && b.length >= 10;
+      const d = enough ? blockBootstrapDiff(a, b) : { lo: null, hi: null, p: null, note: 'need >=10 trades from both models' };
+      const delta = enough ? mean(a.map((t) => t.netReturn)) - mean(b.map((t) => t.netReturn)) : null;
+      row.label = v.label;
+      row.vsPlainFitted = {
+        plainModel: 'fitted_lr', nPlain: b.length, n: a.length, meanDelta: delta, deltaCI95: { lo: d.lo, hi: d.hi }, pDeltaLE0: d.p,
+        // an improvement is only claimed when the delta is positive, clears the corrected alpha AND the variant beat random
+        significantlyBetterAfterCorrection: delta !== null && delta > 0 && d.p !== null && d.p < 0.05 / comparisons && !!row.significantAfterCorrection,
+        ...(d.note ? { note: d.note } : {}),
+      };
     }
   }
 
@@ -107,7 +160,9 @@ function runReport({ models, horizons = HORIZONS, sinceHours = null, includeTpsl
     assumptions: { ...DEFAULTS, ...opt },
     data: dataQuality(universe),
     fit: fit.status === 'ok' ? { status: 'ok', threshold: fit.threshold, ...fit.meta } : fit,
+    ...(groups.length ? { featureGroups: groups, fitExtras: extraFitStatus } : {}),
     comparisons, bonferroniAlpha: 0.05 / comparisons,
+    ...(extraFits.length ? { comparisonsBreakdown: { base: baseComparisons, fittedExtraVsRandom: extraVsRandom, fittedExtraVsPlainFitted: extraPaired } } : {}),
     results,
     caveats: [
       'Snapshots are 1-minute (young tokens) / 5-minute: intrabar highs/lows and exact fill prices are not observed.',
@@ -115,6 +170,7 @@ function runReport({ models, horizons = HORIZONS, sinceHours = null, includeTpsl
       'Entry-per-token is the first threshold crossing; hand-set thresholds are fixed constants, the fitted threshold comes from validation only.',
       'Security features use the latest check at or before each row; tokens not yet vetted are treated as unsafe by the *_safe models.',
       'Fitted model is judged on the held-out test window only; never compare its numbers with the all-window rows.',
+      ...(extraFits.length ? ['fitted + smartmoney/social variants use the same train/validation/test split as the plain fitted model; "better than plain fitted" needs a positive mean-return difference whose day-block bootstrap p clears the Bonferroni alpha (which counts these extra tests) and the variant must itself beat random.'] : []),
     ],
   };
 }

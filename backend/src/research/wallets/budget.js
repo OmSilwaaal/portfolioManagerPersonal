@@ -5,7 +5,9 @@
 
 const DEFAULT_BIRDEYE_DAILY_BUDGET = 150;
 
-const utcDay = (sec) => new Date(sec * 1000).toISOString().slice(0, 10);
+const utcDayFn = (sec) => new Date(sec * 1000).toISOString().slice(0, 10);
+const utcDay = utcDayFn;
+const utcHour = (sec) => new Date(sec * 1000).toISOString().slice(0, 13);   // 'YYYY-MM-DDTHH'
 
 function parseDailyBudget(env = process.env, key = 'BIRDEYE_DAILY_BUDGET', def = DEFAULT_BIRDEYE_DAILY_BUDGET) {
   const raw = env[key];
@@ -15,7 +17,10 @@ function parseDailyBudget(env = process.env, key = 'BIRDEYE_DAILY_BUDGET', def =
 }
 
 /** db may be null: then the budget is in-memory only (not persisted). */
-function createBudget(db, { provider = 'birdeye', dailyLimit = DEFAULT_BIRDEYE_DAILY_BUDGET, nowSec = () => Math.floor(Date.now() / 1000) } = {}) {
+// period 'hour' keys the same persisted api_budget table by clock hour instead of UTC day (used by the smart-money fast
+// loop: `dailyLimit` is then the per-hour limit). Default 'day' behaves exactly as before.
+function createBudget(db, { provider = 'birdeye', dailyLimit = DEFAULT_BIRDEYE_DAILY_BUDGET, nowSec = () => Math.floor(Date.now() / 1000), period = 'day' } = {}) {
+  const utcDay = period === 'hour' ? utcHour : utcDayFn;
   let mem = { day: '', used: 0 };
   if (db) {
     db.exec(`CREATE TABLE IF NOT EXISTS api_budget (provider TEXT NOT NULL, day TEXT NOT NULL, used INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (provider, day))`);
