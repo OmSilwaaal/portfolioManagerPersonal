@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { DatabaseSync } = require('node:sqlite');
+const { DatabaseSync } = require('./_sqlite');
 const { evaluate, mulberry32 } = require('../src/research/eval/evaluate');
 const { initEvalSchema } = require('../src/research/eval/schema');
 const { runOutcomes } = require('../src/research/eval/outcomes');

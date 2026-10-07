@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
-const { DatabaseSync } = require('node:sqlite');
+const { DatabaseSync } = require('./_sqlite');
 
 const E = path.join(__dirname, '..', 'src', 'research', 'eval');
 const wf = require(path.join(E, 'winnerFirst.js'));

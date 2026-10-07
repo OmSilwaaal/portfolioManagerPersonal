@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { DatabaseSync } = require('node:sqlite'); // local Node 24; prod uses better-sqlite3 with the same API subset
+const { DatabaseSync } = require('./_sqlite'); // local Node 24; prod uses better-sqlite3 with the same API subset
 
 const X = require('../src/radar/extraFeatures');
 const { initWalletSchema } = require('../src/research/wallets/schema');

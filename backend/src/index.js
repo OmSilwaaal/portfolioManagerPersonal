@@ -56,6 +56,8 @@ if (process.env.ENABLE_SOLANA_PIPELINE === 'true') {
 
 // Memecoin radar collector (Solana new pools → snapshots). Opt-in via ENABLE_RADAR=true.
 require('./radar').startRadar();
+// Enable the optional smart-money / social radar feature groups when their collectors are on (RADAR_EXTRA_FEATURES=off disables)
+try { require('./radar').configureExtraFeatures(); } catch (err) { console.error('[radar] extra features not configured:', err.message); }
 require('./services/snapshotCollector').startSnapshotCollector();
 
 const app = express();
@@ -204,14 +206,15 @@ try {
   const { initEvalSchema } = require('./research/eval/schema');
   initWalletSchema(rdb); initSocialSchema(rdb); initEvalSchema(rdb);
   require('./research/wallets/collector').start(rdb);
-  require('./research/social/collector').start(rdb, {
+  const socialOn = require('./research/social/collector').start(rdb, {
     skilledWalletIds: () => rdb.prepare(
       'SELECT DISTINCT wallet_id FROM wallet_skill_snapshot WHERE passed_holdout = 1'
     ).all().map((r) => r.wallet_id),
     knownTokens: () => rdb.prepare('SELECT contract_address AS address, symbol FROM token').all(),
   });
-  require('./research/eval/report').start(rdb);
-  require('./research/eval/winnerFirst').start(() => require('./radar/db').getRadarDb(), rdb);
+  console.log(`[social] collector ${socialOn ? 'started' : 'disabled (SOCIAL_COLLECTOR != 1)'}`);
+  console.log(`[eval] hourly job ${require('./research/eval/report').start(rdb) ? 'started' : 'disabled (EVAL_JOB != 1)'}`);
+  console.log(`[winnerFirst] job ${require('./research/eval/winnerFirst').start(() => require('./radar/db').getRadarDb(), rdb) ? 'started' : 'disabled (WINNER_FIRST_JOB != 1)'}`);
 } catch (err) {
   console.error('[research] failed to start collectors:', err.message);
 }

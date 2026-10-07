@@ -266,6 +266,11 @@ const EXTRA_MODELS = {
   market_v1_social: { group: 'social', fn: (f) => Math.min(100, MODELS.market_v1(f) + 70 * socScore(f)) },
   market_v1_sm_social: { group: 'both', fn: (f) => Math.min(100, MODELS.market_v1(f) + 70 * Math.max(smScore(f), socScore(f))) },
   // diagnostics with NO market input: what the group alone contributes
+  // the LIVE radar score is market_v2, so its extra-group variants add the same bonus on top of market_v2 (radarSignals
+  // picks one by the active groups; the report replays exactly the same function)
+  market_v2_sm: { group: 'smartmoney', fn: (f) => Math.min(100, MODELS.market_v2(f) + 70 * smScore(f)) },
+  market_v2_social: { group: 'social', fn: (f) => Math.min(100, MODELS.market_v2(f) + 70 * socScore(f)) },
+  market_v2_sm_social: { group: 'both', fn: (f) => Math.min(100, MODELS.market_v2(f) + 70 * Math.max(smScore(f), socScore(f))) },
   smartmoney_only: { group: 'smartmoney', fn: (f) => 100 * smScore(f) },
   social_only: { group: 'social', fn: (f) => 100 * socScore(f) },
 };
@@ -292,12 +297,19 @@ function syncExtraModels() {
   }
   return src;
 }
+// The currently configured source ({provider, groups}) or null. Used by the live scorer (services/radarSignals).
+const getExtraSource = () => syncExtraModels();
+// Name of the market_v2 variant matching a set of active groups ('market_v2' when none).
+function liveModelFor(groups) {
+  const sm = (groups || []).includes('smartmoney'), soc = (groups || []).includes('social');
+  return sm && soc ? 'market_v2_sm_social' : sm ? 'market_v2_sm' : soc ? 'market_v2_social' : 'market_v2';
+}
 // Every model name incl. the optional-group candidates, whether or not a source is configured (for explicit use).
 const allModelNames = () => [...Object.keys(MODELS), ...Object.keys(EXTRA_MODELS).filter((n) => !Object.keys(MODELS).includes(n))];
 
 // v2 mixes more terms and penalises already-extended moves, so its attainable ceiling for an EARLY setup is lower than
 // v1's. Per-model cutoffs are fixed constants written down before any real-data run, never tuned on results.
-const MODEL_THRESHOLD = { market_v2: 55, market_v2_safe: 55 };
+const MODEL_THRESHOLD = { market_v2: 55, market_v2_safe: 55, market_v2_sm: 55, market_v2_social: 55, market_v2_sm_social: 55 };
 
 // Tradeable universe: thin or brand-new pools can't be bought at the sizes we simulate.
 const ELIGIBLE = { minLiquidity: 5000, minAgeMin: 15, maxAgeMin: 6 * 60 };
@@ -348,4 +360,4 @@ function loadUniverse({ sinceTs = 0 } = {}) {
   return out;
 }
 
-module.exports = { MODELS, EXTRA_MODELS, setExtraFeatureSource, allModelNames, MODEL_THRESHOLD, ELIGIBLE, FEATURE_VERSION, isEligible, isSafe, loadUniverse, marketFeatures };
+module.exports = { MODELS, EXTRA_MODELS, EXTRA_SCORES: { smartmoney: smScore, social: socScore }, setExtraFeatureSource, getExtraSource, liveModelFor, allModelNames, MODEL_THRESHOLD, ELIGIBLE, FEATURE_VERSION, isEligible, isSafe, loadUniverse, marketFeatures };

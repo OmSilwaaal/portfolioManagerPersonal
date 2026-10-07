@@ -8,7 +8,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
-const { DatabaseSync } = require('node:sqlite');
+const { DatabaseSync } = require('./_sqlite');
 
 const W = path.join(__dirname, '..', 'src', 'research', 'wallets');
 const { initWalletSchema } = require(path.join(W, 'schema.js'));

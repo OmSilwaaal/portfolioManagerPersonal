@@ -26,4 +26,14 @@ function safeHttpUrl(v, maxLen = 500) {
   }
 }
 
-module.exports = { isUuid, isTicker, safeEqual, safeHttpUrl };
+// Admin-only gate (x-admin-secret === ADMIN_SECRET). Fails CLOSED: with no ADMIN_SECRET configured every request is refused.
+function requireAdminSecret(req, res, next) {
+  const secret = process.env.ADMIN_SECRET;
+  const given = req.headers['x-admin-secret'];
+  if (!secret || typeof given !== 'string' || !safeEqual(given, secret)) {
+    return res.status(403).json({ error: true, message: 'Forbidden.' });
+  }
+  next();
+}
+
+module.exports = { isUuid, isTicker, safeEqual, safeHttpUrl, requireAdminSecret };

@@ -138,12 +138,16 @@ function attachContext(f, { sec, launch, promos } = {}) {
 const KEY_FEATURES = ['volume_accel', 'buy_pressure', 'txn_accel', 'price_chg_5m', 'price_chg_15m', 'price_chg_60m',
   'liq_delta_15m', 'realized_vol_30m', 'drawdown_from_peak', 'turnover', 'curve_progress'];
 
+const EXTRA_KEYS = ['sm_buyers_30m', 'sm_net_usd_30m', 'mention_unique_accounts_15m', 'mention_accel', 'telegram_mentions_15m', 'source_diversity'];
+
 // Map one token (+ features and score computed by the caller) to the public radar signal shape.
 // `token`: radar token row; `f`: feature row (may be null for a token with no snapshot yet); `score`: number|null.
 function mapRadarSignal({ token, f, score, nowSec, model = RADAR_MODEL }) {
   const hasF = !!f;
   const features = {};
   if (hasF) for (const k of KEY_FEATURES) features[k] = r3(f[k]);
+  // optional smart-money / social group features: present only when a group is enabled; null = collector has no data
+  if (hasF) for (const k of EXTRA_KEYS) if (k in f) features[k] = r3(f[k]);
   const security = hasF && f.has_sec === 1 ? {
     top1Pct: r1(f.top1_pct_ex), top10Pct: r1(f.top10_pct_ex), creatorPct: r1(f.creator_pct), insiderPct: r1(f.insider_pct),
     mintAuthority: !!f.mint_auth, freezeAuthority: !!f.freeze_auth, rugged: !!f.rugged, holders: f.holders ?? null,
@@ -237,7 +241,12 @@ function computeForTokens(db, feat, tokens, nowSec) {
   const secStmt = db.prepare('SELECT * FROM token_security WHERE token_address = ? AND ts <= ? ORDER BY ts DESC LIMIT 1');
   const launchStmt = db.prepare('SELECT * FROM token_launch WHERE token_address = ?');
   const promoStmt = db.prepare('SELECT * FROM token_promo WHERE token_address = ? ORDER BY ts');
-  const model = feat.MODELS[RADAR_MODEL];
+  // Optional smart-money / social groups (main-db collectors). With no source configured this is exactly market_v2.
+  // A configured source with no collector data yields NULL features, which add nothing to the score (never zeros/errors).
+  const extraSrc = typeof feat.getExtraSource === 'function' ? feat.getExtraSource() : null;
+  const modelName = extraSrc ? feat.liveModelFor(extraSrc.groups) : RADAR_MODEL;
+  const model = feat.MODELS[modelName];
+  const extraMod = extraSrc ? require('../radar/extraFeatures') : null;
   const out = [];
   for (const t of tokens) {
     let f = null, score = null;
@@ -254,6 +263,7 @@ function computeForTokens(db, feat, tokens, nowSec) {
             promos: promoStmt.all(t.token_address),
           });
           // no wallet-flow window here: trades-based features stay null (flow_v1 is not the radar score)
+          if (extraSrc) extraMod.attachExtraFeatures([f], t.token_address, extraSrc.provider, extraSrc.groups);
           score = model(f);
         }
       }
@@ -261,7 +271,15 @@ function computeForTokens(db, feat, tokens, nowSec) {
       f = null; score = null;
       console.error('[radarSignals] token', t.token_address, e.message);
     }
-    out.push(mapRadarSignal({ token: t, f, score, nowSec }));
+    const sig = mapRadarSignal({ token: t, f, score, nowSec, model: modelName });
+    if (f && extraSrc) {
+      // bonus components (not part of market_v2's weights): null score = no data from that collector
+      const have = (k) => f[k] !== null && f[k] !== undefined;
+      if (extraSrc.groups.includes('smartmoney')) sig.components.smart_money = { score: have('sm_buyers_30m') ? r1(100 * feat.EXTRA_SCORES.smartmoney(f)) : null, weight: 'bonus' };
+      if (extraSrc.groups.includes('social')) sig.components.social = { score: have('mention_unique_accounts_15m') ? r1(100 * feat.EXTRA_SCORES.social(f)) : null, weight: 'bonus' };
+      sig.notes = [...sig.notes, `Score includes optional ${extraSrc.groups.join(' + ')} bonus (${modelName}); unvalidated.`];
+    }
+    out.push(sig);
   }
   return out;
 }
@@ -300,7 +318,7 @@ function listSignals({ sort = 'score', limit = 30, maxAgeHours = DEFAULT_MAX_AGE
     if (safeOnly) signals = signals.filter((s) => s.passesSafetyGate);
     if (sort === 'new') signals.sort((a, b) => b.launch.createdTs - a.launch.createdTs);
     else signals.sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
-    return { enabled: true, asOf: Date.now(), model: RADAR_MODEL, sort, signals: signals.slice(0, lim) };
+    return { enabled: true, asOf: Date.now(), model: (signals[0] && signals[0].model) || RADAR_MODEL, sort, signals: signals.slice(0, lim) };
   } catch (e) {
     console.error('[radarSignals] list:', e.message);
     return disabled('Radar signals are temporarily unavailable.');
@@ -344,5 +362,5 @@ function lookupMany(addresses) {
 module.exports = {
   RADAR_MODEL, radarRiskFlags, passesSafetyGate, levelFor, radarComponents, radarConfidence, bondingState,
   attachContext, mapRadarSignal, mergeRiskFlags, toMemecoinSignal,
-  radarEnabled, listSignals, getSignal, lookupMany,
+  radarEnabled, computeForTokens, listSignals, getSignal, lookupMany,
 };

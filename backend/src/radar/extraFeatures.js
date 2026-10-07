@@ -130,7 +130,9 @@ function createMainDbProvider({ db: injected } = {}) {
 
   return {
     smartMoney(token) {
-      if (smFrom === undefined) { const r = tryGet('SELECT MIN(ts) m FROM smart_money_event'); smFrom = r && r.m != null ? r.m : null; }
+      // only a FOUND coverage start is cached: a null (no events yet) is re-checked, otherwise a long-running server whose
+      // first lookup preceded the first event would stay blind to smart money until restart
+      if (smFrom === undefined || smFrom === null) { const r = tryGet('SELECT MIN(ts) m FROM smart_money_event'); smFrom = r && r.m != null ? r.m : null; }
       if (smFrom === null) return null;
       const rows = tryAll('SELECT wallet_id, ts, side, amount_usd, skill_as_of_ts, skill_score, ingested_ts FROM smart_money_event WHERE token_id = ? ORDER BY ts', token);
       if (!rows) return null;
@@ -146,7 +148,7 @@ function createMainDbProvider({ db: injected } = {}) {
       return { from: smFrom, events };
     },
     social(token) {
-      if (socFrom === undefined) {
+      if (socFrom === undefined || socFrom === null) {
         const a = tryGet('SELECT MIN(ts) m FROM account_post'), b = tryGet('SELECT MIN(ts) m FROM telegram_message');
         const ms = [a && a.m, b && b.m].filter((x) => x !== null && x !== undefined);
         socFrom = ms.length ? Math.min(...ms) / 1000 : null;      // social tables store epoch MILLISECONDS

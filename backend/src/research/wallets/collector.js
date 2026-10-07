@@ -101,16 +101,15 @@ async function runCycle(db, opts = {}) {
     } catch (e) { stats.errors++; log.warn(`[smart-money] wallet ${w} failed: ${e.message}`); }
   }
 
-  // (d) smart-money events: buys of tracked tokens by wallets that were skilled BEFORE the trade
+  // (d) smart-money events: ANY recent buy (not just of today's top-10 trending tokens: the radar tracks brand-new
+  // launches that are never in that list) by a wallet that was skilled BEFORE the trade. token_id = mint address.
   try {
-    for (const tok of tokens) {
-      const buys = db.prepare("SELECT * FROM wallet_trade WHERE token_id = ? AND side = 'buy' AND ts >= ?").all(tok, now - eventWindowSec);
-      for (const b of buys) {
-        const snap = getSkillAsOf(db, b.wallet_id, b.ts);
-        if (!isSmart(snap)) continue;
-        const r = insEvt.run(tok, b.wallet_id, b.ts, 'buy', b.amount_usd, snap.as_of_ts, snap.skill_score, b.ts, now);
-        stats.events += Number(r.changes || 0);
-      }
+    const buys = db.prepare("SELECT * FROM wallet_trade WHERE side = 'buy' AND ts >= ? ORDER BY ts").all(now - eventWindowSec);
+    for (const b of buys) {
+      const snap = getSkillAsOf(db, b.wallet_id, b.ts);
+      if (!isSmart(snap)) continue;
+      const r = insEvt.run(b.token_id, b.wallet_id, b.ts, 'buy', b.amount_usd, snap.as_of_ts, snap.skill_score, b.ts, now);
+      stats.events += Number(r.changes || 0);
     }
   } catch (e) { stats.errors++; log.warn(`[smart-money] event scan failed: ${e.message}`); }
 

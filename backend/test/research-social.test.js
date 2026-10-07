@@ -4,7 +4,7 @@ const assert = require('node:assert');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { DatabaseSync } = require('node:sqlite');
+const { DatabaseSync } = require('./_sqlite');
 
 const S = path.join(__dirname, '..', 'src', 'research', 'social');
 const { initSocialSchema, addSelfDeclaredWalletLink } = require(path.join(S, 'schema.js'));

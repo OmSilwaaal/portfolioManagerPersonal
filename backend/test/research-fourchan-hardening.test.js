@@ -6,7 +6,7 @@ const assert = require('node:assert');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const { DatabaseSync } = require('node:sqlite');
+const { DatabaseSync } = require('./_sqlite');
 
 const S = path.join(__dirname, '..', 'src', 'research', 'social');
 const { initSocialSchema } = require(path.join(S, 'schema.js'));
