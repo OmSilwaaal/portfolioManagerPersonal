@@ -1,9 +1,19 @@
 'use strict';
 // Smart-money collector. Opt-in via SMART_MONEY_COLLECTOR=1. Never throws out of start()/runCycle().
+//
+// Wallet discovery (all optional, per-source flags, none needs social data):
+//   SMART_MONEY_BIRDEYE_LB=1 (+BIRDEYE_API_KEY)   SMART_MONEY_WINNER_BACKBUY=1 (+ENABLE_RADAR)   SMART_MONEY_SEEDS=1
+//   SMART_MONEY_FOMOAPI=1 (+FOMOAPI_KEY)          SMART_MONEY_SOLANATRACKER=1 (+SOLANATRACKER_API_KEY)
+// Every discovered wallet is only a CANDIDATE: reported PnL is ignored and the wallet is re-scored here from on-chain
+// trades (skill.js, holdout rule, trades strictly before as_of). Only wallets that pass produce smart_money_event.
 
 const { initWalletSchema, getSkillAsOf } = require('./schema');
 const { computeSkill, isSmart } = require('./skill');
 const { getProviders } = require('./providers');
+const { createBudget, parseDailyBudget } = require('./budget');
+const { getDiscoverySources, FLAGS: DISCOVERY_FLAGS } = require('./discoverySources');
+const { runDiscovery } = require('./discovery');
+const { evaluateForward, FORWARD_DAYS_DEFAULT } = require('./candidates');
 
 let timer = null;
 let running = false;
@@ -36,6 +46,8 @@ async function runCycle(db, opts = {}) {
   const lookbackSec = (opts.lookbackDays || 30) * 86400;
   const eventWindowSec = opts.eventWindowSec || 86400;
   const stats = { tokens: 0, wallets: 0, newTrades: 0, snapshots: 0, events: 0, errors: 0 };
+  const discoverySources = opts.discoverySources || [];
+  const forwardDays = opts.forwardDays || FORWARD_DAYS_DEFAULT;
 
   const insWallet = db.prepare('INSERT OR IGNORE INTO wallet (wallet_id, chain, first_seen_ts, event_ts, ingested_ts) VALUES (?, ?, ?, ?, ?)');
   const insTrade = db.prepare('INSERT OR IGNORE INTO wallet_trade (wallet_id, token_id, ts, side, amount_token, price_usd, amount_usd, tx, event_ts, ingested_ts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
@@ -50,11 +62,22 @@ async function runCycle(db, opts = {}) {
   stats.tokens = tokens.length;
 
   const cand = new Set();
+  const trendingTraders = [];
   for (const tok of tokens) {
-    try { for (const w of await firstOk(providers, 'discoverCandidateWallets', tok)) cand.add(w); }
+    try { for (const w of await firstOk(providers, 'discoverCandidateWallets', tok)) { cand.add(w); trendingTraders.push(w); } }
     catch (e) { stats.errors++; log.warn(`[smart-money] discover ${tok} failed: ${e.message}`); }
   }
-  for (const r of db.prepare('SELECT wallet_id FROM wallet').all()) cand.add(r.wallet_id);
+  // on-chain top-earner discovery (candidates are recorded in wallet_candidate and registered in `wallet`; never throws)
+  if (discoverySources.some((s) => s && s.enabled)) {
+    try {
+      stats.discovery = await runDiscovery(db, { sources: discoverySources, now, tokens, trendingTraders, env: opts.env, log });
+      stats.errors += stats.discovery.errors;
+    } catch (e) { stats.errors++; log.warn(`[smart-money] discovery failed: ${e.message}`); }
+  }
+  // known wallets, least recently re-scored first (never-scored candidates first) so every wallet keeps getting refreshed
+  for (const r of db.prepare(`SELECT w.wallet_id FROM wallet w
+      LEFT JOIN (SELECT wallet_id, MAX(as_of_ts) AS m FROM wallet_skill_snapshot GROUP BY wallet_id) s ON s.wallet_id = w.wallet_id
+      ORDER BY COALESCE(s.m, 0) ASC, w.rowid ASC`).all()) cand.add(r.wallet_id);
   const wallets = [...cand].slice(0, maxWallets);
 
   for (const w of wallets) {
@@ -91,6 +114,10 @@ async function runCycle(db, opts = {}) {
     }
   } catch (e) { stats.errors++; log.warn(`[smart-money] event scan failed: ${e.message}`); }
 
+  // (e) forward test of discovered candidates vs controls (append-only, only once the forward window has elapsed)
+  try { stats.forwardEvaluated = evaluateForward(db, { now, forwardDays }); }
+  catch (e) { stats.errors++; log.warn(`[smart-money] forward evaluation failed: ${e.message}`); }
+
   return stats;
 }
 
@@ -102,7 +129,14 @@ function start(db, opts = {}) {
       log.log('[smart-money] disabled: SMART_MONEY_COLLECTOR != 1');
       return { started: false, reason: 'SMART_MONEY_COLLECTOR != 1' };
     }
-    const providers = opts.providers || getProviders(env);
+    initWalletSchema(db);
+    // one persisted daily budget shared by EVERY Birdeye call (provider + leaderboard + back-buyer lookups)
+    const budget = opts.budget || createBudget(db, { provider: 'birdeye', dailyLimit: parseDailyBudget(env) });
+    const providers = opts.providers || getProviders(env, { budget });
+    const discoverySources = opts.discoverySources || getDiscoverySources(env, {
+      budget, radarDb: opts.radarDb, seedsPath: opts.seedsPath,
+    });
+    for (const s of discoverySources) if (!s.enabled && (env[DISCOVERY_FLAGS[s.name]] === '1')) log.log(`[smart-money] discovery ${s.name} disabled: ${s.reason}`);
     for (const p of providers) if (!p.enabled) log.log(`[smart-money] provider ${p.name} disabled: ${p.reason}`);
     const active = providers.filter((p) => p.enabled);
     if (!active.some((p) => typeof p.getWalletTrades === 'function')) {
@@ -112,10 +146,10 @@ function start(db, opts = {}) {
     if (!active.some((p) => typeof p.discoverCandidateWallets === 'function')) {
       log.log('[smart-money] warning: no discovery provider; only already-known wallets will be refreshed');
     }
-    initWalletSchema(db);
     const interval = Number(env.SMART_MONEY_INTERVAL_MS) || 15 * 60_000;
     const cycleOpts = {
-      ...opts, providers, log,
+      ...opts, providers, log, discoverySources, env,
+      forwardDays: Number(env.SMART_MONEY_FORWARD_DAYS) || opts.forwardDays,
       maxTokens: Number(env.SMART_MONEY_MAX_TOKENS) || opts.maxTokens,
       maxWallets: Number(env.SMART_MONEY_MAX_WALLETS) || opts.maxWallets,
       lookbackDays: Number(env.SMART_MONEY_LOOKBACK_DAYS) || opts.lookbackDays,
@@ -133,7 +167,7 @@ function start(db, opts = {}) {
     };
     timer = setTimeout(tick, opts.initialDelayMs != null ? opts.initialDelayMs : 15_000);
     if (timer.unref) timer.unref();
-    log.log(`[smart-money] collector started (every ${interval}ms; providers: ${active.map((p) => p.name).join(', ')})`);
+    log.log(`[smart-money] collector started (every ${interval}ms; providers: ${active.map((p) => p.name).join(', ')}; discovery: ${discoverySources.filter((s) => s.enabled).map((s) => s.name).join(', ') || 'none'})`);
     return { started: true };
   } catch (e) {
     log.warn(`[smart-money] start failed: ${e.message}`);

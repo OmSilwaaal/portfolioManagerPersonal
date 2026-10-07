@@ -7,6 +7,7 @@ import {
   useRunResearchEvalMutation,
   useGetWinnerFirstQuery,
   useRunWinnerFirstMutation,
+  useGetWalletDiscoveryQuery,
 } from '../api/researchApi'
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
@@ -26,6 +27,8 @@ const VERDICTS = {
   INSUFFICIENT_DATA: { label: 'Insufficient data', cls: 'text-[#a1a1aa] border-[#3f3f46] bg-[#1a1a1a]', Icon: CircleDashed },
   NO_EDGE: { label: 'No edge detected', cls: 'text-red-400 border-red-500/30 bg-red-500/10', Icon: AlertTriangle },
   POSSIBLE_EDGE: { label: 'Possible edge (unproven)', cls: 'text-green-400 border-green-500/30 bg-green-500/10', Icon: CheckCircle2 },
+  CANDIDATES_PERSIST: { label: 'Candidates persisted (unproven)', cls: 'text-green-400 border-green-500/30 bg-green-500/10', Icon: CheckCircle2 },
+  NO_PERSISTENCE_DETECTED: { label: 'No persistence detected', cls: 'text-red-400 border-red-500/30 bg-red-500/10', Icon: AlertTriangle },
   MOSTLY_REACTIVE: { label: 'Mostly reactive (chasing moves)', cls: 'text-orange-400 border-orange-500/30 bg-orange-500/10', Icon: AlertTriangle },
   EDGE_NOT_STABLE: { label: 'Edge not stable', cls: 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10', Icon: AlertTriangle },
 }
@@ -65,6 +68,10 @@ function buildFixes(c) {
   if (!flags.SNAPSHOT_COLLECTOR) fixes.push({ what: 'Market snapshot collector is off (needed for the activity-v0 baseline)', fix: 'Set SNAPSHOT_COLLECTOR=1' })
   if (!flags.SMART_MONEY_COLLECTOR) fixes.push({ what: 'Smart-money wallet collector is off', fix: 'Set SMART_MONEY_COLLECTOR=1 and HELIUS_API_KEY or BIRDEYE_API_KEY' })
   else if (!keys.walletProvider) fixes.push({ what: 'Smart-money collector has no data provider', fix: 'Set HELIUS_API_KEY or BIRDEYE_API_KEY' })
+  const discoveryFlags = ['SMART_MONEY_BIRDEYE_LB', 'SMART_MONEY_WINNER_BACKBUY', 'SMART_MONEY_SEEDS', 'SMART_MONEY_FOMOAPI', 'SMART_MONEY_SOLANATRACKER']
+  if (flags.SMART_MONEY_COLLECTOR && !discoveryFlags.some((k) => flags[k])) {
+    fixes.push({ what: 'No on-chain top-earner discovery source is switched on (these need no social data)', fix: 'Set SMART_MONEY_BIRDEYE_LB=1, SMART_MONEY_WINNER_BACKBUY=1 or SMART_MONEY_SEEDS=1' })
+  }
   if (!flags.SOCIAL_COLLECTOR) fixes.push({ what: 'Social collector is off', fix: 'Set SOCIAL_COLLECTOR=1 and X_BEARER_TOKEN (or TWITTERAPI_IO_KEY)' })
   else if (!keys.x && !keys.telegram) fixes.push({ what: 'Social collector has no X or Telegram key', fix: 'Set X_BEARER_TOKEN (or TWITTERAPI_IO_KEY)' })
   if (!flags.EVAL_JOB) fixes.push({ what: 'Hourly baseline evaluation is off', fix: 'Set EVAL_JOB=1' })
@@ -458,7 +465,7 @@ function WinnerFirst({ q, onRun, running, secret }) {
       )}
     >
       <p className="text-xs text-[#6b7280] mb-3">
-        Looks back over chatter our own collectors stored (4chan /biz, Reddit, X, Telegram). A winner is a token that rose
+        Looks back over chatter our own collectors stored (Reddit, X, Telegram, and the optional experimental 4chan control, where only counts are kept: no 4chan text is stored or shown). A winner is a token that rose
         {rep?.config ? ` ${pct(rep.config.winnerReturn, 0)}+ within ${hLabel((rep.config.horizonSec || 0) / 60)}` : ' a lot'} after a fixed
         reference point. A mention is "early" only if it was posted strictly before that point and was already in our database.
       </p>
@@ -524,6 +531,153 @@ function WinnerFirst({ q, onRun, running, secret }) {
   )
 }
 
+/* ─── On-chain top-earner wallet discovery ──────────────────────────────── */
+const SRC_LABEL = {
+  birdeye_leaderboard: 'Birdeye leaderboard',
+  birdeye_gainers: 'Birdeye top gainers',
+  birdeye_top_traders: 'Birdeye top traders (by volume)',
+  winner_backbuyers: 'Early buyers of radar winners',
+  seeds: 'Manual wallet seeds',
+  seed: 'Manual wallet seeds',
+  fomoapi: 'FOMO API leaderboard',
+  solanatracker: 'SolanaTracker leaderboard',
+  control_trending: 'Control: top traders on trending tokens',
+  control_late_buyers: 'Control: late buyers of winners',
+}
+const rate = (x) => (x == null ? '—' : `${(x * 100).toFixed(0)}%`)
+
+function ForwardGroup({ label, g }) {
+  return (
+    <tr className="border-t border-[#1f1f1f]">
+      <td className="py-1.5 pr-3 text-white">{label}</td>
+      <td className="py-1.5 pr-3 text-right text-[#a1a1aa]">{num(g?.evaluated)}</td>
+      <td className="py-1.5 pr-3 text-right text-[#a1a1aa]">{num(g?.withForwardTrades)}</td>
+      <td className="py-1.5 pr-3 text-right text-[#a1a1aa]">
+        {rate(g?.positiveRate)}{g?.positiveCi95 ? ` (${rate(g.positiveCi95[0])} to ${rate(g.positiveCi95[1])})` : ''}
+      </td>
+      <td className="py-1.5 pr-3 text-right text-[#a1a1aa]">{g?.preWinners ? `${g.preWinnersStayedPositive}/${g.preWinners}` : '—'}</td>
+      <td className="py-1.5 pr-3 text-right text-[#a1a1aa]">{pct(g?.medianPreMeanReturn)} to {pct(g?.medianPostMeanReturn)}</td>
+    </tr>
+  )
+}
+
+function WalletDiscovery({ q }) {
+  const rep = q.data
+  const fw = rep?.forward
+  const v = VERDICTS[fw?.verdict] || VERDICTS.INSUFFICIENT_DATA
+  const Icon = v.Icon
+  return (
+    <Panel title="On-chain top-earner wallets (needs no social data)">
+      <p className="text-xs text-[#6b7280] mb-3">
+        Wallet candidates come from Birdeye leaderboards, early buyers of tokens the radar flagged as winners, wallets you paste
+        in by hand, and optional third-party leaderboards. Whatever profit a leaderboard claims is ignored: every wallet is
+        re-scored from its own on-chain trades with the same out-of-sample (holdout) rule, and only wallets that pass it can
+        ever produce a smart-money signal.
+      </p>
+      {q.isLoading ? (
+        <div className="flex items-center gap-2 text-sm text-[#a1a1aa]"><Loader2 size={14} className="animate-spin" /> Loading…</div>
+      ) : q.isError || !rep ? (
+        <p className="text-sm text-red-400">Could not load wallet discovery.</p>
+      ) : (
+        <>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-[#6b7280]">
+                  <th className="py-1 pr-3 font-medium">Source</th>
+                  <th className="py-1 pr-3 font-medium">Switch</th>
+                  <th className="py-1 pr-3 font-medium">Status</th>
+                  <th className="py-1 font-medium text-right">Last run</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(rep.sources || []).map((s) => (
+                  <tr key={s.name} className="border-t border-[#1f1f1f] align-top">
+                    <td className="py-1.5 pr-3 text-white">{SRC_LABEL[s.name] || s.name}</td>
+                    <td className="py-1.5 pr-3"><code className="text-xs text-[#a1a1aa]">{s.flag}</code></td>
+                    <td className={`py-1.5 pr-3 text-xs ${s.enabled ? 'text-green-400' : 'text-[#a1a1aa]'}`}>{s.enabled ? 'on' : `off: ${s.reason || ''}`}</td>
+                    <td className="py-1.5 text-right text-[#a1a1aa]">{s.lastRunTs ? ago(s.lastRunTs) : 'never'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {rep.budget && (
+            <p className="text-xs text-[#6b7280] mt-2">
+              Birdeye requests today (UTC): {num(rep.budget.used)} of {num(rep.budget.limit)} allowed (hard cap, kept across restarts; the free tier is about 200 a day).
+            </p>
+          )}
+
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-[#a1a1aa] mt-5 mb-2">What was found, and what survived re-scoring</h3>
+          {rep.perSource.length === 0 ? (
+            <p className="text-sm text-[#a1a1aa]">No candidates yet.{!rep.collectorEnabled && ' The smart-money collector is off (SMART_MONEY_COLLECTOR=1).'}</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-[#6b7280]">
+                    <th className="py-1 pr-3 font-medium">Source</th>
+                    <th className="py-1 pr-3 font-medium text-right">Wallets found</th>
+                    <th className="py-1 pr-3 font-medium text-right">Re-scored</th>
+                    <th className="py-1 pr-3 font-medium text-right">Passed holdout</th>
+                    <th className="py-1 font-medium text-right">Smart (score 0.5+)</th>
+                  </tr>
+                </thead>
+                <tbody className="tabular-nums">
+                  {rep.perSource.map((p) => (
+                    <tr key={`${p.role}:${p.source}`} className="border-t border-[#1f1f1f]">
+                      <td className="py-1.5 pr-3 text-white">
+                        {SRC_LABEL[p.source] || p.source}
+                        <div className="text-[10px] text-[#6b7280]">{p.role === 'control' ? 'random control (not picked for performance)' : p.survivor ? 'leaderboard survivor' : 'candidate'}</div>
+                      </td>
+                      <td className="py-1.5 pr-3 text-right text-[#a1a1aa]">{num(p.wallets)}</td>
+                      <td className="py-1.5 pr-3 text-right text-[#a1a1aa]">{num(p.scored)}</td>
+                      <td className="py-1.5 pr-3 text-right text-[#a1a1aa]">{num(p.passedHoldout)}</td>
+                      <td className="py-1.5 text-right text-[#a1a1aa]">{num(p.smart)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-[#a1a1aa] mt-5 mb-2">
+            Do leaderboard wallets keep winning? (next {rep.forwardDays} days vs random control wallets)
+          </h3>
+          <div className={`inline-flex items-center gap-2 border rounded-md px-3 py-1.5 text-sm ${v.cls}`}>
+            <Icon size={14} /> {v.label}
+          </div>
+          <p className="text-sm text-[#d4d4d8] mt-3">{fw?.text}</p>
+          <div className="overflow-x-auto mt-3">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-[#6b7280]">
+                  <th className="py-1 pr-3 font-medium">Group</th>
+                  <th className="py-1 pr-3 font-medium text-right">Measured</th>
+                  <th className="py-1 pr-3 font-medium text-right">3+ later trades</th>
+                  <th className="py-1 pr-3 font-medium text-right">Stayed profitable (95% range)</th>
+                  <th className="py-1 pr-3 font-medium text-right">Winners before, still winning</th>
+                  <th className="py-1 pr-3 font-medium text-right">Typical trade return before to after</th>
+                </tr>
+              </thead>
+              <tbody className="tabular-nums">
+                <ForwardGroup label="Leaderboard / seed / back-buyer wallets" g={fw?.candidates} />
+                <ForwardGroup label="Random control wallets" g={fw?.control} />
+              </tbody>
+            </table>
+          </div>
+          {fw?.pCandidatesVsControl != null && (
+            <p className="text-xs text-[#6b7280] mt-2">One-sided p-value, candidates better than control: {fw.pCandidatesVsControl.toFixed(3)} (exploratory; many comparisons are possible).</p>
+          )}
+          <ul className="list-disc pl-5 mt-4 space-y-1 text-xs text-[#6b7280]">
+            {(rep.caveats || []).map((c, i) => <li key={i}>{c}</li>)}
+          </ul>
+        </>
+      )}
+    </Panel>
+  )
+}
+
 export default function ResearchDashboard() {
   const status = useGetResearchStatusQuery(undefined, { pollingInterval: 60000 })
   const reportQ = useGetResearchReportQuery(undefined, { pollingInterval: 60000 })
@@ -531,6 +685,7 @@ export default function ResearchDashboard() {
   const [run, runState] = useRunResearchEvalMutation()
   const wfQ = useGetWinnerFirstQuery(undefined, { pollingInterval: 300000 })
   const [runWf, wfState] = useRunWinnerFirstMutation()
+  const wdQ = useGetWalletDiscoveryQuery(undefined, { pollingInterval: 300000 })
   const [secret, setSecret] = useState('')
   const [runError, setRunError] = useState('')
 
@@ -623,6 +778,8 @@ export default function ResearchDashboard() {
           <p className="text-xs text-[#6b7280]">{report.methodology}</p>
         </>
       )}
+
+      <WalletDiscovery q={wdQ} />
 
       <WinnerFirst
         q={wfQ}

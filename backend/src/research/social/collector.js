@@ -2,8 +2,8 @@
 /**
  * Periodic social collector. Opt-in: SOCIAL_COLLECTOR=1. Per-provider flags:
  * SOCIAL_X=0 / SOCIAL_TELEGRAM=0 disable a provider even if its keys exist.
- * Free chatter feeds are opt-in: SOCIAL_FOURCHAN=1 (4chan /biz), SOCIAL_REDDIT=1 (+ Reddit keys and
- * REDDIT_NON_COMMERCIAL_ACK=1). They poll on their own faster timers (4chan ~60s) inside start().
+ * Free chatter feeds are opt-in: SOCIAL_FOURCHAN=1 + SOCIAL_FOURCHAN_ACK=1 (EXPERIMENTAL untrusted anonymous 4chan
+ * /biz control; no raw text is ever stored for it), SOCIAL_REDDIT=1 (+ Reddit keys and REDDIT_NON_COMMERCIAL_ACK=1). They poll on their own faster timers (4chan ~60s) inside start().
  * Never throws out of start()/runOnce(); all errors are logged and swallowed.
  * Posts are stored at their ACTUAL post time (ts); ingested_ts is our clock.
  */
@@ -11,6 +11,11 @@ const { initSocialSchema, ensureAccount, pruneSocialText } = require('./schema')
 const { extractEntities, textHash } = require('./entityLinking');
 const fg = require('./followGraph');
 const { getProviders } = require('./providers');
+const { fourchanOptIn } = require('./feeds');
+
+// Caps for UNTRUSTED (4chan) posts: only this much text is examined and only this many candidates are kept per post.
+const UNTRUSTED_MAX_TEXT = 2000;
+const UNTRUSTED_MAX_CANDIDATES = 8;
 
 let timer = null;
 let running = false;
@@ -35,15 +40,23 @@ function storeTelegram(db, { channel, messageId, ts, text, tokens, now }) {
  * Everything is INSERT OR IGNORE keyed by post_id, so re-fetching the same post is harmless. Returns true if stored.
  */
 function storeFeedPost(db, p, known, now) {
-  const text = String(p.text || '');
+  // 4chan is untrusted anonymous content: examine a capped prefix, keep only hash + extracted addresses/cashtags,
+  // and NEVER write raw text anywhere (no social_post_text row, no account_post.text).
+  const untrusted = p.platform === '4chan' || p.untrusted === true;
+  const text = untrusted ? String(p.text || '').slice(0, UNTRUSTED_MAX_TEXT) : String(p.text || '');
   const ent = extractEntities(text, known);
+  if (untrusted) {
+    ent.addresses = ent.addresses.slice(0, UNTRUSTED_MAX_CANDIDATES);
+    ent.cashtags = ent.cashtags.slice(0, UNTRUSTED_MAX_CANDIDATES);
+    ent.tokens = ent.tokens.slice(0, UNTRUSTED_MAX_CANDIDATES);
+  }
   if (!ent.addresses.length && !ent.cashtags.length) return false;
   const h = textHash(text);
   const account = p.authorId || `${p.platform}:${p.sourceId}:${String(p.threadId || 'na').replace(/^[^:]*:/, '')}:anon`;
   if (ent.tokens.length) storePost(db, { platform: p.platform, accountId: account, postId: p.id, ts: p.ts, text: null, tokens: ent.tokens, now, hash: h });
   db.prepare('INSERT OR IGNORE INTO social_post_raw(post_id, platform, source_id, thread_id, author_id, ts, text_hash, addresses_json, cashtags_json, ingested_ts) VALUES (?,?,?,?,?,?,?,?,?,?)')
     .run(p.id, p.platform, p.sourceId, p.threadId || null, p.authorId || null, p.ts, h, JSON.stringify(ent.addresses), JSON.stringify(ent.cashtags), now);
-  db.prepare('INSERT OR IGNORE INTO social_post_text(post_id, ts, text, ingested_ts) VALUES (?,?,?,?)').run(p.id, p.ts, text, now);
+  if (!untrusted) db.prepare('INSERT OR IGNORE INTO social_post_text(post_id, ts, text, ingested_ts) VALUES (?,?,?,?)').run(p.id, p.ts, text, now);
   return true;
 }
 
@@ -127,7 +140,7 @@ async function runOnce(db, opts = {}) {
     if (!opts.skipFeeds) {
       for (const [key, flag] of [['fourchan', 'SOCIAL_FOURCHAN'], ['reddit', 'SOCIAL_REDDIT']]) {
         const prov = providers[key];
-        if (prov && prov.enabled && env[flag] === '1') {
+        if (prov && prov.enabled && env[flag] === '1' && (key !== 'fourchan' || fourchanOptIn(env).ok)) {
           const r = await runFeedOnce(db, prov, { ...opts, env, logger, knownTokens: known, now: () => now });
           summary[key] += r.stored; summary.errors += r.errors;
         }
@@ -160,6 +173,7 @@ function start(db, opts = {}) {
     for (const [key, flag, envMs, def] of [['fourchan', 'SOCIAL_FOURCHAN', 'SOCIAL_FOURCHAN_INTERVAL_MS', 60000], ['reddit', 'SOCIAL_REDDIT', 'SOCIAL_REDDIT_INTERVAL_MS', 120000]]) {
       const prov = providers[key];
       if (env[flag] !== '1' || !prov) continue;
+      if (key === 'fourchan' && !fourchanOptIn(env).ok) { (opts.logger || console).log && (opts.logger || console).log(`[social] fourchan off: ${fourchanOptIn(env).reason}`); continue; }
       if (!prov.enabled) { (opts.logger || console).log && (opts.logger || console).log(`[social] ${key} off: ${prov.reason}`); continue; }
       const every = Math.max(Number(opts.feedIntervalMs || env[envMs]) || def, key === 'fourchan' ? 60000 : 30000);
       let busy = false;

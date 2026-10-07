@@ -139,5 +139,16 @@ router.post('/winner-first/run', adminOnly, (req, res) => {
   }
 });
 
+// On-chain top-earner wallet discovery: per-source candidate counts, holdout passes, forward test vs control.
+// Aggregates only (no per-wallet reported PnL is trusted or shown).
+router.get('/wallet-discovery', (req, res) => {
+  try {
+    res.json(require('../research/wallets/discovery').buildDiscoveryReport(db()));
+  } catch (e) {
+    console.error('[researchEval] wallet-discovery:', e.message);
+    res.status(500).json({ error: true, message: 'Internal error' });
+  }
+});
+
 module.exports = router;
 module.exports.buildStatus = buildStatus;

@@ -5,6 +5,8 @@
 // Trade = { wallet_id, token_id, ts (unix s), side:'buy'|'sell', amount_token, price_usd, amount_usd, tx }
 // Disabled providers are { name, enabled:false, reason } with no methods.
 
+const { budgetError } = require('./budget');
+
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 const STABLES = new Set([
   'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', // USDC
@@ -125,7 +127,12 @@ function createBirdeyeProvider(env = process.env, opts = {}) {
   const q = opts.queue || createQueue({ minIntervalMs: 1100 }); // free tier ~1 rps
   const fetchImpl = opts.fetchImpl || globalThis.fetch;
   const headers = { 'X-API-KEY': key, 'x-chain': 'solana', accept: 'application/json' };
-  const get = (url) => q.run(() => httpJson(url, { headers, fetchImpl }));
+  // Every Birdeye HTTP attempt (including retries) is charged against the persisted daily budget when one is given.
+  const budget = opts.budget || null;
+  const get = (url) => q.run(() => {
+    if (budget && !budget.tryConsume(1)) throw budgetError('birdeye');
+    return httpJson(url, { headers, fetchImpl });
+  });
 
   return {
     name: 'birdeye',
@@ -181,4 +188,4 @@ function getProviders(env = process.env, opts = {}) {
   return [createHeliusProvider(env, opts), createBirdeyeProvider(env, opts), createTatumProvider(env)];
 }
 
-module.exports = { getProviders, createHeliusProvider, createBirdeyeProvider, createTatumProvider, createMockProvider, createQueue };
+module.exports = { httpJson, SOL_MINT, STABLES, getProviders, createHeliusProvider, createBirdeyeProvider, createTatumProvider, createMockProvider, createQueue };

@@ -105,7 +105,7 @@ function collectorStatus(d, env = process.env) {
   let tables = new Set();
   try { tables = new Set(d.prepare(`SELECT name FROM sqlite_master WHERE type='table'`).all().map((r) => r.name)); } catch (_) { /* keep empty */ }
   const rows = {};
-  for (const t of ['smart_money_event', 'wallet_skill_snapshot', 'account_post', 'telegram_message', 'follow_edge_snapshot', 'account_wallet_link']) {
+  for (const t of ['smart_money_event', 'wallet_skill_snapshot', 'account_post', 'telegram_message', 'follow_edge_snapshot', 'account_wallet_link', 'wallet_candidate', 'wallet_candidate_eval']) {
     rows[t] = tableCount(d, tables, t);
   }
   const has = (k) => !!env[k];
@@ -115,11 +115,21 @@ function collectorStatus(d, env = process.env) {
       SNAPSHOT_COLLECTOR: env.SNAPSHOT_COLLECTOR === '1',
       SMART_MONEY_COLLECTOR: env.SMART_MONEY_COLLECTOR === '1',
       SOCIAL_COLLECTOR: env.SOCIAL_COLLECTOR === '1',
+      SMART_MONEY_BIRDEYE_LB: env.SMART_MONEY_BIRDEYE_LB === '1',
+      SMART_MONEY_WINNER_BACKBUY: env.SMART_MONEY_WINNER_BACKBUY === '1',
+      SMART_MONEY_SEEDS: env.SMART_MONEY_SEEDS === '1',
+      SMART_MONEY_FOMOAPI: env.SMART_MONEY_FOMOAPI === '1',
+      SMART_MONEY_SOLANATRACKER: env.SMART_MONEY_SOLANATRACKER === '1',
+      // experimental 4chan control feed: effective only with BOTH flags
+      SOCIAL_FOURCHAN: env.SOCIAL_FOURCHAN === '1' && env.SOCIAL_FOURCHAN_ACK === '1',
       EVAL_JOB: env.EVAL_JOB === '1',
     },
     keys: {
       walletProvider: has('HELIUS_API_KEY') || has('BIRDEYE_API_KEY'),
       x: has('X_BEARER_TOKEN') || has('TWITTERAPI_IO_KEY'),
+      birdeye: has('BIRDEYE_API_KEY'),
+      fomoapi: has('FOMOAPI_KEY'),
+      solanatracker: has('SOLANATRACKER_API_KEY'),
       telegram: has('TELEGRAM_API_ID') && has('TELEGRAM_API_HASH') && has('TELEGRAM_SESSION'),
     },
     tables: rows,

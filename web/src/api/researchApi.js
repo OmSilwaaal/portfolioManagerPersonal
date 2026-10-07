@@ -18,6 +18,9 @@ export const researchApi = baseApi.injectEndpoints({
       query: () => '/research/eval/winner-first',
       transformErrorResponse: (res) => res,   // 404 = no report yet
     }),
+    getWalletDiscovery: builder.query({
+      query: () => '/research/eval/wallet-discovery',
+    }),
     runWinnerFirst: builder.mutation({
       query: (adminSecret) => ({
         url: '/research/eval/winner-first/run',
@@ -42,4 +45,5 @@ export const {
   useRunResearchEvalMutation,
   useGetWinnerFirstQuery,
   useRunWinnerFirstMutation,
+  useGetWalletDiscoveryQuery,
 } = researchApi

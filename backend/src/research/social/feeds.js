@@ -13,18 +13,43 @@ const { createRateLimiter } = require('./providers');
 
 const DEFAULT_SUBREDDITS = ['solana', 'CryptoMoonShots', 'memecoins', 'SolanaMemeCoins'];
 
-/** 4chan comment HTML -> plain text. <wbr> is removed WITHOUT a space: it splits long strings (contract addresses). */
-function htmlToText(html) {
-  return String(html || '')
-    .replace(/<wbr\s*\/?>/gi, '')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<[^>]*>/g, '')
-    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
-    .replace(/&gt;/g, '>').replace(/&lt;/g, '<').replace(/&quot;/g, '"').replace(/&#039;/g, "'").replace(/&amp;/g, '&');
+// 4chan content is UNTRUSTED anonymous input. Hard caps are applied before any processing.
+const MAX_RAW_HTML_CHARS = 8000;     // raw comment/subject HTML read at all
+const MAX_POST_TEXT_CHARS = 2000;    // plain text kept in memory for entity extraction (never persisted for 4chan)
+
+/** Numeric entity -> char; never throws on hostile input (out-of-range / surrogate code points become a space). */
+function safeCodePoint(n) {
+  return Number.isInteger(n) && n > 0 && n <= 0x10ffff && !(n >= 0xd800 && n <= 0xdfff) ? String.fromCodePoint(n) : ' ';
 }
 
-/** catalog.json = [{page, threads:[{no, time, last_modified, replies, com, sub, ...}]}] */
+/**
+ * 4chan comment HTML -> plain text. All tags are dropped (anchors, images, scripts: nothing in a post is ever
+ * followed or fetched). <wbr> is removed WITHOUT a space: it splits long strings (contract addresses). Input and
+ * output length are capped and control characters are removed.
+ */
+function htmlToText(html, maxChars = MAX_POST_TEXT_CHARS) {
+  return String(html || '').slice(0, MAX_RAW_HTML_CHARS)
+    .replace(/<wbr\s*\/?>/gi, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]*>?/g, '')
+    .replace(/&#(\d{1,8});/g, (_, n) => safeCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]{1,6});/gi, (_, n) => safeCodePoint(parseInt(n, 16)))
+    .replace(/&gt;/g, '>').replace(/&lt;/g, '<').replace(/&quot;/g, '"').replace(/&#039;/g, "'").replace(/&amp;/g, '&')
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '')
+    .slice(0, maxChars);
+}
+
+/** Opt-in gate for the experimental 4chan control feed: BOTH flags must be exactly '1'. */
+function fourchanOptIn(env = process.env) {
+  if (env.SOCIAL_FOURCHAN !== '1') return { ok: false, reason: 'SOCIAL_FOURCHAN not set to 1 (the 4chan feed is off by default)' };
+  if (env.SOCIAL_FOURCHAN_ACK !== '1') {
+    return { ok: false, reason: 'SOCIAL_FOURCHAN_ACK=1 not set (required: acknowledges 4chan is untrusted anonymous content; only hashes and extracted addresses/cashtags are stored)' };
+  }
+  return { ok: true };
+}
+
+/** catalog.json = [{page, threads:[{no, time, last_modified, replies, com, sub, ...}]}]. Only text fields are read:
+ *  media fields (tim, ext, filename, md5, ...) and any link inside the HTML are deliberately ignored. */
 function parseCatalog(json, board = 'biz') {
   const threads = [];
   for (const page of Array.isArray(json) ? json : []) {
@@ -50,7 +75,7 @@ function parseThread(json, board = 'biz') {
 }
 
 const toFeedPost4 = (board, threadNo, p) => ({
-  id: `4chan:${board}:${p.id}`, ts: p.ts, text: p.text, platform: '4chan', sourceId: board,
+  id: `4chan:${board}:${p.id}`, ts: p.ts, text: p.text, platform: '4chan', sourceId: board, untrusted: true,
   threadId: `${board}:${threadNo}`,
   // 4chan has no accounts: only a per-thread poster id exists on some boards. Never reused across threads.
   authorId: p.posterId ? `4chan:${board}:t${threadNo}:${p.posterId}` : null,
@@ -60,11 +85,15 @@ const toFeedPost4 = (board, threadNo, p) => ({
  * 4chan board provider. STRICT limits (4chan API rules): <= 1 request/second (limiter spaces calls >= 1.1s),
  * a given thread is never re-fetched within 10s, If-Modified-Since on every request (304 = nothing new), catalog
  * polled at most once per ~60s and only threads whose catalog last_modified changed are re-fetched.
- * Opt-in: env SOCIAL_FOURCHAN=1.
+ * EXPERIMENTAL "anonymous chatter control", OFF BY DEFAULT. Opt-in needs BOTH SOCIAL_FOURCHAN=1 and
+ * SOCIAL_FOURCHAN_ACK=1 (acknowledging the content is untrusted and anonymous). Only the two documented JSON
+ * endpoints on the API host are ever requested: images, attachments and links inside posts are never fetched
+ * (an allow-list check refuses any other URL). The collector stores no raw text for 4chan.
  */
 function createFourchanProvider(env = process.env, o = {}) {
   const board = (env.FOURCHAN_BOARD || 'biz').replace(/[^a-z0-9]/gi, '').toLowerCase() || 'biz';
-  if (env.SOCIAL_FOURCHAN !== '1' && !o.force) return { enabled: false, name: '4chan', reason: 'SOCIAL_FOURCHAN not set to 1' };
+  const gate = fourchanOptIn(env);
+  if (!gate.ok) return { enabled: false, name: '4chan', reason: gate.reason };
   const fetchImpl = o.fetchImpl || globalThis.fetch;
   if (typeof fetchImpl !== 'function') return { enabled: false, name: '4chan', reason: 'no fetch available' };
   const now = o.now || Date.now;
@@ -81,7 +110,11 @@ function createFourchanProvider(env = process.env, o = {}) {
   let started = null;
   const stats = { requests: 0, notModified: 0, threadFetches: 0 };
 
+  const threadPrefix = `${base}/${board}/thread/`;
+  const allowedUrl = (url) => typeof url === 'string' && (url === `${base}/${board}/catalog.json` ||
+    (url.startsWith(threadPrefix) && /^\d+\.json$/.test(url.slice(threadPrefix.length))));
   async function get(url) {
+    if (!allowedUrl(url)) throw new Error('4chan: refusing to fetch a URL outside the documented catalog/thread JSON endpoints');
     return rl.schedule(async () => {
       const headers = { 'User-Agent': userAgent, Accept: 'application/json' };
       if (lastModHeader.has(url)) headers['If-Modified-Since'] = lastModHeader.get(url);
@@ -255,5 +288,5 @@ function createMockFeedProvider({ name = '4chan', batches = [] } = {}) {
 }
 
 module.exports = {
-  htmlToText, parseCatalog, parseThread, createFourchanProvider, createRedditProvider, createMockFeedProvider, DEFAULT_SUBREDDITS,
+  fourchanOptIn, MAX_POST_TEXT_CHARS, htmlToText, parseCatalog, parseThread, createFourchanProvider, createRedditProvider, createMockFeedProvider, DEFAULT_SUBREDDITS,
 };

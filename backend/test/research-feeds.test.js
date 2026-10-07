@@ -34,7 +34,7 @@ test('4chan parsing: html stripped, <wbr> removed without a space so addresses s
   assert.deepStrictEqual(posts.map((p) => [p.id, p.ts, p.posterId]), [[5, 1_000_000, null], [6, 1_010_000, 'AbC']]);
 });
 
-test('4chan provider is off unless SOCIAL_FOURCHAN=1', () => {
+test('4chan provider is off unless SOCIAL_FOURCHAN=1 and SOCIAL_FOURCHAN_ACK=1', () => {
   const p = feeds.createFourchanProvider({}, { fetchImpl: async () => resp({}) });
   assert.strictEqual(p.enabled, false);
   assert.ok(p.reason);
@@ -63,7 +63,7 @@ test('4chan: <=1 req/s spacing, catalog >=60s, If-Modified-Since, only changed t
     return resp({ posts: [{ no, time: sec() - 500, com: 'op' }, { no: reply, time: sec(), com: `reply ${MINT}` }] },
       { headers: { 'last-modified': `thread-${no}-lm` } });
   };
-  const p = feeds.createFourchanProvider({ SOCIAL_FOURCHAN: '1' }, { fetchImpl, now: () => clock, sleep: async (ms) => { sleeps.push(ms); } });
+  const p = feeds.createFourchanProvider({ SOCIAL_FOURCHAN: '1', SOCIAL_FOURCHAN_ACK: '1' }, { fetchImpl, now: () => clock, sleep: async (ms) => { sleeps.push(ms); } });
   assert.ok(p.enabled);
 
   const first = await p.getNewPosts();
@@ -104,7 +104,7 @@ test('4chan: a thread is never refetched within 10s even when the catalog polls 
     threadCalls.push(clock);
     return resp({ posts: [{ no: 9, time: sec(), com: 'op' }, { no: 10 + n, time: sec(), com: 'r' }] });
   };
-  const p = feeds.createFourchanProvider({ SOCIAL_FOURCHAN: '1' }, { fetchImpl, now: () => clock, sleep: async () => {}, catalogMinIntervalMs: 0 });
+  const p = feeds.createFourchanProvider({ SOCIAL_FOURCHAN: '1', SOCIAL_FOURCHAN_ACK: '1' }, { fetchImpl, now: () => clock, sleep: async () => {}, catalogMinIntervalMs: 0 });
   await p.getNewPosts();
   clock += 3000; n = 1;
   await p.getNewPosts();
@@ -122,7 +122,7 @@ test('4chan: 404 thread is marked dead and never fetched again; provider errors 
     if (url.endsWith('/catalog.json')) return resp([{ page: 1, threads: [{ no: 9, time: sec() - 100, last_modified: sec(), replies: 1, com: 'op' }] }]);
     threadHits++; return resp({}, { status: 404 });
   };
-  const p = feeds.createFourchanProvider({ SOCIAL_FOURCHAN: '1' }, { fetchImpl, now: () => clock, sleep: async () => {}, catalogMinIntervalMs: 0 });
+  const p = feeds.createFourchanProvider({ SOCIAL_FOURCHAN: '1', SOCIAL_FOURCHAN_ACK: '1' }, { fetchImpl, now: () => clock, sleep: async () => {}, catalogMinIntervalMs: 0 });
   await p.getNewPosts(); clock += 20_000; await p.getNewPosts();
   assert.strictEqual(threadHits, 1);
   const boom = { enabled: true, name: '4chan', async getNewPosts() { throw new Error('net down'); } };
@@ -204,11 +204,14 @@ test('entity-linked posts are stored append-only; unresolved cashtags kept as ca
   assert.throws(() => db.prepare('DELETE FROM social_post_raw').run(), /append-only/);
   assert.throws(() => db.prepare('UPDATE account_post SET ts = 1').run(), /append-only/);
   // retention: the 40-day-old text is gone after the prune in runFeedOnce (default 30d); hashes/candidates stay forever
-  assert.strictEqual(db.prepare("SELECT COUNT(*) n FROM social_post_text WHERE post_id = '4chan:biz:5'").get().n, 0);
-  assert.strictEqual(db.prepare('SELECT COUNT(*) n FROM social_post_text').get().n, 3);
+  // 4chan never gets a raw-text row at all; retention is exercised with a reddit post
+  assert.strictEqual(db.prepare('SELECT COUNT(*) n FROM social_post_text').get().n, 0);
+  collector.storeFeedPost(db, { id: 'reddit:t3_a', ts: now - 1000, text: `hi ${MINT}`, platform: 'reddit', sourceId: 'solana', threadId: 'reddit:a', authorId: 'reddit:u' }, [], now);
+  collector.storeFeedPost(db, { id: 'reddit:t3_old', ts: old, text: `old ${MINT}`, platform: 'reddit', sourceId: 'solana', threadId: 'reddit:b', authorId: 'reddit:u' }, [], now);
+  assert.strictEqual(pruneSocialText(db, now, 30), 1);
   assert.strictEqual(db.prepare("SELECT COUNT(*) n FROM social_post_raw WHERE post_id = '4chan:biz:5'").get().n, 1);
-  assert.strictEqual(pruneSocialText(db, now, 0.00001), 3);
-  assert.strictEqual(db.prepare('SELECT COUNT(*) n FROM social_post_raw').get().n, 4);
+  assert.strictEqual(pruneSocialText(db, now, 0.00001), 1);
+  assert.strictEqual(db.prepare('SELECT COUNT(*) n FROM social_post_raw').get().n, 6);
 });
 
 test('runOnce polls feed providers only with their flag; future timestamps rejected', async () => {
@@ -222,7 +225,7 @@ test('runOnce polls feed providers only with their flag; future timestamps rejec
   await collector.runOnce(off, { providers: { x: bad, telegram: bad, fourchan: mk() }, seedsPath: noSeeds, logger: quiet, env: {}, now: () => now });
   assert.strictEqual(off.prepare('SELECT COUNT(*) n FROM social_post_raw').get().n, 0);
   const on = newDb();
-  const s = await collector.runOnce(on, { providers: { x: bad, telegram: bad, fourchan: mk() }, seedsPath: noSeeds, logger: quiet, env: { SOCIAL_FOURCHAN: '1' }, now: () => now });
+  const s = await collector.runOnce(on, { providers: { x: bad, telegram: bad, fourchan: mk() }, seedsPath: noSeeds, logger: quiet, env: { SOCIAL_FOURCHAN: '1', SOCIAL_FOURCHAN_ACK: '1' }, now: () => now });
   assert.strictEqual(s.fourchan, 1);
   assert.strictEqual(on.prepare('SELECT COUNT(*) n FROM social_post_raw').get().n, 1);
   assert.strictEqual(collector.start(on, { env: {} }), false);       // SOCIAL_COLLECTOR switch still gates start()
