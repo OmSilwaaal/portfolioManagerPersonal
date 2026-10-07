@@ -66,7 +66,7 @@ function ProtectedLayout() {
       <WatchlistPersistence />
       <PriceAlertBanner tickers={watchlistTickers} />
       <Sidebar />
-      <div className="flex-1 md:ml-[200px] flex flex-col min-h-screen pb-16 md:pb-0">
+      <div className="flex-1 min-w-0 md:ml-[200px] flex flex-col min-h-screen pb-16 md:pb-0">
         <Outlet />
       </div>
       <BottomNav />
