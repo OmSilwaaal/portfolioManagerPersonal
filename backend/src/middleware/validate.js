@@ -26,16 +26,14 @@ function safeHttpUrl(v, maxLen = 500) {
   }
 }
 
-module.exports = { isUuid, isTicker, safeEqual, safeHttpUrl };
-
-// Express middleware: requires header `x-admin-secret` to match ADMIN_SECRET (constant-time compare)
+// Admin-only gate (x-admin-secret === ADMIN_SECRET). Fails CLOSED: with no ADMIN_SECRET configured every request is refused.
 function requireAdminSecret(req, res, next) {
   const secret = process.env.ADMIN_SECRET;
-  const provided = req.headers['x-admin-secret'];
-  if (!secret || typeof provided !== 'string' || !safeEqual(provided, secret)) {
+  const given = req.headers['x-admin-secret'];
+  if (!secret || typeof given !== 'string' || !safeEqual(given, secret)) {
     return res.status(403).json({ error: true, message: 'Forbidden.' });
   }
   next();
 }
 
-module.exports.requireAdminSecret = requireAdminSecret;
+module.exports = { isUuid, isTicker, safeEqual, safeHttpUrl, requireAdminSecret };

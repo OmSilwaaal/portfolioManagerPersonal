@@ -111,6 +111,18 @@
   0%,100% { transform: translate(0, 0); }
   50%     { transform: translate(4px, -6px); }
 }
+@keyframes auroraDriftA {
+  0%, 100% { transform: translate(-8%, -6%) scale(1); }
+  50%      { transform: translate(9%, 6%) scale(1.18); }
+}
+@keyframes auroraDriftB {
+  0%, 100% { transform: translate(8%, 10%) scale(1.1); }
+  50%      { transform: translate(-9%, -8%) scale(0.92); }
+}
+@keyframes auroraDriftC {
+  0%, 100% { transform: translate(0%, 12%) scale(1); }
+  50%      { transform: translate(-12%, -4%) scale(1.22); }
+}
 
 ::selection { background: var(--moss-300); color: var(--ink-900); }
 

@@ -30,6 +30,7 @@ import PrivacyPolicy from './pages/PrivacyPolicy'
 import Terms from './pages/Terms'
 import Disclaimer from './pages/Disclaimer'
 import TradingTerminal from './pages/TradingTerminal'
+import ResearchDashboard from './pages/ResearchDashboard'
 import { CelebrationProvider } from './components/ProfitCelebration'
 import PrivyProviderWrapper from './providers/PrivyProviderWrapper'
 
@@ -163,6 +164,7 @@ function AppInner() {
         <Route path="/settings" element={<Settings />} />
         <Route path="/pricing" element={<Pricing />} />
         <Route path="/terminal" element={<TradingTerminal />} />
+<Route path="/research" element={<ResearchDashboard />} />
       </Route>
     </Routes>
   )

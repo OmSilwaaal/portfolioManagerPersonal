@@ -14,8 +14,12 @@ const HANDLES = [
   { dir: 'se', cursor: 'nwse-resize', className: 'bottom-0 right-0 h-4 w-4', corner: 'bottom-[2px] right-[2px]' },
 ]
 
-export default function Panel({ id, title, icon: Icon, actions, children, bodyClassName = '' }) {
-  const { pxLayout, layout, specs, locked, free, active, beginInteraction, bringToFront } = useWorkspace()
+/**
+ * `bare` hosts a panel that already brings its own card chrome: the workspace
+ * adds no header or background, just a floating grip and the resize handles.
+ */
+export default function Panel({ id, title, icon: Icon, actions, children, bodyClassName = '', bare = false }) {
+  const { pxLayout, layout, specs, locked, free, active, accent, beginInteraction, bringToFront } = useWorkspace()
   const spec = specs[id]
   if (!spec) return null
 
@@ -41,19 +45,33 @@ export default function Panel({ id, title, icon: Icon, actions, children, bodyCl
 
   return (
     <section
-      style={positioning.style}
+      style={isActive ? { ...positioning.style, '--tw-ring-color': `${accent}99` } : positioning.style}
       onPointerDown={() => free && !locked && bringToFront(id)}
       className={[
         positioning.className,
-        'group flex flex-col overflow-hidden rounded-lg border bg-[#111] shadow-xl',
-        isActive
-          ? 'border-blue-500/70 shadow-[0_18px_50px_-12px_rgba(37,99,235,0.55)] ring-1 ring-blue-500/40'
-          : 'border-[#222]',
+        'group flex min-w-0 flex-col',
+        bare ? 'rounded-[28px]' : 'overflow-hidden rounded-lg border bg-[#111] shadow-xl',
+        isActive ? 'ring-2' : bare ? '' : 'border-[#222]',
         isMoving ? 'cursor-grabbing' : '',
         // Only animate when idle, otherwise the panel lags behind the cursor.
         isActive ? '' : 'transition-[border-color,box-shadow] duration-150',
       ].join(' ')}
     >
+      {bare ? (
+        free &&
+        !locked && (
+          <div
+            onPointerDown={(e) => beginInteraction(id, 'move', null, e)}
+            style={{ touchAction: 'none' }}
+            title="Drag to move  ·  edges and corners resize"
+            className={`absolute top-3 right-3 z-30 rounded-full bg-black/40 p-1.5 text-[#a39d8d] opacity-0 backdrop-blur-md transition hover:text-white group-hover:opacity-100 ${
+              isMoving ? 'cursor-grabbing opacity-100' : 'cursor-grab'
+            }`}
+          >
+            <GripVertical className="h-3.5 w-3.5" />
+          </div>
+        )
+      ) : (
       <header
         onPointerDown={(e) => beginInteraction(id, 'move', null, e)}
         style={{ touchAction: 'none' }}
@@ -83,8 +101,17 @@ export default function Panel({ id, title, icon: Icon, actions, children, bodyCl
           </div>
         )}
       </header>
+      )}
 
-      <div className={`min-h-0 flex-1 overflow-auto overscroll-contain ${bodyClassName}`}>{children}</div>
+      <div
+        className={
+          bare
+            ? `min-h-0 min-w-0 flex-1 ${bodyClassName}`
+            : `min-h-0 flex-1 overflow-auto overscroll-contain ${bodyClassName}`
+        }
+      >
+        {children}
+      </div>
 
       {free && !locked && (
         <>
@@ -98,7 +125,8 @@ export default function Panel({ id, title, icon: Icon, actions, children, bodyCl
               {h.corner && (
                 <span
                   aria-hidden
-                  className={`pointer-events-none absolute h-2 w-2 rounded-[1px] border border-blue-500 bg-white opacity-0 transition-opacity group-hover:opacity-100 ${
+                  style={{ borderColor: accent }}
+                  className={`pointer-events-none absolute h-2 w-2 rounded-[1px] border bg-white opacity-0 transition-opacity group-hover:opacity-100 ${
                     isResizing ? 'opacity-100' : ''
                   } ${h.corner}`}
                 />

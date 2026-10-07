@@ -56,7 +56,24 @@ function loadLayout(storageKey, panels) {
   }
 }
 
-export default function PanelWorkspace({ panels, storageKey, children, className = '' }) {
+export default function PanelWorkspace({
+  panels,
+  storageKey,
+  children,
+  className = '',
+  // Canvas chrome. Pass `surface=""` to let a page's own background show through.
+  surface = 'rounded-xl border border-[#1b1b1b] bg-[#080808]',
+  showGrid = true,
+  // Minimum canvas width for free dragging. Raise it to line up with a page that
+  // only pins itself to the viewport height at a wider breakpoint.
+  freeformMinWidth = FREEFORM_MIN_WIDTH,
+  // Optional ref, populated with { locked, toggleLock, reset } so a page's own
+  // toolbar can drive the workspace.
+  controls,
+  // Accent for the drag chrome (ghost, readout, lock pill). Defaults to blue;
+  // pages with their own palette pass their own hex.
+  accent = '#3b82f6',
+}) {
   const canvasRef = useRef(null)
   const initial = useRef(null)
   if (!initial.current) initial.current = loadLayout(storageKey, panels)
@@ -75,7 +92,7 @@ export default function PanelWorkspace({ panels, storageKey, children, className
   canvasSizeRef.current = canvas
   const drag = useRef(null)
 
-  const wantsFree = canvas.w >= FREEFORM_MIN_WIDTH
+  const wantsFree = canvas.w >= freeformMinWidth
   const free = wantsFree && canvas.h >= FREEFORM_MIN_HEIGHT
 
   /* ── Measure the canvas instead of trusting viewport maths ───────────────
@@ -261,11 +278,18 @@ export default function PanelWorkspace({ panels, storageKey, children, className
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
+  const toggleLock = useCallback(() => setLocked((v) => !v), [])
+  useEffect(() => {
+    if (!controls) return
+    controls.current = { locked, toggleLock, reset: resetLayout }
+  }, [controls, locked, toggleLock, resetLayout])
+
   const ctx = useMemo(
     () => ({
       layout,
       pxLayout,
       specs,
+      accent,
       canvas,
       locked,
       free,
@@ -273,7 +297,7 @@ export default function PanelWorkspace({ panels, storageKey, children, className
       beginInteraction,
       bringToFront,
     }),
-    [layout, pxLayout, specs, canvas, locked, free, active, beginInteraction, bringToFront],
+    [layout, pxLayout, specs, accent, canvas, locked, free, active, beginInteraction, bringToFront],
   )
 
   // Stacked mode follows the arrangement the user made on desktop (top-to-bottom,
@@ -307,22 +331,25 @@ export default function PanelWorkspace({ panels, storageKey, children, className
         ref={canvasRef}
         data-workspace-canvas
         className={[
-          'relative rounded-xl border border-[#1b1b1b] bg-[#080808]',
+          'relative',
+          surface,
           wantsFree ? 'min-h-[360px] flex-1 overflow-hidden' : 'flex-none overflow-visible',
           active ? 'select-none' : '',
           className,
         ].join(' ')}
       >
         {/* Figma-style dot grid — brightens while something is being moved. */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 rounded-xl transition-opacity duration-200"
-          style={{
-            opacity: active ? 0.85 : 0.35,
-            backgroundImage: 'radial-gradient(rgba(255,255,255,0.09) 1px, transparent 1px)',
-            backgroundSize: '22px 22px',
-          }}
-        />
+        {showGrid && (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 rounded-xl transition-opacity duration-200"
+            style={{
+              opacity: active ? 0.85 : 0.35,
+              backgroundImage: 'radial-gradient(rgba(255,255,255,0.09) 1px, transparent 1px)',
+              backgroundSize: '22px 22px',
+            }}
+          />
+        )}
 
         {!measured ? null : free ? (
           <>
@@ -330,8 +357,11 @@ export default function PanelWorkspace({ panels, storageKey, children, className
             {active && (
               <div
                 aria-hidden
-                className="pointer-events-none absolute z-0 rounded-lg border-2 border-dashed border-blue-500/45 bg-blue-500/[0.06]"
+                data-workspace-ghost
+                className="pointer-events-none absolute z-0 rounded-lg border-2 border-dashed"
                 style={{
+                  borderColor: `${accent}73`,
+                  backgroundColor: `${accent}10`,
                   left: active.originPx.x,
                   top: active.originPx.y,
                   width: active.originPx.w,
@@ -345,6 +375,7 @@ export default function PanelWorkspace({ panels, storageKey, children, className
               <div
                 key={`${g.axis}-${g.pos}-${i}`}
                 aria-hidden
+                data-workspace-guide
                 className="pointer-events-none absolute z-[70] bg-[#ff4d6d]"
                 style={
                   g.axis === 'v'
@@ -360,8 +391,10 @@ export default function PanelWorkspace({ panels, storageKey, children, className
             {active && (
               <div
                 aria-hidden
-                className="pointer-events-none absolute z-[80] rounded bg-blue-600 px-2 py-0.5 font-mono text-[10px] font-bold text-white shadow-lg"
+                data-workspace-readout
+                className="pointer-events-none absolute z-[80] rounded px-2 py-0.5 font-mono text-[10px] font-bold text-white shadow-lg"
                 style={{
+                  backgroundColor: accent,
                   left: Math.max(active.rectPx.x, 2),
                   top: Math.max(active.rectPx.y + active.rectPx.h + 6, 2),
                 }}
@@ -374,10 +407,11 @@ export default function PanelWorkspace({ panels, storageKey, children, className
 
             <WorkspaceToolbar
               floating
+              accent={accent}
               locked={locked}
               free={free}
               interacting={interacting}
-              onToggleLock={() => setLocked((v) => !v)}
+              onToggleLock={toggleLock}
               onReset={resetLayout}
             />
           </>
@@ -385,10 +419,11 @@ export default function PanelWorkspace({ panels, storageKey, children, className
           <div className="relative z-10 flex flex-col gap-3 p-3">
             <div className="flex justify-end">
               <WorkspaceToolbar
+                accent={accent}
                 locked={locked}
                 free={free}
                 interacting={false}
-                onToggleLock={() => setLocked((v) => !v)}
+                onToggleLock={toggleLock}
                 onReset={resetLayout}
               />
             </div>
@@ -400,7 +435,7 @@ export default function PanelWorkspace({ panels, storageKey, children, className
   )
 }
 
-function WorkspaceToolbar({ locked, free, floating, interacting, onToggleLock, onReset }) {
+function WorkspaceToolbar({ locked, free, floating, interacting, accent = '#3b82f6', onToggleLock, onReset }) {
   return (
     <div
       className={`pointer-events-none z-[90] flex max-w-full justify-center transition-opacity duration-150 ${
@@ -419,10 +454,9 @@ function WorkspaceToolbar({ locked, free, floating, interacting, onToggleLock, o
           aria-pressed={locked}
           title={locked ? 'Unlock layout (L)' : 'Lock layout (L)'}
           className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider transition ${
-            locked
-              ? 'bg-amber-500/15 text-amber-400 shadow-[0_0_14px_rgba(245,158,11,0.18)]'
-              : 'bg-blue-600/15 text-blue-400 hover:bg-blue-600/25'
+            locked ? 'bg-amber-500/15 text-amber-400 shadow-[0_0_14px_rgba(245,158,11,0.18)]' : 'hover:brightness-125'
           }`}
+          style={locked ? undefined : { backgroundColor: `${accent}26`, color: accent }}
         >
           {locked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
           <span className="hidden sm:inline">{locked ? 'Locked' : 'Unlocked'}</span>

@@ -1,4 +1,5 @@
 const { getRadarDb } = require('./db');
+const extra = require('./extraFeatures');
 
 // POINT-IN-TIME RULE: a feature for the row at time t may only use data with ts <= t (cross-sectional features use the
 // previous completed 5-minute bucket, security features use the latest check with ts <= t, creator history only counts
@@ -253,9 +254,62 @@ const MODELS = {
   sec_only: (f) => (f.has_sec !== 1 ? 0 : isSafe(f) ? 100 * (1 - 0.01 * (f.rc_score ?? 50)) : 0),
 };
 
+// OPTIONAL feature groups ('smartmoney', 'social') from the main DB's research collectors. OFF by default: the models
+// below are registered NON-enumerable (so Object.keys(MODELS), and therefore the report grid and its Bonferroni
+// correction, are exactly as before) and become enumerable only once a source for their group is configured.
+const smScore = (f) => 0.6 * lin(f.sm_buyers_30m, 0, 3) + 0.4 * lin(f.sm_net_usd_30m, 0, 2000);
+const socScore = (f) => 0.35 * lin(f.mention_unique_accounts_15m, 1, 6) + 0.30 * lin(Math.log1p(f.mention_accel ?? 0), Math.log1p(1), Math.log1p(10)) +
+  0.20 * lin(f.telegram_mentions_15m, 0, 10) + 0.15 * lin(f.source_diversity, 1, 3);
+const EXTRA_MODELS = {
+  // ablation pairs: each adds ONE group on top of market_v1 (a bonus, so with the group missing it equals market_v1)
+  market_v1_sm: { group: 'smartmoney', fn: (f) => Math.min(100, MODELS.market_v1(f) + 70 * smScore(f)) },
+  market_v1_social: { group: 'social', fn: (f) => Math.min(100, MODELS.market_v1(f) + 70 * socScore(f)) },
+  market_v1_sm_social: { group: 'both', fn: (f) => Math.min(100, MODELS.market_v1(f) + 70 * Math.max(smScore(f), socScore(f))) },
+  // diagnostics with NO market input: what the group alone contributes
+  // the LIVE radar score is market_v2, so its extra-group variants add the same bonus on top of market_v2 (radarSignals
+  // picks one by the active groups; the report replays exactly the same function)
+  market_v2_sm: { group: 'smartmoney', fn: (f) => Math.min(100, MODELS.market_v2(f) + 70 * smScore(f)) },
+  market_v2_social: { group: 'social', fn: (f) => Math.min(100, MODELS.market_v2(f) + 70 * socScore(f)) },
+  market_v2_sm_social: { group: 'both', fn: (f) => Math.min(100, MODELS.market_v2(f) + 70 * Math.max(smScore(f), socScore(f))) },
+  smartmoney_only: { group: 'smartmoney', fn: (f) => 100 * smScore(f) },
+  social_only: { group: 'social', fn: (f) => 100 * socScore(f) },
+};
+for (const [name, m] of Object.entries(EXTRA_MODELS)) Object.defineProperty(MODELS, name, { value: m.fn, enumerable: false, configurable: true, writable: true });
+
+let extraSource = null;                     // { provider, groups } set explicitly; else RADAR_EXTRA_FEATURES opts in
+let envSource = null;
+function setExtraFeatureSource(src) {
+  extraSource = src ? { provider: src.provider, groups: extra.normalizeGroups(src.groups || extra.GROUP_NAMES) } : null;
+  syncExtraModels();
+}
+function activeExtraSource() {
+  if (extraSource) return extraSource;
+  const groups = extra.normalizeGroups((process.env.RADAR_EXTRA_FEATURES || '').split(',').map((s) => s.trim()));
+  if (!groups.length) { envSource = null; return null; }
+  if (!envSource || envSource.groups.join() !== groups.join()) envSource = { provider: extra.createMainDbProvider(), groups };
+  return envSource;
+}
+function syncExtraModels() {
+  const src = activeExtraSource();
+  for (const [name, m] of Object.entries(EXTRA_MODELS)) {
+    const on = !!src && (m.group === 'both' ? src.groups.length === extra.GROUP_NAMES.length : src.groups.includes(m.group));
+    Object.defineProperty(MODELS, name, { enumerable: on });
+  }
+  return src;
+}
+// The currently configured source ({provider, groups}) or null. Used by the live scorer (services/radarSignals).
+const getExtraSource = () => syncExtraModels();
+// Name of the market_v2 variant matching a set of active groups ('market_v2' when none).
+function liveModelFor(groups) {
+  const sm = (groups || []).includes('smartmoney'), soc = (groups || []).includes('social');
+  return sm && soc ? 'market_v2_sm_social' : sm ? 'market_v2_sm' : soc ? 'market_v2_social' : 'market_v2';
+}
+// Every model name incl. the optional-group candidates, whether or not a source is configured (for explicit use).
+const allModelNames = () => [...Object.keys(MODELS), ...Object.keys(EXTRA_MODELS).filter((n) => !Object.keys(MODELS).includes(n))];
+
 // v2 mixes more terms and penalises already-extended moves, so its attainable ceiling for an EARLY setup is lower than
 // v1's. Per-model cutoffs are fixed constants written down before any real-data run, never tuned on results.
-const MODEL_THRESHOLD = { market_v2: 55, market_v2_safe: 55 };
+const MODEL_THRESHOLD = { market_v2: 55, market_v2_safe: 55, market_v2_sm: 55, market_v2_social: 55, market_v2_sm_social: 55 };
 
 // Tradeable universe: thin or brand-new pools can't be bought at the sizes we simulate.
 const ELIGIBLE = { minLiquidity: 5000, minAgeMin: 15, maxAgeMin: 6 * 60 };
@@ -267,6 +321,7 @@ function isEligible(f) {
 // Load every token's snapshot series + point-in-time features. Market features come from the cache when present.
 function loadUniverse({ sinceTs = 0 } = {}) {
   const db = getRadarDb();
+  const extraSrc = syncExtraModels();
   // Only tokens that lived long enough to ever be tradeable (most launches die in minutes and can't be scored anyway).
   const tokens = db.prepare('SELECT * FROM token WHERE pool_created_ts >= ? AND last_snapshot_ts - pool_created_ts >= ?')
     .all(sinceTs, ELIGIBLE.minAgeMin * 60);
@@ -297,6 +352,7 @@ function loadUniverse({ sinceTs = 0 } = {}) {
     attachSecurity(rows, secStmt.all(t.token_address));
     attachLaunchAndPromo(rows, launchStmt.get(t.token_address), promoStmt.all(t.token_address));
     attachTrades(rows, tradeStmt.all(t.token_address), t.creator);
+    if (extraSrc) extra.attachExtraFeatures(rows, t.token_address, extraSrc.provider, extraSrc.groups);   // never cached
     out.set(t.token_address, { token: t, series, rows });
   }
   attachCreatorHistory(out);
@@ -304,4 +360,4 @@ function loadUniverse({ sinceTs = 0 } = {}) {
   return out;
 }
 
-module.exports = { MODELS, MODEL_THRESHOLD, ELIGIBLE, FEATURE_VERSION, isEligible, isSafe, loadUniverse, marketFeatures };
+module.exports = { MODELS, EXTRA_MODELS, EXTRA_SCORES: { smartmoney: smScore, social: socScore }, setExtraFeatureSource, getExtraSource, liveModelFor, allModelNames, MODEL_THRESHOLD, ELIGIBLE, FEATURE_VERSION, isEligible, isSafe, loadUniverse, marketFeatures };
