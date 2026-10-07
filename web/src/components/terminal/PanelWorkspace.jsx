@@ -91,6 +91,17 @@ export default function PanelWorkspace({
   const canvasSizeRef = useRef(canvas)
   canvasSizeRef.current = canvas
   const drag = useRef(null)
+  // Live DOM handles. A drag writes geometry straight to these instead of going
+  // through React, so a gesture costs two renders (start and end) rather than one
+  // per frame.
+  const nodes = useRef(new Map())
+  const ghostRef = useRef(null)
+  const readoutRef = useRef(null)
+  const guideRefs = [useRef(null), useRef(null)]
+  const registerNode = useCallback((id, el) => {
+    if (el) nodes.current.set(id, el)
+    else nodes.current.delete(id)
+  }, [])
 
   const wantsFree = canvas.w >= freeformMinWidth
   const free = wantsFree && canvas.h >= FREEFORM_MIN_HEIGHT
@@ -191,8 +202,15 @@ export default function PanelWorkspace({
         minW: spec.minW ?? 260,
         minH: spec.minH ?? 140,
         moved: false,
+        node: nodes.current.get(id) || null,
+        rect: startPx,
       }
-      setActive({ id, mode, originPx: startPx, rectPx: startPx, guides: [] })
+      // Promote the panel to its own layer, and drop the frosted-glass backdrop
+      // for the duration: re-blurring a moving element every frame is the single
+      // most expensive thing on this canvas.
+      if (drag.current.node) drag.current.node.style.willChange = 'transform'
+      canvasRef.current?.setAttribute('data-interacting', 'true')
+      setActive({ id, mode, originPx: startPx, rectPx: startPx })
     },
     [bringToFront, free, locked, specs],
   )
@@ -204,13 +222,49 @@ export default function PanelWorkspace({
     let frame = null
     let pending = null
 
-    const commit = () => {
+    // Paint the frame by hand. `transform` keeps a move off the layout path
+    // entirely; a resize still has to touch width/height, but only on one node.
+    const paint = () => {
       frame = null
       const d = drag.current
       if (!d || !pending) return
       const { rect, guides } = pending
-      setLayout((prev) => ({ ...prev, [d.id]: { ...toFraction(rect, d.canvas), z: prev[d.id].z } }))
-      setActive((prev) => (prev ? { ...prev, rectPx: rect, guides } : prev))
+      d.rect = rect
+
+      if (d.node) {
+        d.node.style.transform = `translate3d(${rect.x - d.startPx.x}px, ${rect.y - d.startPx.y}px, 0)`
+        if (d.mode === 'resize') {
+          d.node.style.width = `${rect.w}px`
+          d.node.style.height = `${rect.h}px`
+        }
+      }
+
+      const readout = readoutRef.current
+      if (readout) {
+        readout.textContent = d.mode === 'move'
+          ? `${Math.round(rect.x)} , ${Math.round(rect.y)}`
+          : `${Math.round(rect.w)} × ${Math.round(rect.h)}`
+        readout.style.transform = `translate3d(${Math.max(rect.x, 2)}px, ${Math.max(rect.y + rect.h + 6, 2)}px, 0)`
+      }
+
+      guideRefs.forEach((ref, i) => {
+        const el = ref.current
+        if (!el) return
+        const g = guides[i]
+        if (!g) {
+          if (el.style.display !== 'none') el.style.display = 'none'
+          return
+        }
+        // Set discrete properties; assigning to cssText here would append to it
+        // every frame and force a re-parse of an ever-growing string.
+        const vertical = g.axis === 'v'
+        el.style.display = 'block'
+        el.style.width = vertical ? '1px' : '100%'
+        el.style.height = vertical ? '100%' : '1px'
+        el.style.transform = vertical
+          ? `translate3d(${g.pos}px, 0, 0)`
+          : `translate3d(0, ${g.pos}px, 0)`
+      })
     }
 
     const onMove = (e) => {
@@ -229,28 +283,40 @@ export default function PanelWorkspace({
       } else {
         pending = applyResize(d.startPx, d.dir, dx, dy, d.targets, d.canvas, d.minW, d.minH)
       }
-      if (frame === null) frame = requestAnimationFrame(commit)
+      if (frame === null) frame = requestAnimationFrame(paint)
     }
 
-    const finish = () => {
+    // Hand geometry back to React and strip the inline overrides in the same tick,
+    // so there is no frame where both the transform and the new rect are applied.
+    const finish = (commitRect) => {
       if (frame !== null) cancelAnimationFrame(frame)
+      const d = drag.current
       drag.current = null
+      canvasRef.current?.removeAttribute('data-interacting')
+      if (d?.node) {
+        d.node.style.transform = ''
+        d.node.style.width = ''
+        d.node.style.height = ''
+        d.node.style.willChange = ''
+      }
+      if (d && commitRect) {
+        setLayout((prev) => (prev[d.id]
+          ? { ...prev, [d.id]: { ...toFraction(commitRect, d.canvas), z: prev[d.id].z } }
+          : prev))
+      }
       setActive(null)
     }
 
     const onUp = (e) => {
       const d = drag.current
       if (d && e.pointerId !== undefined && e.pointerId !== d.pointerId) return
-      if (frame !== null) commit()
-      finish()
+      finish(d?.moved ? d.rect : null)
     }
 
     const onKeyDown = (e) => {
       if (e.key !== 'Escape') return
-      const d = drag.current
-      if (!d) return
-      setLayout((prev) => ({ ...prev, [d.id]: d.startRect }))
-      finish()
+      if (!drag.current) return
+      finish(null) // drop the gesture; the committed rect is already correct
     }
 
     window.addEventListener('pointermove', onMove)
@@ -296,8 +362,9 @@ export default function PanelWorkspace({
       active,
       beginInteraction,
       bringToFront,
+      registerNode,
     }),
-    [layout, pxLayout, specs, accent, canvas, locked, free, active, beginInteraction, bringToFront],
+    [layout, pxLayout, specs, accent, canvas, locked, free, active, beginInteraction, bringToFront, registerNode],
   )
 
   // Stacked mode follows the arrangement the user made on desktop (top-to-bottom,
@@ -358,6 +425,7 @@ export default function PanelWorkspace({
               <div
                 aria-hidden
                 data-workspace-ghost
+                ref={ghostRef}
                 className="pointer-events-none absolute z-0 rounded-lg border-2 border-dashed"
                 style={{
                   borderColor: `${accent}73`,
@@ -371,17 +439,14 @@ export default function PanelWorkspace({
             )}
 
             {/* Alignment guides. */}
-            {active?.guides.map((g, i) => (
+            {active && guideRefs.map((ref, i) => (
               <div
-                key={`${g.axis}-${g.pos}-${i}`}
+                key={i}
+                ref={ref}
                 aria-hidden
                 data-workspace-guide
-                className="pointer-events-none absolute z-[70] bg-[#ff4d6d]"
-                style={
-                  g.axis === 'v'
-                    ? { left: g.pos, top: 0, width: 1, height: '100%' }
-                    : { top: g.pos, left: 0, height: 1, width: '100%' }
-                }
+                className="pointer-events-none absolute left-0 top-0 z-[70] bg-[#ff4d6d]"
+                style={{ display: 'none' }}
               />
             ))}
 
@@ -392,11 +457,11 @@ export default function PanelWorkspace({
               <div
                 aria-hidden
                 data-workspace-readout
-                className="pointer-events-none absolute z-[80] rounded px-2 py-0.5 font-mono text-[10px] font-bold text-white shadow-lg"
+                ref={readoutRef}
+                className="pointer-events-none absolute left-0 top-0 z-[80] rounded px-2 py-0.5 font-mono text-[10px] font-bold text-white shadow-lg"
                 style={{
                   backgroundColor: accent,
-                  left: Math.max(active.rectPx.x, 2),
-                  top: Math.max(active.rectPx.y + active.rectPx.h + 6, 2),
+                  transform: `translate3d(${Math.max(active.rectPx.x, 2)}px, ${Math.max(active.rectPx.y + active.rectPx.h + 6, 2)}px, 0)`,
                 }}
               >
                 {active.mode === 'move'

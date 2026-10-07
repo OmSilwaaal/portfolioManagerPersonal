@@ -19,7 +19,7 @@ const HANDLES = [
  * adds no header or background, just a floating grip and the resize handles.
  */
 export default function Panel({ id, title, icon: Icon, actions, children, bodyClassName = '', bare = false }) {
-  const { pxLayout, layout, specs, locked, free, active, accent, beginInteraction, bringToFront } = useWorkspace()
+  const { pxLayout, layout, specs, locked, free, active, accent, beginInteraction, bringToFront, registerNode } = useWorkspace()
   const spec = specs[id]
   if (!spec) return null
 
@@ -45,6 +45,7 @@ export default function Panel({ id, title, icon: Icon, actions, children, bodyCl
 
   return (
     <section
+      ref={(el) => registerNode(id, free ? el : null)}
       style={isActive ? { ...positioning.style, '--tw-ring-color': `${accent}99` } : positioning.style}
       onPointerDown={() => free && !locked && bringToFront(id)}
       className={[

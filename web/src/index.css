@@ -145,6 +145,24 @@
 }
 
 @layer utilities {
+  /* While a workspace panel is being dragged or resized, drop the frosted-glass
+     backdrop on the canvas. backdrop-filter re-blurs everything behind a moving
+     element on every frame, which is by far the most expensive thing happening
+     during the gesture; the panels stay translucent, just not blurred. */
+  [data-workspace-canvas][data-interacting] [class*='backdrop-blur'] {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  /* Honour the OS setting: no transition work during drags for people who ask
+     for reduced motion. */
+  @media (prefers-reduced-motion: reduce) {
+    [data-workspace-canvas] * {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+    }
+  }
+
   .line-clamp-2 {
     display: -webkit-box;
     -webkit-line-clamp: 2;

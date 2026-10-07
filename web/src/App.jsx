@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import PriceAlertBanner from './components/PriceAlertBanner'
@@ -7,32 +7,39 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { setPreferences, setIsPro } from './store/preferencesSlice'
 import Sidebar from './components/Sidebar'
 import BottomNav from './components/BottomNav'
-import Dashboard from './pages/Dashboard'
-import Stocks from './pages/Stocks'
-import Crypto from './pages/Crypto'
-import CopyTrading from './pages/CopyTrading'
-import Alerts from './pages/Alerts'
-import Onboarding from './pages/Onboarding'
-import Welcome from './pages/Welcome'
-import Feed from './pages/Feed'
-import GovTrades from './pages/GovTrades'
-import Commodities from './pages/Commodities'
-import Settings from './pages/Settings'
-import PaperTrading from './pages/PaperTrading'
-import Groups from './pages/Groups'
-import GroupDetail from './pages/GroupDetail'
-import CreateGroup from './pages/CreateGroup'
-import Profile from './pages/Profile'
 import Landing from './pages/Landing'
-import Pricing from './pages/Pricing'
-import Portfolio from './pages/Portfolio'
-import PrivacyPolicy from './pages/PrivacyPolicy'
-import Terms from './pages/Terms'
-import Disclaimer from './pages/Disclaimer'
-import TradingTerminal from './pages/TradingTerminal'
-import ResearchDashboard from './pages/ResearchDashboard'
+
+// Route-level code splitting: the router only ever renders one page, so shipping
+// all of them (plus their chart/wallet deps) in the entry chunk just delays first
+// paint for everyone.
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const Stocks = lazy(() => import('./pages/Stocks'))
+const Crypto = lazy(() => import('./pages/Crypto'))
+const CopyTrading = lazy(() => import('./pages/CopyTrading'))
+const Alerts = lazy(() => import('./pages/Alerts'))
+const Onboarding = lazy(() => import('./pages/Onboarding'))
+const Welcome = lazy(() => import('./pages/Welcome'))
+const Feed = lazy(() => import('./pages/Feed'))
+const GovTrades = lazy(() => import('./pages/GovTrades'))
+const Commodities = lazy(() => import('./pages/Commodities'))
+const Settings = lazy(() => import('./pages/Settings'))
+const PaperTrading = lazy(() => import('./pages/PaperTrading'))
+const Groups = lazy(() => import('./pages/Groups'))
+const GroupDetail = lazy(() => import('./pages/GroupDetail'))
+const CreateGroup = lazy(() => import('./pages/CreateGroup'))
+const Profile = lazy(() => import('./pages/Profile'))
+const Pricing = lazy(() => import('./pages/Pricing'))
+const Portfolio = lazy(() => import('./pages/Portfolio'))
+const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'))
+const Terms = lazy(() => import('./pages/Terms'))
+const Disclaimer = lazy(() => import('./pages/Disclaimer'))
+const TradingTerminal = lazy(() => import('./pages/TradingTerminal'))
+// The wallet SDK is big and only the terminal uses it, so it loads with that route
+// rather than on every visit to the landing page.
+const PrivyProviderWrapper = lazy(() => import('./providers/PrivyProviderWrapper'))
+const ResearchDashboard = lazy(() => import('./pages/ResearchDashboard'))
+
 import { CelebrationProvider } from './components/ProfitCelebration'
-import PrivyProviderWrapper from './providers/PrivyProviderWrapper'
 
 // Import API modules to register endpoints
 import './api/stocksApi'
@@ -68,7 +75,7 @@ function ProtectedLayout() {
       <PriceAlertBanner tickers={watchlistTickers} />
       <Sidebar />
       <div className="flex-1 min-w-0 md:ml-[200px] flex flex-col min-h-screen pb-16 md:pb-0">
-        <Outlet />
+        <Suspense fallback={<Spinner />}><Outlet /></Suspense>
       </div>
       <BottomNav />
     </div>
@@ -87,7 +94,7 @@ function ProtectedLayoutMinimal() {
   return (
     <div className={`flex min-h-screen ${isDark ? 'bg-[#0f0f0f] text-white' : 'bg-white text-[#0f0f0f]'}`}>
       <div className="flex-1 flex flex-col min-h-screen">
-        <Outlet />
+        <Suspense fallback={<Spinner />}><Outlet /></Suspense>
       </div>
     </div>
   )
@@ -131,6 +138,7 @@ function AppInner() {
   }, [user, dispatch])
 
   return (
+    <Suspense fallback={<Spinner />}>
     <Routes>
       {/* Public */}
       <Route path="/" element={<Landing />} />
@@ -163,23 +171,25 @@ function AppInner() {
         <Route path="/commodities" element={<Commodities />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/pricing" element={<Pricing />} />
-        <Route path="/terminal" element={<TradingTerminal />} />
+        <Route
+          path="/terminal"
+          element={<PrivyProviderWrapper><TradingTerminal /></PrivyProviderWrapper>}
+        />
 <Route path="/research" element={<ResearchDashboard />} />
       </Route>
     </Routes>
+    </Suspense>
   )
 }
 
 export default function App() {
   return (
     <BrowserRouter>
-      <PrivyProviderWrapper>
-        <AuthProvider>
-          <CelebrationProvider>
-            <AppInner />
-          </CelebrationProvider>
-        </AuthProvider>
-      </PrivyProviderWrapper>
+      <AuthProvider>
+        <CelebrationProvider>
+          <AppInner />
+        </CelebrationProvider>
+      </AuthProvider>
     </BrowserRouter>
   )
 }

@@ -7,6 +7,7 @@ import {
   useMarkMemecoinAlertsReadMutation,
 } from '../../api/memecoinAlertsApi'
 import { useNotificationPermission, notify } from './useDesktopNotifications'
+import { usePoll } from '../../api/memecoinApi'
 
 const POLL_MS = 60_000
 // Remembering this per browser keeps the "turn alerts on" nudge from reappearing
@@ -48,8 +49,11 @@ export default function MemecoinAlerts({ onSelectToken }) {
   const prefs = prefsData?.prefs
   const enabled = Boolean(prefs?.enabled)
 
+  // usePoll pauses while the tab is hidden or the API is rate-limiting, matching
+  // every other poll in the terminal.
+  const pollMs = usePoll(POLL_MS)
   const { data: eventsData } = useGetMemecoinAlertEventsQuery(50, {
-    pollingInterval: enabled ? POLL_MS : 0,
+    pollingInterval: enabled ? pollMs : 0,
     skip: !enabled,
   })
   const events = useMemo(() => eventsData?.events ?? [], [eventsData])
