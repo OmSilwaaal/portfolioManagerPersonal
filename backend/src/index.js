@@ -44,6 +44,8 @@ const { warmCoinList } = require('./services/search');
 warmCoinList();
 const { startAlertPoller } = require('./services/alertPoller');
 startAlertPoller();
+const { startMemecoinAlertPoller } = require('./services/memecoinAlertPoller');
+startMemecoinAlertPoller();
 
 // High-speed Solana pipeline — experimental/mock code (random triggers, throwaway keypairs).
 // Opt-in only; never runs unless ENABLE_SOLANA_PIPELINE=true.
@@ -165,6 +167,7 @@ app.use('/api/radar', radarRouter); // admin-secret protected inside the router
 
 // Lower-cost routes — still require auth to prevent enumeration
 app.use('/api/alerts', requireAuth, alertsRouter);
+app.use('/api/memecoin-alerts', requireAuth, require('./routes/memecoinAlerts'));
 app.use('/api/sms', requireAuth, smsRouter);
 app.use('/api/friends', requireAuth, friendsRouter);
 app.use('/api/referrals', requireAuth, referralsRouter);

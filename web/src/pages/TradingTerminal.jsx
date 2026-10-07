@@ -29,6 +29,7 @@ import {
 } from '../api/memecoinApi'
 import PanelWorkspace from '../components/terminal/PanelWorkspace'
 import WorkspacePanel from '../components/terminal/Panel'
+import MemecoinAlerts from '../components/alerts/MemecoinAlerts'
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
 const ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/
@@ -253,7 +254,7 @@ function TopBar({ onSelect, solAddress, solBalance, paperCash, onResetLayout }) 
   }
 
   return (
-    <header className="relative z-10 flex flex-col md:flex-row md:items-center gap-2.5 md:gap-4 px-4 py-3 bg-black/30 backdrop-blur-xl">
+    <header className="relative z-30 flex flex-col md:flex-row md:items-center gap-2.5 md:gap-4 px-4 py-3 bg-black/30 backdrop-blur-xl">
       <div className="flex items-center gap-2.5 shrink-0">
         <div className="p-2 rounded-xl bg-gradient-to-br from-[#3e4d26] to-[#1f2910] text-[#9eae84] shadow-[0_0_20px_-4px_rgba(158,174,132,0.6)]">
           <Zap className="w-4 h-4" />
@@ -269,6 +270,7 @@ function TopBar({ onSelect, solAddress, solBalance, paperCash, onResetLayout }) 
           <span className="text-[#555143] mr-1">PAPER</span>
           <span className="text-white font-bold">{paperCash == null ? '--' : fmtUsd(paperCash)}</span>
         </div>
+        <MemecoinAlerts onSelectToken={onSelect} />
         <button onClick={onResetLayout} title="Reset panel layout" className="p-2 rounded-full bg-white/5 hover:bg-white/10 text-[#a39d8d] hover:text-white backdrop-blur-md transition">
           <RotateCcw className="w-3.5 h-3.5" />
         </button>

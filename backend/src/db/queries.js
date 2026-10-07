@@ -171,3 +171,73 @@ module.exports = {
   upsertGovTrade,
   getCachedGovTrades,
 };
+
+/* ── memecoin alerts ──────────────────────────────────────────────────────── */
+
+const getMemeAlertPrefs = (userId) =>
+  getDb().prepare('SELECT * FROM memecoin_alert_prefs WHERE user_id = ?').get(userId) || null;
+
+const listEnabledMemeAlertPrefs = () =>
+  getDb().prepare('SELECT * FROM memecoin_alert_prefs WHERE enabled = 1').all();
+
+function upsertMemeAlertPrefs(userId, p) {
+  getDb()
+    .prepare(
+      `INSERT INTO memecoin_alert_prefs
+         (user_id, enabled, sms, move_pct_5m, move_pct_1h, min_score, min_confidence, min_liquidity, cooldown_min, updated_at)
+       VALUES (@user_id, @enabled, @sms, @move_pct_5m, @move_pct_1h, @min_score, @min_confidence, @min_liquidity, @cooldown_min, datetime('now'))
+       ON CONFLICT(user_id) DO UPDATE SET
+         enabled = excluded.enabled, sms = excluded.sms,
+         move_pct_5m = excluded.move_pct_5m, move_pct_1h = excluded.move_pct_1h,
+         min_score = excluded.min_score, min_confidence = excluded.min_confidence,
+         min_liquidity = excluded.min_liquidity, cooldown_min = excluded.cooldown_min,
+         updated_at = datetime('now')`,
+    )
+    .run({ user_id: userId, ...p });
+  return getMemeAlertPrefs(userId);
+}
+
+// Most recent send time per (address, kind) for one user — drives the cooldown.
+function getMemeAlertLastSent(userId) {
+  const rows = getDb()
+    .prepare(
+      `SELECT address, kind, MAX(created_ts) AS ts
+         FROM memecoin_alert_events WHERE user_id = ? GROUP BY address, kind`,
+    )
+    .all(userId);
+  const map = new Map();
+  for (const r of rows) map.set(`${r.address}|${r.kind}`, r.ts);
+  return map;
+}
+
+const insertMemeAlertEvent = (e) =>
+  getDb()
+    .prepare(
+      `INSERT INTO memecoin_alert_events
+         (user_id, address, symbol, kind, direction, window, change_pct, score, confidence, message, created_ts)
+       VALUES (@user_id, @address, @symbol, @kind, @direction, @window, @change_pct, @score, @confidence, @message, @created_ts)`,
+    )
+    .run(e).lastInsertRowid;
+
+const listMemeAlertEvents = (userId, limit = 50) =>
+  getDb()
+    .prepare('SELECT * FROM memecoin_alert_events WHERE user_id = ? ORDER BY created_ts DESC LIMIT ?')
+    .all(userId, Math.min(Math.max(Number(limit) || 50, 1), 200));
+
+const markMemeAlertsRead = (userId, ts) =>
+  getDb()
+    .prepare('UPDATE memecoin_alert_events SET read_ts = ? WHERE user_id = ? AND read_ts IS NULL AND created_ts <= ?')
+    .run(ts, userId, ts).changes;
+
+// Keep the table from growing without bound.
+const pruneMemeAlertEvents = (beforeTs) =>
+  getDb().prepare('DELETE FROM memecoin_alert_events WHERE created_ts < ?').run(beforeTs).changes;
+
+module.exports.getMemeAlertPrefs = getMemeAlertPrefs;
+module.exports.listEnabledMemeAlertPrefs = listEnabledMemeAlertPrefs;
+module.exports.upsertMemeAlertPrefs = upsertMemeAlertPrefs;
+module.exports.getMemeAlertLastSent = getMemeAlertLastSent;
+module.exports.insertMemeAlertEvent = insertMemeAlertEvent;
+module.exports.listMemeAlertEvents = listMemeAlertEvents;
+module.exports.markMemeAlertsRead = markMemeAlertsRead;
+module.exports.pruneMemeAlertEvents = pruneMemeAlertEvents;
