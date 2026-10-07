@@ -4,6 +4,7 @@ import { usePrivy } from '@privy-io/react-auth'
 import {
   Zap, Wallet, LogIn, LogOut, Search, Copy, Check, RefreshCw, AlertTriangle,
   ArrowUpRight, ArrowDownRight, Flame, Sparkles, Rocket, X, Loader2, Radar,
+  GripVertical, RotateCcw,
 } from 'lucide-react'
 import MemeChart from '../components/MemeChart'
 import { useGetPortfolioQuery } from '../api/paperTradingApi'
@@ -17,9 +18,14 @@ import {
   useGetMemecoinSignalsQuery,
   useGetMemecoinSignalQuery,
   useGetRadarSignalsQuery,
+  useGetMemePositionsQuery,
+  useGetMemeHistoryQuery,
   useQuoteMemecoinMutation,
   useTradeMemecoinMutation,
   isMockData,
+  usePoll,
+  useRateLimited,
+  rateLimitedUntil,
 } from '../api/memecoinApi'
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
@@ -27,7 +33,20 @@ const ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/
 const TIMEFRAMES = ['1m', '5m', '15m', '1h']
 const SOL_PRESETS = [0.1, 0.5, 1, 2.5, 5]
 const SELL_PCTS = [25, 50, 75, 100]
-const FILLS_KEY = 'memecoin_fills_v1'
+const HISTORY_PAGE = 25
+// Poll intervals (ms). Global /api limiter is 60 req/min per IP and is shared with the rest of the app, so every
+// poller is slow, only runs while its panel is visible/needed, and is paused when the tab is hidden or on a 429
+// (see usePoll in memecoinApi). Upstream caches: token 10s, trades 8s, ohlcv 10-20s, lists 30s, signals 45s.
+const POLL = { detail: 10_000, signal: 30_000, radar: 20_000, lists: 30_000, signals: 60_000, trades: 10_000, positions: 30_000 }
+const CHART_POLL = { '1m': 15_000, '5m': 30_000, '15m': 60_000, '1h': 120_000 }
+
+// Untrusted token text (names/symbols come from third parties). React renders it as text, never HTML; this also
+// removes bidi/zero-width/control characters and caps the length so it cannot spoof or break the layout.
+const UNSAFE_TEXT = /[\p{Cc}\p{Cf}\p{Co}\p{Zl}\p{Zp}]/gu
+function safeText(v, max = 32) {
+  if (typeof v !== 'string' && typeof v !== 'number') return ''
+  return Array.from(String(v).slice(0, max * 4).replace(/\s+/g, ' ').replace(UNSAFE_TEXT, '').normalize('NFKC').trim()).slice(0, max).join('')
+}
 
 const short = (a, n = 4) => (a ? `${a.slice(0, n)}...${a.slice(-n)}` : '')
 
@@ -63,13 +82,14 @@ function timeAgo(ts) {
   if (s < 3600) return `${Math.floor(s / 60)}m`
   return `${Math.floor(s / 3600)}h`
 }
-const errMsg = (e) => e?.data?.error || e?.data?.message || e?.error || (e?.status ? `Request failed (${e.status})` : 'Request failed')
+const errMsg = (e) => e?.status === 429
+  ? 'Slow down: too many requests. Live updates are paused for a moment.'
+  : e?.data?.error || e?.data?.message || e?.error || (e?.status ? `Request failed (${e.status})` : 'Request failed')
 const pctColor = (v) => (v == null ? 'text-[#a39d8d]' : v >= 0 ? 'text-[#7ea968]' : 'text-[#d35c4a]')
 const fmtPct = (v) => (v == null || isNaN(v) ? '--' : `${v >= 0 ? '+' : ''}${Number(v).toFixed(2)}%`)
 
-function loadFills() {
-  try { return JSON.parse(localStorage.getItem(FILLS_KEY) || '[]') } catch { return [] }
-}
+const newOrderId = () => (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`)
+const fmtTokens = (n) => (n == null || isNaN(n) ? '--' : Math.abs(n) >= 1 ? fmtNum(n) : Number(n).toPrecision(3))
 
 /* ─── Small UI primitives ────────────────────────────────────────────────── */
 const Skel = ({ className = '' }) => <div className={`bg-white/[0.06] animate-pulse rounded-lg ${className}`} />
@@ -80,8 +100,8 @@ function ErrorBox({ error, onRetry, label = 'Failed to load' }) {
       <AlertTriangle className="w-5 h-5 text-[#d6b87a]" />
       <div>{label}</div>
       <div className="text-[10px] text-[#555143] break-words max-w-full">{errMsg(error)}</div>
-      {onRetry && (
-        <button onClick={onRetry} className="flex items-center gap-1 px-3 py-1.5 rounded-full border border-white/10 bg-white/5 hover:border-[#9eae84]/60 hover:bg-[#9eae84]/10 text-[#9eae84] transition">
+      {onRetry && error?.status !== 429 && (
+        <button onClick={onRetry} className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-white/5 hover:bg-[#9eae84]/15 text-[#9eae84] transition">
           <RefreshCw className="w-3 h-3" /> Retry
         </button>
       )}
@@ -89,11 +109,12 @@ function ErrorBox({ error, onRetry, label = 'Failed to load' }) {
   )
 }
 
-/* Glass panel: translucent surface, soft lift shadow, hairline top highlight */
-function Panel({ className = '', children }) {
+/* Glass panel: translucent surface, soft lift shadow, hairline top highlight. No hard edges —
+ * depth comes from the shadow + a vertical gradient fill instead of a border. */
+function Panel({ className = '', tint = 'from-white/[0.05] to-white/[0.015]', children }) {
   return (
     <section
-      className={`relative min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-[#121212]/70 backdrop-blur-xl shadow-[0_24px_60px_-28px_rgba(0,0,0,0.85)] before:content-[''] before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/25 before:to-transparent ${className}`}
+      className={`relative min-w-0 overflow-hidden rounded-[28px] bg-[#121212]/60 bg-gradient-to-b ${tint} backdrop-blur-2xl shadow-[0_30px_70px_-30px_rgba(0,0,0,0.85)] before:content-[''] before:absolute before:inset-x-6 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/20 before:to-transparent ${className}`}
     >
       {children}
     </section>
@@ -102,14 +123,14 @@ function Panel({ className = '', children }) {
 
 function Tabs({ tabs, value, onChange }) {
   return (
-    <div className="flex items-center gap-1 overflow-x-auto no-scrollbar rounded-full bg-black/30 border border-white/5 p-1">
+    <div className="flex items-center gap-1 overflow-x-auto no-scrollbar rounded-full bg-black/25 p-1">
       {tabs.map((t) => (
         <button
           key={t.id}
           onClick={() => onChange(t.id)}
           className={`flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full whitespace-nowrap transition-all ${
             value === t.id
-              ? 'bg-[#3e4d26]/70 text-[#dce8c9] shadow-[0_0_0_1px_rgba(158,174,132,0.35),0_4px_14px_-4px_rgba(158,174,132,0.55)]'
+              ? 'bg-[#3e4d26]/70 text-[#dce8c9] shadow-[0_4px_14px_-4px_rgba(158,174,132,0.55)]'
               : 'text-[#a39d8d] hover:text-white hover:bg-white/5'
           }`}
         >
@@ -188,7 +209,7 @@ function TokenSearch({ onSelect }) {
           onChange={(e) => { setQ(e.target.value); setOpen(true) }}
           onFocus={() => setOpen(true)}
           placeholder="Search name, symbol or contract address"
-          className="w-full rounded-full bg-black/30 border border-white/10 backdrop-blur-md pl-9 pr-9 py-2 text-xs text-white placeholder-[#6b6657] focus:outline-none focus:border-[#9eae84]/60 focus:ring-2 focus:ring-[#9eae84]/15 transition"
+          className="w-full rounded-full bg-black/30 backdrop-blur-md pl-9 pr-9 py-2.5 text-sm text-white placeholder-[#6b6657] focus:outline-none focus:ring-2 focus:ring-[#9eae84]/25 transition"
         />
         {q && (
           <button type="button" onClick={() => { setQ(''); setDq('') }} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#555143] hover:text-white">
@@ -197,9 +218,9 @@ function TokenSearch({ onSelect }) {
         )}
       </form>
       {open && dq.length >= 2 && (
-        <div className="absolute z-30 mt-2 w-full rounded-2xl bg-[#141414]/90 border border-white/10 backdrop-blur-2xl shadow-[0_24px_60px_-20px_rgba(0,0,0,0.8)] max-h-80 overflow-y-auto overflow-hidden">
+        <div className="absolute z-30 mt-2 w-full rounded-2xl bg-[#141414]/90 backdrop-blur-2xl shadow-[0_24px_60px_-20px_rgba(0,0,0,0.8)] max-h-80 overflow-y-auto overflow-hidden">
           {isAddr && (
-            <button onClick={() => pick(dq)} className="w-full text-left px-3.5 py-2.5 text-xs hover:bg-white/5 border-b border-white/5 text-[#d6b87a]">
+            <button onClick={() => pick(dq)} className="w-full text-left px-3.5 py-2.5 text-xs hover:bg-white/5 bg-gradient-to-b from-white/[0.04] to-transparent text-[#d6b87a]">
               Open contract {short(dq, 6)}
             </button>
           )}
@@ -210,7 +231,7 @@ function TokenSearch({ onSelect }) {
           )}
           {!isFetching && results.map((t) => (
             <button key={t.address} onClick={() => pick(t.address)} className="w-full flex items-center justify-between gap-2 px-3.5 py-2.5 text-xs hover:bg-white/5 text-left">
-              <span className="truncate"><span className="font-bold text-white">{t.symbol}</span> <span className="text-[#a39d8d]">{t.name}</span></span>
+              <span className="truncate"><span className="font-bold text-white">{safeText(t.symbol)}</span> <span className="text-[#a39d8d]">{safeText(t.name, 48)}</span></span>
               <span className="text-[#555143] shrink-0">{fmtUsd(t.marketCap)}</span>
             </button>
           ))}
@@ -220,7 +241,7 @@ function TokenSearch({ onSelect }) {
   )
 }
 
-function TopBar({ onSelect, solAddress, solBalance, paperCash }) {
+function TopBar({ onSelect, solAddress, solBalance, paperCash, onResetLayout }) {
   const { ready, authenticated, login, logout } = usePrivy()
   const [copied, setCopied] = useState(false)
 
@@ -230,30 +251,33 @@ function TopBar({ onSelect, solAddress, solBalance, paperCash }) {
   }
 
   return (
-    <header className="relative z-10 flex flex-col md:flex-row md:items-center gap-2.5 md:gap-4 px-4 py-3 bg-black/30 backdrop-blur-xl border-b border-white/10">
+    <header className="relative z-10 flex flex-col md:flex-row md:items-center gap-2.5 md:gap-4 px-4 py-3 bg-black/30 backdrop-blur-xl">
       <div className="flex items-center gap-2.5 shrink-0">
-        <div className="p-2 rounded-xl bg-gradient-to-br from-[#3e4d26] to-[#1f2910] border border-[#9eae84]/30 text-[#9eae84] shadow-[0_0_20px_-4px_rgba(158,174,132,0.6)]">
+        <div className="p-2 rounded-xl bg-gradient-to-br from-[#3e4d26] to-[#1f2910] text-[#9eae84] shadow-[0_0_20px_-4px_rgba(158,174,132,0.6)]">
           <Zap className="w-4 h-4" />
         </div>
         <h1 className="text-sm font-bold font-display tracking-tight text-white">AXIOM TERMINAL</h1>
-        <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#d6b87a]/10 text-[#d6b87a] border border-[#d6b87a]/30 uppercase tracking-wider">Paper</span>
+        <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#d6b87a]/15 text-[#d6b87a] uppercase tracking-wider">Paper</span>
       </div>
 
       <TokenSearch onSelect={onSelect} />
 
       <div className="flex items-center gap-2 md:ml-auto text-xs flex-wrap">
-        <div className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 backdrop-blur-md" title="Paper-trading cash balance">
+        <div className="px-3 py-1.5 rounded-full bg-white/5 backdrop-blur-md" title="Paper-trading cash balance">
           <span className="text-[#555143] mr-1">PAPER</span>
           <span className="text-white font-bold">{paperCash == null ? '--' : fmtUsd(paperCash)}</span>
         </div>
+        <button onClick={onResetLayout} title="Reset panel layout" className="p-2 rounded-full bg-white/5 hover:bg-white/10 text-[#a39d8d] hover:text-white backdrop-blur-md transition">
+          <RotateCcw className="w-3.5 h-3.5" />
+        </button>
         {!ready ? (
           <Skel className="h-8 w-28 rounded-full" />
         ) : !authenticated ? (
-          <button onClick={login} className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-gradient-to-r from-[#3e4d26] to-[#566838] hover:brightness-110 text-white font-semibold border border-[#9eae84]/40 shadow-[0_8px_24px_-8px_rgba(158,174,132,0.5)] transition">
+          <button onClick={login} className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-gradient-to-r from-[#3e4d26] to-[#566838] hover:brightness-110 text-white font-semibold shadow-[0_8px_24px_-8px_rgba(158,174,132,0.5)] transition">
             <LogIn className="w-3.5 h-3.5" /> Connect Wallet
           </button>
         ) : (
-          <div className="flex items-center gap-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-md px-3 py-1.5">
+          <div className="flex items-center gap-2 rounded-full bg-white/5 backdrop-blur-md px-3 py-1.5">
             <Wallet className="w-3.5 h-3.5 text-[#9eae84]" />
             {solAddress ? (
               <>
@@ -281,10 +305,10 @@ const SOURCE_LABEL = { radar: 'Radar', 'activity-v0': 'Activity v0' }
 const captionFor = (sig) => (sig?.source === 'radar' ? RADAR_CAPTION : SIGNAL_CAPTION)
 const RADAR_OFF_HINT = 'Radar is off. Set ENABLE_RADAR=true on the backend to see new launches.'
 const LEVEL_STYLE = {
-  QUIET: { text: 'text-[#a39d8d]', border: 'border-[#555143]', bar: 'bg-[#555143]' },
-  WARMING: { text: 'text-[#d6b87a]', border: 'border-[#d6b87a]/50', bar: 'bg-[#d6b87a]' },
-  ACTIVE: { text: 'text-[#9eae84]', border: 'border-[#9eae84]/60', bar: 'bg-[#9eae84]' },
-  HOT: { text: 'text-[#d35c4a]', border: 'border-[#d35c4a]/60', bar: 'bg-[#d35c4a]' },
+  QUIET: { text: 'text-[#a39d8d]', chip: 'bg-[#555143]/20', bar: 'bg-[#555143]' },
+  WARMING: { text: 'text-[#d6b87a]', chip: 'bg-[#d6b87a]/15', bar: 'bg-[#d6b87a]' },
+  ACTIVE: { text: 'text-[#9eae84]', chip: 'bg-[#9eae84]/15', bar: 'bg-[#9eae84]' },
+  HOT: { text: 'text-[#d35c4a]', chip: 'bg-[#d35c4a]/15', bar: 'bg-[#d35c4a]' },
 }
 const COMPONENT_LABELS = {
   volume_accel: 'Volume vs typical',
@@ -304,7 +328,7 @@ const COMPONENT_LABELS = {
 function SourceTag({ source }) {
   if (!source) return null
   return (
-    <span className={`shrink-0 text-[9px] px-1.5 py-0.5 rounded-full border uppercase tracking-wider ${source === 'radar' ? 'text-[#9eae84] border-[#9eae84]/40 bg-[#9eae84]/5' : 'text-[#555143] border-white/10'}`}
+    <span className={`shrink-0 text-[9px] px-1.5 py-0.5 rounded-full uppercase tracking-wider ${source === 'radar' ? 'text-[#9eae84] bg-[#9eae84]/10' : 'text-[#555143] bg-white/5'}`}
       title={`Score source: ${SOURCE_LABEL[source] || source}`}>{source === 'radar' ? 'radar' : 'v0'}</span>
   )
 }
@@ -312,7 +336,7 @@ function SourceTag({ source }) {
 function FlagBadge({ f }) {
   const danger = f.severity === 'danger'
   return (
-    <span title={f.detail} className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border backdrop-blur-sm ${danger ? 'border-[#d35c4a]/50 text-[#d35c4a] bg-[#d35c4a]/10' : 'border-[#d6b87a]/40 text-[#d6b87a] bg-[#d6b87a]/5'}`}>
+    <span title={f.detail} className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full backdrop-blur-sm ${danger ? 'text-[#d35c4a] bg-[#d35c4a]/15' : 'text-[#d6b87a] bg-[#d6b87a]/15'}`}>
       <AlertTriangle className="w-3 h-3" />{f.label}
     </span>
   )
@@ -325,19 +349,19 @@ function SignalBadge({ sig }) {
   return (
     <span
       title={`${SOURCE_LABEL[sig.source] || 'Activity'} score ${sig.score} (${sig.level})${low ? ', low confidence' : ''}. Not a prediction.`}
-      className={`shrink-0 min-w-[28px] text-center px-1.5 py-0.5 rounded-full text-[10px] font-bold border ${st.text} ${st.border} ${low ? 'opacity-60 border-dashed' : ''}`}
+      className={`shrink-0 min-w-[28px] text-center px-1.5 py-0.5 rounded-full text-[10px] font-bold ${st.text} ${st.chip} ${low ? 'opacity-60' : ''}`}
     >{Math.round(sig.score)}</span>
   )
 }
 
 function SignalPanel({ address }) {
-  const q = useGetMemecoinSignalQuery(address, { skip: !address, pollingInterval: 30000 })
+  const q = useGetMemecoinSignalQuery(address, { skip: !address, pollingInterval: usePoll(POLL.signal) })
   const sig = q.data
   const st = LEVEL_STYLE[sig?.level] || LEVEL_STYLE.QUIET
   return (
-    <div className="px-4 py-3 border-t border-white/10">
+    <div className="px-4 py-3">
       <div className="flex items-center gap-2 mb-1.5">
-        <span className="text-[10px] text-[#555143] uppercase">Activity signal</span>
+        <span className="text-[11px] text-[#8a8574] uppercase tracking-wide">Activity signal</span>
         <SourceTag source={sig?.source} />
         {q.isFetching && !q.isLoading && <Loader2 className="w-3 h-3 animate-spin text-[#555143]" />}
       </div>
@@ -382,6 +406,33 @@ function SignalPanel({ address }) {
 }
 
 /* ─── Discovery columns ──────────────────────────────────────────────────── */
+// Compact multi-timeframe trend indicator for a discovery row. Real per-row OHLCV would mean one
+// extra request per visible token (list can show 40) against a shared 60req/min limiter, so this is
+// built from the interval deltas the list endpoints already return — a shape, not a tick chart.
+function MiniTrend({ points }) {
+  const known = points.map((p) => p.value).filter((v) => v != null)
+  if (known.length === 0) return null
+  const max = Math.max(0.5, ...known.map((v) => Math.abs(v)))
+  return (
+    <div
+      className="flex items-end gap-0.5 h-5 w-5 shrink-0"
+      title={points.map((p) => `${p.label} ${p.value == null ? 'n/a' : fmtPct(p.value)}`).join(' · ')}
+    >
+      {points.map((p, i) => {
+        const v = p.value
+        const h = v == null ? 20 : Math.max(20, Math.min(100, (Math.abs(v) / max) * 100))
+        return (
+          <div
+            key={i}
+            className="flex-1 rounded-full"
+            style={{ height: `${h}%`, background: v == null ? 'rgba(255,255,255,0.12)' : v >= 0 ? '#7ea968' : '#d35c4a' }}
+          />
+        )
+      })}
+    </div>
+  )
+}
+
 function TokenRow({ t, active, onSelect, sig }) {
   return (
     <button
@@ -390,20 +441,23 @@ function TokenRow({ t, active, onSelect, sig }) {
     >
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0 flex items-center gap-2">
-          <div className="w-8 h-8 shrink-0 rounded-full bg-white/5 ring-1 ring-white/10 text-[10px] flex items-center justify-center font-bold text-[#9eae84] overflow-hidden">
-            {t.image ? <img src={t.image} alt="" className="w-full h-full object-cover" loading="lazy" /> : (t.symbol || '?').slice(0, 2)}
+          <div className="w-9 h-9 shrink-0 rounded-full bg-white/5 ring-1 ring-white/10 text-[11px] flex items-center justify-center font-bold text-[#9eae84] overflow-hidden">
+            {t.image ? <img src={t.image} alt="" className="w-full h-full object-cover" loading="lazy" /> : safeText(t.symbol || '?', 4).slice(0, 2)}
           </div>
           <div className="min-w-0">
-            <div className="text-xs font-bold text-white flex items-center gap-1.5"><SignalBadge sig={sig} /><SourceTag source={sig?.source} /><span className="truncate">{t.symbol} <span className="font-normal text-[#a39d8d]">{t.name}</span></span></div>
-            <div className="text-[10px] text-[#555143]">{short(t.address)}{t.ageMinutes != null && ` · ${fmtAge(t.ageMinutes)}`}</div>
+            <div className="text-sm font-bold text-white flex items-center gap-1.5"><SignalBadge sig={sig} /><SourceTag source={sig?.source} /><span className="truncate">{safeText(t.symbol)} <span className="font-normal text-[#b3ad9d]">{safeText(t.name, 48)}</span></span></div>
+            <div className="text-[11px] text-[#6b6657]">{short(t.address)}{t.ageMinutes != null && ` · ${fmtAge(t.ageMinutes)}`}</div>
           </div>
         </div>
-        <div className="text-right shrink-0">
-          <div className="text-xs text-white">{fmtUsd(t.marketCap)}</div>
-          <div className={`text-[10px] ${pctColor(t.change24h ?? t.change1h)}`}>{fmtPct(t.change24h ?? t.change1h)}</div>
+        <div className="flex items-center gap-2 shrink-0">
+          <MiniTrend points={[{ label: '5m', value: t.change5m }, { label: '1h', value: t.change1h }, { label: '24h', value: t.change24h }]} />
+          <div className="text-right">
+            <div className="text-sm text-white">{fmtUsd(t.marketCap)}</div>
+            <div className={`text-[11px] font-semibold ${pctColor(t.change24h ?? t.change1h)}`}>{fmtPct(t.change24h ?? t.change1h)}</div>
+          </div>
         </div>
       </div>
-      <div className="flex gap-3 mt-1.5 text-[10px] text-[#555143]">
+      <div className="flex gap-3 mt-1.5 text-[11px] text-[#6b6657]">
         <span>V {fmtUsd(t.volume24h)}</span><span>L {fmtUsd(t.liquidity)}</span>{t.holders != null && <span>H {fmtNum(t.holders)}</span>}
       </div>
       {t.bondingProgress != null && (
@@ -427,28 +481,35 @@ function RadarRow({ s, active, onSelect }) {
     >
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <div className="text-xs font-bold text-white flex items-center gap-1.5">
-            {sig ? <SignalBadge sig={sig} /> : <span className="shrink-0 min-w-[28px] text-center px-1.5 py-0.5 rounded-full text-[10px] border border-dashed border-[#555143] text-[#555143]" title="No market snapshot yet">new</span>}
+          <div className="text-sm font-bold text-white flex items-center gap-1.5">
+            {sig ? <SignalBadge sig={sig} /> : <span className="shrink-0 min-w-[28px] text-center px-1.5 py-0.5 rounded-full text-[10px] bg-white/5 text-[#555143]" title="No market snapshot yet">new</span>}
             <SourceTag source="radar" />
-            <span className="truncate">{s.symbol || '?'} <span className="font-normal text-[#a39d8d]">{s.name}</span></span>
+            <span className="truncate">{safeText(s.symbol) || '?'} <span className="font-normal text-[#b3ad9d]">{safeText(s.name, 48)}</span></span>
           </div>
-          <div className="text-[10px] text-[#555143]">{short(s.address)} · {fmtAge(l.ageMin)} · {l.state}{l.curveProgress != null ? ` ${Math.round(Math.min(l.curveProgress, 1) * 100)}%` : ''}</div>
+          <div className="text-[11px] text-[#6b6657]">{short(s.address)} · {fmtAge(l.ageMin)} · {l.state}{l.curveProgress != null ? ` ${Math.round(Math.min(l.curveProgress, 1) * 100)}%` : ''}</div>
         </div>
-        <div className="text-right shrink-0">
-          <div className="text-xs text-white">{fmtUsd(s.market?.fdv)}</div>
-          <div className={`text-[10px] ${pctColor(s.features?.price_chg_15m != null ? s.features.price_chg_15m * 100 : null)}`}>{s.features?.price_chg_15m != null ? `${fmtPct(s.features.price_chg_15m * 100)} 15m` : '--'}</div>
+        <div className="flex items-center gap-2 shrink-0">
+          <MiniTrend points={[
+            { label: '5m', value: s.features?.price_chg_5m != null ? s.features.price_chg_5m * 100 : null },
+            { label: '15m', value: s.features?.price_chg_15m != null ? s.features.price_chg_15m * 100 : null },
+            { label: '60m', value: s.features?.price_chg_60m != null ? s.features.price_chg_60m * 100 : null },
+          ]} />
+          <div className="text-right">
+            <div className="text-sm text-white">{fmtUsd(s.market?.fdv)}</div>
+            <div className={`text-[11px] font-semibold ${pctColor(s.features?.price_chg_15m != null ? s.features.price_chg_15m * 100 : null)}`}>{s.features?.price_chg_15m != null ? `${fmtPct(s.features.price_chg_15m * 100)} 15m` : '--'}</div>
+          </div>
         </div>
       </div>
       <div className="flex flex-wrap gap-1.5 mt-1.5">
         {danger.map((f) => <FlagBadge key={f.code} f={f} />)}
         {warn.map((f) => <FlagBadge key={f.code} f={f} />)}
-        {s.passesSafetyGate && <span className="text-[10px] px-2 py-0.5 rounded-full border border-[#7ea968]/40 text-[#7ea968] bg-[#7ea968]/5" title="Passed the radar safety gate (authorities, holder concentration, insiders, creator history)">vetted</span>}
-        {p.boostTotal > 0 && <span className="text-[10px] px-2 py-0.5 rounded-full border border-[#d6b87a]/40 text-[#d6b87a] bg-[#d6b87a]/5" title="Paid DexScreener boost">boost</span>}
-        {p.hasProfile && <span className="text-[10px] px-2 py-0.5 rounded-full border border-white/10 text-[#a39d8d]" title="Paid DexScreener profile">profile</span>}
-        {p.cto && <span className="text-[10px] px-2 py-0.5 rounded-full border border-white/10 text-[#a39d8d]" title="Community takeover">CTO</span>}
-        {p.twitter && <span className="text-[10px] px-2 py-0.5 rounded-full border border-white/10 text-[#555143]">X</span>}
-        {p.telegram && <span className="text-[10px] px-2 py-0.5 rounded-full border border-white/10 text-[#555143]">TG</span>}
-        {p.website && <span className="text-[10px] px-2 py-0.5 rounded-full border border-white/10 text-[#555143]">web</span>}
+        {s.passesSafetyGate && <span className="text-[10px] px-2 py-0.5 rounded-full text-[#7ea968] bg-[#7ea968]/15" title="Passed the radar safety gate (authorities, holder concentration, insiders, creator history)">vetted</span>}
+        {p.boostTotal > 0 && <span className="text-[10px] px-2 py-0.5 rounded-full text-[#d6b87a] bg-[#d6b87a]/15" title="Paid DexScreener boost">boost</span>}
+        {p.hasProfile && <span className="text-[10px] px-2 py-0.5 rounded-full text-[#a39d8d] bg-white/5" title="Paid DexScreener profile">profile</span>}
+        {p.cto && <span className="text-[10px] px-2 py-0.5 rounded-full text-[#a39d8d] bg-white/5" title="Community takeover">CTO</span>}
+        {p.twitter && <span className="text-[10px] px-2 py-0.5 rounded-full text-[#555143] bg-white/5">X</span>}
+        {p.telegram && <span className="text-[10px] px-2 py-0.5 rounded-full text-[#555143] bg-white/5">TG</span>}
+        {p.website && <span className="text-[10px] px-2 py-0.5 rounded-full text-[#555143] bg-white/5">web</span>}
       </div>
     </button>
   )
@@ -456,13 +517,13 @@ function RadarRow({ s, active, onSelect }) {
 
 function RadarList({ selected, onSelect }) {
   const [sort, setSort] = useState('new')
-  const q = useGetRadarSignalsQuery({ sort, limit: 40 }, { pollingInterval: 10000 })
+  const q = useGetRadarSignalsQuery({ sort, limit: 40 }, { pollingInterval: usePoll(POLL.radar) })
   const d = q.data
   return (
     <>
-      <div className="px-3 py-2 border-b border-white/10 flex items-center gap-2 text-[10px] text-[#a39d8d]" title={RADAR_CAPTION}>
+      <div className="px-3 py-2 flex items-center gap-2 text-[10px] text-[#a39d8d]" title={RADAR_CAPTION}>
         <span>Radar</span>
-        <select value={sort} onChange={(e) => setSort(e.target.value)} className="rounded-full bg-black/30 border border-white/10 text-[10px] px-2.5 py-1">
+        <select value={sort} onChange={(e) => setSort(e.target.value)} className="rounded-full bg-black/30 text-[10px] px-2.5 py-1">
           <option value="new">Newest launches</option>
           <option value="score">Top score</option>
         </select>
@@ -484,15 +545,18 @@ function RadarList({ selected, onSelect }) {
           d.signals.map((s) => <RadarRow key={s.address} s={s} active={s.address === selected} onSelect={onSelect} />)
         )}
       </div>
-      <div className="px-3 py-2 border-t border-white/10 text-[10px] text-[#555143] italic">{RADAR_CAPTION}</div>
+      <div className="px-3 py-2 text-[10px] text-[#555143] italic">{RADAR_CAPTION}</div>
     </>
   )
 }
 
 function DiscoveryPanel({ selected, onSelect }) {
   const [tab, setTab] = useState('radar')
-  const trending = useGetTrendingMemecoinsQuery(undefined, { pollingInterval: 15000 })
-  const fresh = useGetNewMemecoinsQuery(undefined, { pollingInterval: 15000 })
+  // The default (Radar) tab does not need these lists, so they only poll while another tab is open.
+  const listPoll = usePoll(tab === 'radar' ? 0 : POLL.lists)
+  const sigPoll = usePoll(POLL.signals)
+  const trending = useGetTrendingMemecoinsQuery(undefined, { pollingInterval: listPoll })
+  const fresh = useGetNewMemecoinsQuery(undefined, { pollingInterval: listPoll })
 
   const finalStretch = useMemo(() => {
     const all = [...(fresh.data || []), ...(trending.data || [])]
@@ -504,8 +568,8 @@ function DiscoveryPanel({ selected, onSelect }) {
 
   const [sortBy, setSortBy] = useState('default')
   const [minLevel, setMinLevel] = useState(0)
-  const sigNew = useGetMemecoinSignalsQuery('new', { pollingInterval: 30000 })
-  const sigTrend = useGetMemecoinSignalsQuery('trending', { pollingInterval: 30000 })
+  const sigNew = useGetMemecoinSignalsQuery('new', { skip: tab === 'radar', pollingInterval: sigPoll })
+  const sigTrend = useGetMemecoinSignalsQuery('trending', { skip: tab === 'radar', pollingInterval: sigPoll })
   const sigMap = useMemo(() => {
     const m = new Map()
     for (const s of [...(sigNew.data || []), ...(sigTrend.data || [])]) m.set(s.address, s)
@@ -524,7 +588,7 @@ function DiscoveryPanel({ selected, onSelect }) {
 
   return (
     <Panel className="flex flex-col h-[420px] lg:h-full lg:min-h-0">
-      <div className="px-3 pt-3 pb-2 border-b border-white/10 flex items-center justify-between gap-2">
+      <div className="px-3 pt-3 pb-2 flex items-center justify-between gap-2">
         <Tabs
           value={tab}
           onChange={setTab}
@@ -535,16 +599,16 @@ function DiscoveryPanel({ selected, onSelect }) {
             { id: 'trending', label: 'Trending', icon: <Flame className="w-3 h-3" /> },
           ]}
         />
-        {isMockData(q.data) && <span className="text-[9px] px-2 py-0.5 rounded-full border border-[#d6b87a]/40 text-[#d6b87a] shrink-0">MOCK</span>}
+        {isMockData(q.data) && <span className="text-[9px] px-2 py-0.5 rounded-full bg-[#d6b87a]/15 text-[#d6b87a] shrink-0">MOCK</span>}
       </div>
       {tab === 'radar' ? <RadarList selected={selected} onSelect={onSelect} /> : (<>
-      <div className="px-3 py-2 border-b border-white/10 flex items-center gap-2 text-[10px] text-[#a39d8d]" title={SIGNAL_CAPTION}>
+      <div className="px-3 py-2 flex items-center gap-2 text-[10px] text-[#a39d8d]" title={SIGNAL_CAPTION}>
         <span>Activity</span>
-        <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="rounded-full bg-black/30 border border-white/10 text-[10px] px-2.5 py-1">
+        <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="rounded-full bg-black/30 text-[10px] px-2.5 py-1">
           <option value="default">Default order</option>
           <option value="score">Sort by score</option>
         </select>
-        <select value={minLevel} onChange={(e) => setMinLevel(Number(e.target.value))} className="rounded-full bg-black/30 border border-white/10 text-[10px] px-2.5 py-1">
+        <select value={minLevel} onChange={(e) => setMinLevel(Number(e.target.value))} className="rounded-full bg-black/30 text-[10px] px-2.5 py-1">
           <option value={0}>All</option>
           <option value={25}>Warming+ (25)</option>
           <option value={50}>Active+ (50)</option>
@@ -575,27 +639,28 @@ function DiscoveryPanel({ selected, onSelect }) {
 function Stat({ label, value, className = '' }) {
   return (
     <div className="min-w-0">
-      <div className="text-[10px] text-[#555143] uppercase">{label}</div>
-      <div className={`text-xs font-bold truncate ${className || 'text-white'}`}>{value}</div>
+      <div className="text-[11px] text-[#6b6657] uppercase">{label}</div>
+      <div className={`text-sm font-bold truncate ${className || 'text-white'}`}>{value}</div>
     </div>
   )
 }
 
 function TokenHeader({ q }) {
   const t = q.data
-  if (q.isLoading) return <div className="p-3 grid grid-cols-3 md:grid-cols-6 gap-3">{Array.from({ length: 6 }).map((_, i) => <Skel key={i} className="h-8" />)}</div>
-  if (q.isError) return <ErrorBox error={q.error} onRetry={q.refetch} label="Could not load token" />
+  // Stale-while-revalidate: a transient poll error only blanks the header if we never had data at all.
+  if (!t && q.isLoading) return <div className="p-3 grid grid-cols-3 md:grid-cols-6 gap-3">{Array.from({ length: 6 }).map((_, i) => <Skel key={i} className="h-8" />)}</div>
+  if (!t && q.isError) return <ErrorBox error={q.error} onRetry={q.refetch} label="Could not load token" />
   if (!t) return null
   const ch = t.change24h ?? t.change1h
   return (
     <div className="p-4 flex flex-wrap items-center gap-x-6 gap-y-2">
       <div className="min-w-0">
-        <div className="text-sm font-bold text-white font-display">{t.symbol} <span className="text-[#a39d8d] font-normal text-xs">{t.name}</span></div>
-        <div className="text-[10px] text-[#555143]">{short(t.address, 6)}</div>
+        <div className="text-base font-bold text-white font-display">{safeText(t.symbol)} <span className="text-[#a39d8d] font-normal text-sm">{safeText(t.name, 48)}</span></div>
+        <div className="text-[11px] text-[#6b6657]">{short(t.address, 6)}</div>
       </div>
       <div>
-        <div className="text-lg font-bold text-white leading-none">{fmtPrice(t.price)}</div>
-        <div className={`text-[11px] flex items-center ${pctColor(ch)}`}>
+        <div className="text-xl font-bold text-white leading-none">{fmtPrice(t.price)}</div>
+        <div className={`text-xs flex items-center ${pctColor(ch)}`}>
           {ch != null && (ch >= 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />)}{fmtPct(ch)}
         </div>
       </div>
@@ -604,20 +669,21 @@ function TokenHeader({ q }) {
       <Stat label="Volume 24h" value={fmtUsd(t.volume24h)} />
       <Stat label="Holders" value={fmtNum(t.holders)} />
       {t.change1h != null && <Stat label="1h" value={fmtPct(t.change1h)} className={pctColor(t.change1h)} />}
-      {isMockData(t) && <span className="text-[9px] px-2 py-0.5 rounded-full border border-[#d6b87a]/40 text-[#d6b87a]">MOCK DATA</span>}
+      {isMockData(t) && <span className="text-[9px] px-2 py-0.5 rounded-full bg-[#d6b87a]/15 text-[#d6b87a]">MOCK DATA</span>}
+      {q.isError && <span className="text-[9px] px-2 py-0.5 rounded-full bg-[#d6b87a]/15 text-[#d6b87a]" title="Showing the last known values; reconnecting">reconnecting</span>}
     </div>
   )
 }
 
 function ChartPanel({ address }) {
   const [tf, setTf] = useState('1m')
-  const q = useGetMemecoinOhlcvQuery({ address, tf }, { skip: !address, pollingInterval: 10000 })
+  const q = useGetMemecoinOhlcvQuery({ address, tf }, { skip: !address, pollingInterval: usePoll(CHART_POLL[tf]) })
   const candles = Array.isArray(q.data) ? q.data : []
 
   return (
     <div className="flex flex-col h-[340px] lg:h-full lg:min-h-0">
-      <div className="flex items-center gap-2 px-3 py-2 border-y border-white/10">
-        <div className="flex items-center gap-1 rounded-full bg-black/30 border border-white/5 p-1">
+      <div className="flex items-center gap-2 px-3 py-2">
+        <div className="flex items-center gap-1 rounded-full bg-black/30 p-1">
           {TIMEFRAMES.map((x) => (
             <button
               key={x}
@@ -627,19 +693,26 @@ function ChartPanel({ address }) {
           ))}
         </div>
         {q.isFetching && !q.isLoading && <Loader2 className="w-3 h-3 ml-1 animate-spin text-[#555143]" />}
-        {isMockData(q.data) && <span className="ml-auto text-[9px] px-2 py-0.5 rounded-full border border-[#d6b87a]/40 text-[#d6b87a]">MOCK</span>}
+        {isMockData(q.data) && <span className="ml-auto text-[9px] px-2 py-0.5 rounded-full bg-[#d6b87a]/15 text-[#d6b87a]">MOCK</span>}
       </div>
       <div className="relative flex-1 min-h-0">
         {!address ? (
-          <div className="absolute inset-0 flex items-center justify-center text-xs text-[#555143]">Select a token to load its chart</div>
+          <div className="absolute inset-0 flex items-center justify-center text-xs text-[#6b6657]">Select a token to load its chart</div>
+        ) : candles.length > 0 ? (
+          // Stale-while-revalidate: once we have candles, keep showing them through a transient poll
+          // error instead of swapping to a full error box (that was the main source of "chart unavailable" flicker).
+          <>
+            <MemeChart candles={candles} fitKey={`${address}:${tf}`} />
+            {q.isError && (
+              <span className="absolute top-2 right-2 text-[9px] px-2 py-0.5 rounded-full bg-[#d6b87a]/15 text-[#d6b87a] backdrop-blur-sm">reconnecting</span>
+            )}
+          </>
         ) : q.isLoading ? (
           <Skel className="absolute inset-0" />
         ) : q.isError ? (
           <div className="absolute inset-0 flex items-center justify-center"><ErrorBox error={q.error} onRetry={q.refetch} label="Chart unavailable" /></div>
-        ) : candles.length === 0 ? (
-          <div className="absolute inset-0 flex items-center justify-center text-xs text-[#555143]">No candle data yet for this token</div>
         ) : (
-          <MemeChart candles={candles} fitKey={`${address}:${tf}`} />
+          <div className="absolute inset-0 flex items-center justify-center text-xs text-[#6b6657]">No candle data yet for this token</div>
         )}
       </div>
     </div>
@@ -647,9 +720,11 @@ function ChartPanel({ address }) {
 }
 
 /* ─── Order ticket ───────────────────────────────────────────────────────── */
-function OrderTicket({ token, position, onFilled }) {
+function OrderTicket({ token, position }) {
   const [side, setSide] = useState('buy')
   const [amount, setAmount] = useState('0.5')
+  // Exact token amount chosen via the 25/50/75/100% buttons (sell side); typing an SOL amount clears it
+  const [sellPct, setSellPct] = useState(null)
   const [slippage, setSlippage] = useState('15') // percent; memecoins need wide slippage
   const [priority, setPriority] = useState('0.001') // SOL
   const [quote, setQuote] = useState(null)
@@ -659,13 +734,17 @@ function OrderTicket({ token, position, onFilled }) {
   const [getQuote] = useQuoteMemecoinMutation()
   const [trade, { isLoading: trading }] = useTradeMemecoinMutation()
   const reqId = useRef(0)
+  useEffect(() => { setSellPct(null) }, [token?.address])
 
   const amountNum = parseFloat(amount)
   const slipNum = parseFloat(slippage)
-  const validAmount = amountNum > 0 && isFinite(amountNum)
+  const heldTokens = position?.tokens > 0 ? position.tokens : 0
+  const sellTokens = side === 'sell' && sellPct != null && heldTokens > 0 ? heldTokens * (sellPct / 100) : null
+  const validAmount = sellTokens != null || (amountNum > 0 && isFinite(amountNum))
   const validSlip = slipNum >= 0 && slipNum <= 100
   const slippageBps = Math.round((validSlip ? slipNum : 0) * 100)
   const address = token?.address
+  const orderAmount = sellTokens != null ? { amountTokens: sellTokens } : { amountSol: amountNum }
 
   // Debounced quote on every relevant input change
   useEffect(() => {
@@ -674,76 +753,72 @@ function OrderTicket({ token, position, onFilled }) {
     const id = ++reqId.current
     setQuoting(true)
     const t = setTimeout(async () => {
-      const res = await getQuote({ address, side, amountSol: amountNum, slippageBps })
+      const res = await getQuote({ address, side, ...(sellTokens != null ? { amountTokens: sellTokens } : { amountSol: amountNum }), slippageBps })
       if (id !== reqId.current) return
       setQuoting(false)
       if (res.error) setQuoteErr(errMsg(res.error)); else setQuote(res.data)
     }, 400)
     return () => clearTimeout(t)
-  }, [address, side, amountNum, slippageBps, validAmount, validSlip, getQuote])
-
-  const positionValueSol = position && position.avgPrice > 0 && token?.price
-    ? position.costSol * (token.price / position.avgPrice) : 0
+  }, [address, side, amountNum, sellTokens, slippageBps, validAmount, validSlip, getQuote])
 
   const submit = async () => {
-    if (!address || !validAmount || !validSlip) return
+    if (!address || !validAmount || !validSlip || trading) return
     setStatus(null)
-    const body = { address, side, amountSol: amountNum, slippageBps, priorityFeeSol: parseFloat(priority) || 0 }
+    // clientOrderId lets the server collapse an accidental double submit into one fill
+    const body = { address, side, ...orderAmount, slippageBps, clientOrderId: newOrderId() }
     const res = await trade(body)
     if (res.error) { setStatus({ ok: false, msg: errMsg(res.error) }); return }
     const r = res.data || {}
-    const price = r.fillPrice ?? r.price ?? token.price
-    onFilled({
-      id: r.id ?? `${Date.now()}`,
-      address, symbol: token.symbol, side, amountSol: amountNum, price,
-      amountToken: r.tokens ?? r.amountToken ?? 0,
-      ts: Date.now(), mock: isMockData(r),
-    })
-    setStatus({ ok: true, msg: `${side === 'buy' ? 'Bought' : 'Sold'} ${amountNum} SOL of ${token.symbol}${isMockData(r) ? ' (mock fill)' : ' (paper)'}` })
+    setSellPct(null)
+    const what = side === 'buy' ? `${fmtUsd(r.usd)} of ${safeText(r.symbol || token.symbol)}` : `${fmtTokens(r.tokens)} ${safeText(r.symbol || token.symbol)} for ${fmtUsd(r.usd)}`
+    setStatus({ ok: true, msg: `${side === 'buy' ? 'Bought' : 'Sold'} ${what} (paper)${r.realizedPnl != null ? ` · realized ${r.realizedPnl >= 0 ? '+' : '-'}${fmtUsd(Math.abs(r.realizedPnl))}` : ''}` })
   }
 
   const buy = side === 'buy'
   return (
-    <Panel className="flex flex-col">
-      <div className="grid grid-cols-2 gap-1 m-3 mb-0 p-1 rounded-full bg-black/30 border border-white/5">
+    <Panel className="flex flex-col" tint={buy ? 'from-[#7ea968]/[0.08] to-transparent' : 'from-[#d35c4a]/[0.08] to-transparent'}>
+      <div className="grid grid-cols-2 gap-1.5 m-3 mb-0 p-1.5 rounded-full bg-black/30">
         {['buy', 'sell'].map((s) => (
           <button
             key={s}
             onClick={() => { setSide(s); setStatus(null) }}
-            className={`py-2 rounded-full text-xs font-bold uppercase tracking-wider transition-all ${
+            className={`flex items-center justify-center gap-1.5 py-3 rounded-full text-sm font-extrabold uppercase tracking-wider transition-all ${
               side === s
                 ? (s === 'buy'
-                    ? 'bg-gradient-to-r from-[#3e4d26] to-[#566838] text-white shadow-[0_6px_20px_-6px_rgba(126,169,104,0.6)]'
-                    : 'bg-gradient-to-r from-[#803e26] to-[#a4583c] text-white shadow-[0_6px_20px_-6px_rgba(211,92,74,0.6)]')
+                    ? 'bg-gradient-to-r from-[#3e4d26] to-[#7ea968] text-white shadow-[0_8px_26px_-6px_rgba(126,169,104,0.75)] scale-[1.02]'
+                    : 'bg-gradient-to-r from-[#803e26] to-[#d35c4a] text-white shadow-[0_8px_26px_-6px_rgba(211,92,74,0.75)] scale-[1.02]')
                 : 'text-[#a39d8d] hover:text-white'
             }`}
-          >{s}</button>
+          >
+            {s === 'buy' ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
+            {s}
+          </button>
         ))}
       </div>
 
       <div className="p-4 space-y-3.5">
-        <div className="text-[11px] text-[#a39d8d] truncate">
-          {token ? <>Trading <span className="text-white font-bold">{token.symbol}</span> @ {fmtPrice(token.price)}</> : 'Select a token to trade'}
+        <div className={`text-sm truncate px-3 py-2 rounded-xl ${buy ? 'bg-[#7ea968]/10 text-[#9fc488]' : 'bg-[#d35c4a]/10 text-[#e08a7a]'}`}>
+          {token ? <><span className="font-extrabold text-white">{buy ? 'Buying' : 'Selling'} {safeText(token.symbol)}</span> @ {fmtPrice(token.price)}</> : 'Select a token to trade'}
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-[10px] text-[#555143] uppercase">Amount (SOL)</label>
+          <label className="text-[11px] text-[#8a8574] uppercase tracking-wide">Amount (SOL)</label>
           <div className="grid grid-cols-5 gap-1.5">
             {SOL_PRESETS.map((v) => (
-              <button key={v} onClick={() => setAmount(String(v))}
-                className={`py-1.5 rounded-lg text-[11px] font-bold border transition ${amountNum === v ? 'bg-[#3e4d26]/70 text-white border-[#9eae84]/50 shadow-[0_0_0_1px_rgba(158,174,132,0.3)]' : 'bg-black/30 text-[#a39d8d] border-white/10 hover:border-white/25'}`}>
+              <button key={v} onClick={() => { setAmount(String(v)); setSellPct(null) }}
+                className={`py-1.5 rounded-lg text-[11px] font-bold transition ${amountNum === v ? 'bg-[#3e4d26]/70 text-white shadow-[0_0_0_1px_rgba(158,174,132,0.3)]' : 'bg-black/30 text-[#a39d8d] hover:bg-white/10'}`}>
                 {v}
               </button>
             ))}
           </div>
-          <input type="number" min="0" step="any" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Custom amount"
-            className="w-full rounded-xl bg-black/30 border border-white/10 backdrop-blur-md px-3 py-2 text-xs text-white focus:outline-none focus:border-[#9eae84]/60 focus:ring-2 focus:ring-[#9eae84]/15 transition" />
+          <input type="number" min="0" step="any" value={sellTokens != null ? '' : amount} onChange={(e) => { setAmount(e.target.value); setSellPct(null) }} placeholder={sellTokens != null ? `${sellPct}% of position (${fmtTokens(sellTokens)})` : 'Custom amount'}
+            className="w-full rounded-xl bg-black/30 backdrop-blur-md px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-[#9eae84]/25 transition" />
           {!buy && (
             <div className="grid grid-cols-4 gap-1.5">
               {SELL_PCTS.map((p) => (
-                <button key={p} disabled={!positionValueSol}
-                  onClick={() => setAmount(String(+(positionValueSol * p / 100).toFixed(4)))}
-                  className="py-1.5 rounded-lg text-[11px] border border-white/10 text-[#a39d8d] hover:border-[#d35c4a]/60 hover:text-white disabled:opacity-40 disabled:hover:border-white/10 disabled:hover:text-[#a39d8d] transition">
+                <button key={p} disabled={!heldTokens}
+                  onClick={() => setSellPct(p)}
+                  className="py-1.5 rounded-lg text-[11px] text-[#a39d8d] bg-black/30 hover:bg-[#d35c4a]/15 hover:text-white disabled:opacity-40 disabled:hover:bg-black/30 disabled:hover:text-[#a39d8d] transition">
                   {p}%
                 </button>
               ))}
@@ -753,19 +828,19 @@ function OrderTicket({ token, position, onFilled }) {
 
         <div className="grid grid-cols-2 gap-2.5">
           <div>
-            <label className="text-[10px] text-[#555143] uppercase">Slippage (%)</label>
+            <label className="text-[11px] text-[#8a8574] uppercase tracking-wide">Slippage (%)</label>
             <input type="number" min="0" max="100" step="0.5" value={slippage} onChange={(e) => setSlippage(e.target.value)}
-              className={`w-full rounded-xl bg-black/30 border backdrop-blur-md px-3 py-1.5 text-xs text-[#9eae84] focus:outline-none focus:ring-2 focus:ring-[#9eae84]/15 transition ${validSlip ? 'border-white/10 focus:border-[#9eae84]/60' : 'border-[#d35c4a]/60'}`} />
+              className={`w-full rounded-xl bg-black/30 backdrop-blur-md px-3 py-1.5 text-xs text-[#9eae84] focus:outline-none focus:ring-2 transition ${validSlip ? 'focus:ring-[#9eae84]/25' : 'ring-2 ring-[#d35c4a]/60'}`} />
           </div>
           <div>
-            <label className="text-[10px] text-[#555143] uppercase">Priority fee (SOL)</label>
+            <label className="text-[11px] text-[#8a8574] uppercase tracking-wide">Priority fee (SOL)</label>
             <input type="number" min="0" step="0.0005" value={priority} onChange={(e) => setPriority(e.target.value)}
-              className="w-full rounded-xl bg-black/30 border border-white/10 backdrop-blur-md px-3 py-1.5 text-xs text-[#d6b87a] focus:outline-none focus:border-[#9eae84]/60 focus:ring-2 focus:ring-[#9eae84]/15 transition" />
+              className="w-full rounded-xl bg-black/30 backdrop-blur-md px-3 py-1.5 text-xs text-[#d6b87a] focus:outline-none focus:ring-2 focus:ring-[#9eae84]/25 transition" />
           </div>
         </div>
 
         {/* Quote */}
-        <div className="rounded-xl bg-black/30 border border-white/10 backdrop-blur-md p-3 text-[11px] space-y-1.5 min-h-[68px]">
+        <div className="rounded-xl bg-black/30 backdrop-blur-md p-3 text-[11px] space-y-1.5 min-h-[68px]">
           {quoting ? (
             <><Skel className="h-3 w-full" /><Skel className="h-3 w-2/3" /><Skel className="h-3 w-1/2" /></>
           ) : quoteErr ? (
@@ -774,7 +849,7 @@ function OrderTicket({ token, position, onFilled }) {
             <>
               <Row k={buy ? 'You receive' : 'You receive (SOL)'} v={fmtNum(buy ? quote.tokens : quote.amountSol)} />
               <Row k="Min received" v={fmtNum(quote.minReceived)} />
-              <Row k="Price impact" v={quote.priceImpactPct != null ? `${quote.priceImpactPct}%` : '--'} warn={quote.priceImpactPct > 5} />
+              <Row k="Price impact" v={quote.priceImpactPct != null ? `${Number(quote.priceImpactPct).toFixed(2)}%` : '--'} warn={quote.priceImpactPct > 5} />
               {quote.feeSol != null && <Row k="Fee" v={`${quote.feeSol} SOL`} />}
               {isMockData(quote) && <div className="text-[9px] text-[#d6b87a]">MOCK QUOTE</div>}
             </>
@@ -786,22 +861,22 @@ function OrderTicket({ token, position, onFilled }) {
         <button
           onClick={submit}
           disabled={!token || !validAmount || !validSlip || trading}
-          className={`w-full py-3 rounded-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none ${
+          className={`w-full py-3.5 rounded-full text-sm font-extrabold uppercase tracking-wider flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none ${
             buy
-              ? 'bg-gradient-to-r from-[#3e4d26] to-[#566838] hover:brightness-110 text-white shadow-[0_10px_30px_-10px_rgba(126,169,104,0.7)]'
-              : 'bg-gradient-to-r from-[#803e26] to-[#a4583c] hover:brightness-110 text-white shadow-[0_10px_30px_-10px_rgba(211,92,74,0.7)]'
+              ? 'bg-gradient-to-r from-[#3e4d26] to-[#7ea968] hover:brightness-110 text-white shadow-[0_14px_36px_-10px_rgba(126,169,104,0.8)]'
+              : 'bg-gradient-to-r from-[#803e26] to-[#d35c4a] hover:brightness-110 text-white shadow-[0_14px_36px_-10px_rgba(211,92,74,0.8)]'
           }`}
         >
-          {trading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+          {trading ? <Loader2 className="w-4 h-4 animate-spin" /> : buy ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
           {trading ? 'Submitting...' : `${buy ? 'Buy' : 'Sell'} ${token?.symbol || ''}`}
         </button>
 
         {status && (
-          <div className={`p-2.5 rounded-xl text-[11px] border backdrop-blur-md break-words ${status.ok ? 'text-[#7ea968] border-[#3e4d26]/60 bg-[#1f2910]/40' : 'text-[#d35c4a] border-[#803e26]/60 bg-[#803e26]/10'}`}>
+          <div className={`p-2.5 rounded-xl text-xs font-semibold backdrop-blur-md break-words ${status.ok ? 'text-[#9fc488] bg-[#1f2910]/60' : 'text-[#e08a7a] bg-[#803e26]/30'}`}>
             {status.msg}
           </div>
         )}
-        <p className="text-[10px] text-[#555143] leading-snug">Orders execute through the paper-trading system. No real funds move.</p>
+        <p className="text-[11px] text-[#6b6657] leading-snug">Orders execute through the paper-trading system. No real funds move.</p>
       </div>
     </Panel>
   )
@@ -815,11 +890,11 @@ function Row({ k, v, warn }) {
 function Table({ head, children, empty }) {
   return (
     <div className="overflow-auto h-full">
-      <table className="w-full text-[11px] min-w-[480px]">
+      <table className="w-full text-xs min-w-[480px]">
         <thead className="sticky top-0 bg-[#141414]/90 backdrop-blur-md text-[#555143] uppercase">
           <tr>{head.map((h) => <th key={h} className="text-left font-normal px-3 py-2 whitespace-nowrap">{h}</th>)}</tr>
         </thead>
-        <tbody className="divide-y divide-white/5">{children}</tbody>
+        <tbody>{children}</tbody>
       </table>
       {empty}
     </div>
@@ -827,70 +902,110 @@ function Table({ head, children, empty }) {
 }
 const Empty = ({ text }) => <div className="p-6 text-center text-xs text-[#555143]">{text}</div>
 
-function BottomPanel({ address, positions, fills, onSelect, priceMap }) {
+const fmtUsdSigned = (n) => (n == null || isNaN(n) ? '--' : `${n >= 0 ? '+' : '-'}${fmtUsd(Math.abs(n))}`)
+
+function HistoryTab({ onSelect }) {
+  const [page, setPage] = useState(0)
+  const q = useGetMemeHistoryQuery({ limit: HISTORY_PAGE, offset: page * HISTORY_PAGE })
+  const items = q.data?.items || []
+  const total = q.data?.total ?? 0
+  if (q.isLoading) return <div className="p-3 space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skel key={i} className="h-4 w-full" />)}</div>
+  if (q.isError) return <ErrorBox error={q.error} onRetry={q.refetch} label="Trade history unavailable" />
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex-1 min-h-0">
+        <Table head={['Time', 'Token', 'Side', 'Qty', 'Price', 'Total']} empty={items.length === 0 && <Empty text="No memecoin trades yet." />}>
+          {items.map((f) => (
+            <tr key={f.id} onClick={() => onSelect(f.address)} className="odd:bg-white/[0.025] hover:bg-white/10 cursor-pointer transition-colors">
+              <td className="px-3 py-1.5 text-[#a39d8d]" title={f.createdAt}>{f.createdAt ? `${timeAgo(Date.parse(f.createdAt))} ago` : '--'}</td>
+              <td className="px-3 py-1.5 font-bold text-white">{safeText(f.symbol)}</td>
+              <td className={`px-3 py-1.5 uppercase ${f.type === 'buy' ? 'text-[#7ea968]' : 'text-[#d35c4a]'}`}>{f.type}</td>
+              <td className="px-3 py-1.5">{fmtTokens(f.tokens)}</td>
+              <td className="px-3 py-1.5">{fmtPrice(f.price)}</td>
+              <td className="px-3 py-1.5">{fmtUsd(f.totalUsd)}</td>
+            </tr>
+          ))}
+        </Table>
+      </div>
+      {total > HISTORY_PAGE && (
+        <div className="flex items-center justify-between gap-2 px-3 py-1 text-[10px] text-[#a39d8d]">
+          <button disabled={page === 0 || q.isFetching} onClick={() => setPage((p) => Math.max(0, p - 1))} className="px-2 py-0.5 disabled:opacity-40">Newer</button>
+          <span>{page * HISTORY_PAGE + 1}-{Math.min(total, page * HISTORY_PAGE + items.length)} of {total}</span>
+          <button disabled={!q.data?.hasMore || q.isFetching} onClick={() => setPage((p) => p + 1)} className="px-2 py-0.5 disabled:opacity-40">Older</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PositionsTab({ q, onSelect }) {
+  const positions = q.data?.positions || []
+  if (q.isLoading) return <div className="p-3 space-y-2">{Array.from({ length: 4 }).map((_, i) => <Skel key={i} className="h-4 w-full" />)}</div>
+  if (q.isError && !q.data) return <ErrorBox error={q.error} onRetry={q.refetch} label="Positions unavailable" />
+  const t = q.data?.totals
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex-1 min-h-0">
+        <Table head={['Token', 'Qty', 'Avg price', 'Price', 'Cost', 'Value', 'PnL']} empty={positions.length === 0 && <Empty text="No open positions. Buy a token to get started." />}>
+          {positions.map((p) => (
+            <tr key={p.address} onClick={() => onSelect(p.address)} className="odd:bg-white/[0.025] hover:bg-white/10 cursor-pointer transition-colors">
+              <td className="px-3 py-1.5 font-bold text-white">{safeText(p.symbol)}</td>
+              <td className="px-3 py-1.5">{fmtTokens(p.tokens)}</td>
+              <td className="px-3 py-1.5">{fmtPrice(p.avgCost)}</td>
+              <td className="px-3 py-1.5">{p.currentPrice == null ? <span title="Live price unavailable" className="text-[#d6b87a]">n/a</span> : fmtPrice(p.currentPrice)}</td>
+              <td className="px-3 py-1.5">{fmtUsd(p.costUsd)}</td>
+              <td className="px-3 py-1.5">{fmtUsd(p.value)}</td>
+              <td className={`px-3 py-1.5 whitespace-nowrap ${pctColor(p.pnlPct)}`}>{p.pnl == null ? '--' : `${fmtUsdSigned(p.pnl)} (${fmtPct(p.pnlPct)})`}</td>
+            </tr>
+          ))}
+        </Table>
+      </div>
+      {positions.length > 0 && t && (
+        <div className="flex items-center justify-between gap-2 px-3 py-1 text-[10px] text-[#a39d8d]">
+          <span>Open value {fmtUsd(t.valueUsd)}{t.unpriced > 0 ? ` (+${t.unpriced} unpriced)` : ''}</span>
+          <span className={pctColor(t.pnlPct)}>Unrealized {fmtUsdSigned(t.pnl)} ({fmtPct(t.pnlPct)})</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function BottomPanel({ address, positionsQuery, onSelect }) {
   const [tab, setTab] = useState('positions')
-  const trades = useGetMemecoinTradesQuery(address, { skip: !address, pollingInterval: 5000 })
+  // Live trades only poll while that tab is open
+  const trades = useGetMemecoinTradesQuery(address, { skip: !address || tab !== 'live', pollingInterval: usePoll(POLL.trades) })
   const list = Array.isArray(trades.data) ? trades.data : []
+  const count = positionsQuery.data?.positions?.length
 
   return (
     <Panel className="flex flex-col h-[300px] lg:h-full lg:min-h-0">
-      <div className="px-3 pt-3 pb-2 border-b border-white/10">
+      <div className="px-3 pt-3 pb-2">
         <Tabs
           value={tab}
           onChange={setTab}
           tabs={[
-            { id: 'positions', label: `Positions (${positions.length})` },
+            { id: 'positions', label: count != null ? `Positions (${count})` : 'Positions' },
             { id: 'orders', label: 'Orders' },
-            { id: 'history', label: `History (${fills.length})` },
+            { id: 'history', label: 'History' },
             { id: 'live', label: 'Live Trades' },
           ]}
         />
       </div>
       <div className="flex-1 min-h-0">
-        {tab === 'positions' && (
-          <Table head={['Token', 'Qty', 'Avg price', 'Cost (SOL)', 'Value (SOL)', 'PnL']} empty={positions.length === 0 && <Empty text="No open positions. Buy a token to get started." />}>
-            {positions.map((p) => {
-              const cur = priceMap[p.address]
-              const value = cur && p.avgPrice > 0 ? p.costSol * (cur / p.avgPrice) : null
-              const pnl = value != null && p.costSol > 0 ? ((value - p.costSol) / p.costSol) * 100 : null
-              return (
-                <tr key={p.address} onClick={() => onSelect(p.address)} className="hover:bg-white/5 cursor-pointer transition-colors">
-                  <td className="px-3 py-1.5 font-bold text-white">{p.symbol}</td>
-                  <td className="px-3 py-1.5">{fmtNum(p.qty)}</td>
-                  <td className="px-3 py-1.5">{fmtPrice(p.avgPrice)}</td>
-                  <td className="px-3 py-1.5">{p.costSol.toFixed(3)}</td>
-                  <td className="px-3 py-1.5">{value == null ? '--' : value.toFixed(3)}</td>
-                  <td className={`px-3 py-1.5 ${pctColor(pnl)}`}>{fmtPct(pnl)}</td>
-                </tr>
-              )
-            })}
-          </Table>
-        )}
+        {tab === 'positions' && <PositionsTab q={positionsQuery} onSelect={onSelect} />}
         {tab === 'orders' && <Empty text="No open orders. Market orders fill instantly; limit orders are not supported yet." />}
-        {tab === 'history' && (
-          <Table head={['Time', 'Token', 'Side', 'SOL', 'Price']} empty={fills.length === 0 && <Empty text="No trades yet this device." />}>
-            {fills.map((f) => (
-              <tr key={f.id} className="hover:bg-white/5 transition-colors">
-                <td className="px-3 py-1.5 text-[#a39d8d]">{timeAgo(f.ts)} ago</td>
-                <td className="px-3 py-1.5 font-bold text-white">{f.symbol}{f.mock && <span className="ml-1 text-[9px] text-[#d6b87a]">MOCK</span>}</td>
-                <td className={`px-3 py-1.5 uppercase ${f.side === 'buy' ? 'text-[#7ea968]' : 'text-[#d35c4a]'}`}>{f.side}</td>
-                <td className="px-3 py-1.5">{f.amountSol}</td>
-                <td className="px-3 py-1.5">{fmtPrice(f.price)}</td>
-              </tr>
-            ))}
-          </Table>
-        )}
+        {tab === 'history' && <HistoryTab onSelect={onSelect} />}
         {tab === 'live' && (
           !address ? <Empty text="Select a token to see live trades." />
           : trades.isLoading ? <div className="p-3 space-y-2">{Array.from({ length: 6 }).map((_, i) => <Skel key={i} className="h-4 w-full" />)}</div>
           : trades.isError ? <ErrorBox error={trades.error} onRetry={trades.refetch} label="Live trades unavailable" />
           : (
-            <Table head={['Age', 'Side', 'SOL', 'Price', 'Maker']} empty={list.length === 0 && <Empty text="No trades yet for this token." />}>
+            <Table head={['Age', 'Side', 'Size', 'Price', 'Maker']} empty={list.length === 0 && <Empty text="No trades yet for this token." />}>
               {list.map((t, i) => (
-                <tr key={t.id ?? t.signature ?? i} className="hover:bg-white/5 transition-colors">
+                <tr key={t.id ?? t.signature ?? i} className="odd:bg-white/[0.025] hover:bg-white/10 transition-colors">
                   <td className="px-3 py-1 text-[#a39d8d]">{t.timestamp ? timeAgo(t.timestamp) : '--'}</td>
                   <td className={`px-3 py-1 uppercase font-bold ${t.side === 'buy' ? 'text-[#7ea968]' : 'text-[#d35c4a]'}`}>{t.side}</td>
-                  <td className="px-3 py-1">{fmtNum(t.amountSol)}</td>
+                  <td className="px-3 py-1">{t.amountSol != null ? `${fmtNum(t.amountSol)} SOL` : fmtUsd(t.amountUsd)}</td>
                   <td className="px-3 py-1">{fmtPrice(t.price)}</td>
                   <td className="px-3 py-1 text-[#555143]">{short(t.maker)}</td>
                 </tr>
@@ -903,6 +1018,67 @@ function BottomPanel({ address, positions, fills, onSelect, priceMap }) {
   )
 }
 
+/* Shown while the API is rate limiting us; all pollers pause until the window closes */
+function SlowDownBanner() {
+  const limited = useRateLimited()
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => {
+    if (!limited) return undefined
+    const t = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [limited])
+  if (!limited) return null
+  const secs = Math.max(0, Math.ceil((rateLimitedUntil() - now) / 1000))
+  return (
+    <div role="status" className="relative z-10 flex items-center gap-2 px-3 py-1.5 text-[11px] text-[#d6b87a] bg-[#d6b87a]/15 backdrop-blur-md">
+      <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+      <span>Slow down: too many requests. Live updates are paused and will resume automatically{secs > 0 ? ` in ~${secs}s` : ''}.</span>
+    </div>
+  )
+}
+
+/* ─── Customizable layout ────────────────────────────────────────────────── */
+// Four fixed grid positions (desktop); panels can be dragged by their grip handle onto a different
+// position and swap places there ("magnet" — it always lands cleanly in a slot, never a loose float).
+const SLOT_POS = {
+  left: 'order-3 lg:order-none lg:col-start-1 lg:row-span-2',
+  top: 'order-1 lg:order-none lg:col-start-2 lg:row-start-1 min-h-0',
+  right: 'order-2 lg:order-none lg:col-start-3 lg:row-span-2 lg:overflow-y-auto',
+  bottom: 'order-4 lg:order-none lg:col-start-2 lg:row-start-2 min-h-0',
+}
+const SLOT_KEYS = ['left', 'top', 'right', 'bottom']
+const DEFAULT_LAYOUT = { left: 'discovery', top: 'chart', right: 'order', bottom: 'bottom' }
+const LAYOUT_KEY = 'axiom_layout_v1'
+
+function loadLayout() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(LAYOUT_KEY))
+    const ids = Object.values(DEFAULT_LAYOUT)
+    if (saved && SLOT_KEYS.every((k) => ids.includes(saved[k])) && new Set(SLOT_KEYS.map((k) => saved[k])).size === 4) return saved
+  } catch { /* corrupt/missing, use default */ }
+  return { ...DEFAULT_LAYOUT }
+}
+
+function DraggableSlot({ pos, panelId, dragOver, onDragStart, onDragOver, onDrop, children }) {
+  return (
+    <div
+      className={`relative group ${SLOT_POS[pos]} ${dragOver ? 'ring-2 ring-[#9eae84]/60 rounded-[28px]' : ''}`}
+      onDragOver={(e) => { e.preventDefault(); onDragOver(pos) }}
+      onDrop={(e) => { e.preventDefault(); onDrop(pos) }}
+    >
+      <div
+        draggable
+        onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', pos); onDragStart(pos) }}
+        title="Drag to rearrange"
+        className="absolute top-3 right-3 z-20 p-1.5 rounded-full bg-black/40 backdrop-blur-md text-[#a39d8d] opacity-0 group-hover:opacity-100 hover:text-white cursor-grab active:cursor-grabbing transition"
+      >
+        <GripVertical className="w-3.5 h-3.5" />
+      </div>
+      {children}
+    </div>
+  )
+}
+
 /* ─── Page ───────────────────────────────────────────────────────────────── */
 export default function TradingTerminal() {
   const [params, setParams] = useSearchParams()
@@ -912,81 +1088,80 @@ export default function TradingTerminal() {
   const solAddress = user?.linkedAccounts?.find((a) => a.type === 'wallet' && a.chainType === 'solana')?.address || null
   const solBalance = useSolBalance(solAddress)
   const { data: portfolio } = useGetPortfolioQuery()
-  const [fills, setFills] = useState(loadFills)
-
-  const trending = useGetTrendingMemecoinsQuery(undefined, { pollingInterval: 15000 })
-  const fresh = useGetNewMemecoinsQuery(undefined, { pollingInterval: 15000 })
+  // Initial load only (just to pick a default token); DiscoveryPanel owns list polling
+  const trending = useGetTrendingMemecoinsQuery(undefined)
+  const fresh = useGetNewMemecoinsQuery(undefined)
+  // Server-side positions (Supabase paper_positions), refreshed on every trade via tag invalidation
+  const positionsQuery = useGetMemePositionsQuery(undefined, { pollingInterval: usePoll(POLL.positions) })
 
   const urlToken = params.get('token')
   const defaultToken = trending.data?.[0]?.address || fresh.data?.[0]?.address || null
   const address = urlToken || defaultToken
 
   const select = useCallback((a) => setParams({ token: a }, { replace: true }), [setParams])
-  const detail = useGetMemecoinQuery(address, { skip: !address, pollingInterval: 5000 })
+  const detail = useGetMemecoinQuery(address, { skip: !address, pollingInterval: usePoll(POLL.detail) })
 
-  const onFilled = useCallback((fill) => {
-    setFills((prev) => {
-      const next = [fill, ...prev].slice(0, 200)
-      try { localStorage.setItem(FILLS_KEY, JSON.stringify(next)) } catch { /* storage blocked */ }
-      return next
-    })
+  // Keep trading on the last good snapshot through a transient poll error rather than blanking the ticket
+  const token = detail.data ?? null
+  const position = positionsQuery.data?.positions?.find((p) => p.address === address)
+
+  const [layout, setLayout] = useState(loadLayout)
+  useEffect(() => { try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout)) } catch { /* storage blocked */ } }, [layout])
+  const [dragFrom, setDragFrom] = useState(null)
+  const [dragOverPos, setDragOverPos] = useState(null)
+  const swapSlots = useCallback((fromPos, toPos) => {
+    if (fromPos === toPos) return
+    setLayout((prev) => ({ ...prev, [fromPos]: prev[toPos], [toPos]: prev[fromPos] }))
+  }, [])
+  // Reset on dragend (covers drops outside any slot, or the drag being cancelled) rather than
+  // dragleave, which fires on every child element boundary and would make the highlight flicker.
+  useEffect(() => {
+    const reset = () => { setDragFrom(null); setDragOverPos(null) }
+    window.addEventListener('dragend', reset)
+    return () => window.removeEventListener('dragend', reset)
   }, [])
 
-  // Positions are derived from this device's recorded fills (average-cost method).
-  const positions = useMemo(() => {
-    const map = {}
-    for (const f of [...fills].reverse()) {
-      const p = (map[f.address] ||= { address: f.address, symbol: f.symbol, qty: 0, costSol: 0, avgPrice: 0 })
-      if (f.side === 'buy') {
-        // SOL-weighted average entry price
-        p.avgPrice = (p.costSol * p.avgPrice + f.amountSol * f.price) / (p.costSol + f.amountSol)
-        p.costSol += f.amountSol
-        p.qty += f.amountToken || 0
-      } else {
-        const valueSol = p.avgPrice > 0 ? p.costSol * (f.price / p.avgPrice) : 0
-        const frac = valueSol > 0 ? Math.min(1, f.amountSol / valueSol) : 1
-        p.costSol *= 1 - frac
-        p.qty *= 1 - frac
-      }
-    }
-    return Object.values(map).filter((p) => p.costSol > 1e-9 && p.qty > 0)
-  }, [fills])
-
-  const priceMap = useMemo(() => {
-    const m = {}
-    for (const t of [...(fresh.data || []), ...(trending.data || [])]) m[t.address] = t.price
-    if (detail.data?.address) m[detail.data.address] = detail.data.price
-    return m
-  }, [fresh.data, trending.data, detail.data])
-
-  const token = detail.data && !detail.isError ? detail.data : null
-  const position = positions.find((p) => p.address === address)
+  const panelContent = {
+    discovery: <DiscoveryPanel selected={address} onSelect={select} />,
+    chart: (
+      <Panel className="flex flex-col h-full min-h-0">
+        <TokenHeader q={detail} />
+        {address && <SignalPanel address={address} />}
+        <ChartPanel address={address} />
+      </Panel>
+    ),
+    order: <OrderTicket token={token} position={position} />,
+    bottom: <BottomPanel address={address} positionsQuery={positionsQuery} onSelect={select} />,
+  }
 
   return (
     <div className="relative flex flex-col text-[#f0ebe0] font-mono lg:h-screen lg:overflow-hidden">
       <GlassBackground />
 
-      <TopBar onSelect={select} solAddress={solAddress} solBalance={solBalance} paperCash={portfolio?.cashBalance ?? null} />
+      <SlowDownBanner />
+      <TopBar
+        onSelect={select}
+        solAddress={solAddress}
+        solBalance={solBalance}
+        paperCash={portfolio?.cashBalance ?? null}
+        onResetLayout={() => setLayout({ ...DEFAULT_LAYOUT })}
+      />
 
       <div className="relative z-10 flex-1 min-h-0 grid gap-3 p-3 grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)_300px] lg:grid-rows-[minmax(0,1fr)_260px]">
-        {/* Order ticket first on mobile so it is reachable without scrolling past the chart */}
-        <div className="order-3 lg:order-none lg:col-start-1 lg:row-span-2">
-          <DiscoveryPanel selected={address} onSelect={select} />
-        </div>
-
-        <Panel className="order-1 lg:order-none lg:col-start-2 lg:row-start-1 flex flex-col min-h-0">
-          <TokenHeader q={detail} />
-          {address && <SignalPanel address={address} />}
-          <ChartPanel address={address} />
-        </Panel>
-
-        <div className="order-2 lg:order-none lg:col-start-3 lg:row-span-2 lg:overflow-y-auto">
-          <OrderTicket token={token} position={position} onFilled={onFilled} />
-        </div>
-
-        <div className="order-4 lg:order-none lg:col-start-2 lg:row-start-2 min-h-0">
-          <BottomPanel address={address} positions={positions} fills={fills} onSelect={select} priceMap={priceMap} />
-        </div>
+        {SLOT_KEYS.map((pos) => (
+          <DraggableSlot
+            key={pos}
+            pos={pos}
+            panelId={layout[pos]}
+            dragOver={dragOverPos === pos && dragFrom !== pos}
+            onDragStart={setDragFrom}
+            onDragOver={setDragOverPos}
+            onDragLeave={() => setDragOverPos(null)}
+            onDrop={(toPos) => { if (dragFrom) swapSlots(dragFrom, toPos); setDragFrom(null); setDragOverPos(null) }}
+          >
+            {panelContent[layout[pos]]}
+          </DraggableSlot>
+        ))}
       </div>
     </div>
   )
