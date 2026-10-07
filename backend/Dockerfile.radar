@@ -1,8 +1,8 @@
 # Radar-only image: collects free memecoin data into a SQLite file on a mounted volume. No web server, no trading.
-FROM node:20-bookworm-slim
+FROM node:22-bookworm-slim
 WORKDIR /app
 COPY package.json package-lock.json ./
-# better-sqlite3 ships prebuilt binaries for Node 20 on linux x64/arm64, so no compiler is needed
+# better-sqlite3 ships prebuilt binaries for Node 22 on linux x64/arm64, so no compiler is needed
 RUN npm ci --omit=dev --no-audit --no-fund
 COPY src ./src
 ENV NODE_ENV=production \
