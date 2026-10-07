@@ -162,6 +162,48 @@ function initSchema() {
     );
   `);
 
+  // Research data collection — append-only (never UPDATE/DELETE market_snapshot rows)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS token (
+      token_id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      chain            TEXT    NOT NULL DEFAULT 'solana',
+      contract_address TEXT    NOT NULL,
+      first_seen_ts    INTEGER NOT NULL,
+      symbol           TEXT,
+      UNIQUE(chain, contract_address)
+    );
+
+    CREATE TABLE IF NOT EXISTS market_snapshot (
+      snapshot_id   INTEGER PRIMARY KEY AUTOINCREMENT,
+      token_id      INTEGER NOT NULL REFERENCES token(token_id),
+      ts            INTEGER NOT NULL,
+      price         REAL,
+      mcap          REAL,
+      liquidity_usd REAL,
+      volume_5m     REAL,
+      volume_1h     REAL,
+      buy_count     INTEGER,
+      sell_count    INTEGER,
+      holder_count  INTEGER,
+      ingested_ts   INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_market_snapshot_token_ts ON market_snapshot(token_id, ts);
+  `);
+
+  // Unusual-activity signal log — append-only (INSERT only; never UPDATE/DELETE)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS signal_snapshot (
+      signal_id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      token_id            INTEGER NOT NULL REFERENCES token(token_id),
+      as_of_ts            INTEGER NOT NULL,
+      model_version       TEXT    NOT NULL,
+      component_scores    TEXT    NOT NULL,
+      composite_score     REAL    NOT NULL,
+      feature_vector_hash TEXT    NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_signal_snapshot_token_ts ON signal_snapshot(token_id, as_of_ts);
+  `);
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS sms_settings (
       user_id      TEXT    PRIMARY KEY,

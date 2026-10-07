@@ -5,7 +5,29 @@ const { runReport, latencySweep } = require('../radar/report');
 const stream = require('../radar/stream');
 const { requireAdminSecret } = require('../middleware/validate');
 
-// Research endpoints — admin only. Never expose raw signal scores/reports publicly until the stats justify it.
+const { requireAuth } = require('../middleware/auth');
+const radarSignals = require('../services/radarSignals');
+
+// User-facing signal endpoints (logged-in users, same as /api/memecoins). Declared BEFORE the admin gate below.
+// When the radar is off or empty they answer 200 {enabled:false, reason} so the terminal can show a hint.
+// GET /api/radar/signals?sort=score|new&limit=30&maxAgeHours=24&minScore=40&safeOnly=1
+router.get('/signals', requireAuth, (req, res) => {
+  const q = req.query;
+  res.json(radarSignals.listSignals({
+    sort: q.sort === 'new' ? 'new' : 'score',
+    limit: q.limit, maxAgeHours: q.maxAgeHours,
+    minScore: q.minScore !== undefined && q.minScore !== '' && !Number.isNaN(Number(q.minScore)) ? Number(q.minScore) : null,
+    safeOnly: q.safeOnly === '1' || q.safeOnly === 'true',
+  }));
+});
+
+router.get('/token/:address', requireAuth, (req, res) => {
+  const a = String(req.params.address || '');
+  if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(a)) return res.status(400).json({ error: true, message: 'Invalid Solana address' });
+  res.json(radarSignals.getSignal(a));
+});
+
+// Research endpoints below — admin only. Never expose raw reports publicly until the stats justify it.
 router.use(requireAdminSecret);
 
 router.get('/status', (req, res) => {

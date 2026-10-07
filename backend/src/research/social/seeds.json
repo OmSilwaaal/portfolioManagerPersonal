@@ -1,0 +1,5 @@
+{
+  "_comment": "Edit me. x_handles: public X handles (no @) you choose as seed accounts. telegram_channels: public channel usernames. Do not add handles you merely inferred to own a wallet.",
+  "x_handles": [],
+  "telegram_channels": []
+}

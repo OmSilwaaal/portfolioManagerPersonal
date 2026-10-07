@@ -1,0 +1,11 @@
+{
+  "_instructions": [
+    "Paste wallet addresses you found yourself (Dune dashboards, KolScan, leaderboards, a trader you follow) into the \"wallets\" list, then restart and set SMART_MONEY_SEEDS=1 (and SMART_MONEY_COLLECTOR=1).",
+    "Each entry is either a plain base58 Solana address string, or an object: { \"wallet\": \"<address>\", \"reported_pnl\": 12345, \"period\": \"30d\", \"label\": \"where you found it\" }.",
+    "reported_pnl / period / label are for your audit trail only. They are NEVER trusted: every wallet is re-scored from its own on-chain trades with the holdout rule, using only trades before the scoring time.",
+    "Only public wallet addresses. Do not add addresses you merely guessed belong to a person.",
+    "Seeds are survivors (they are on a list because they already did well), so the forward test compares them with random control wallets.",
+    "At most 500 wallets are read. Invalid addresses and duplicates are ignored."
+  ],
+  "wallets": []
+}

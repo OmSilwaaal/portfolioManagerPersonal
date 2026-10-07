@@ -15,8 +15,9 @@ export default function PrivyProviderWrapper({ children }) {
           logo: 'https://www.travauxus.com/favicon.ico',
         },
         embeddedWallets: {
-          createOnLogin: 'users-without-wallets',
-          requireUserPasswordOnCreate: false,
+          // Privy v3: embedded wallets are configured per chain. The terminal needs Solana.
+          ethereum: { createOnLogin: 'off' },
+          solana: { createOnLogin: 'users-without-wallets' },
         },
         loginMethods: ['google', 'twitter', 'email', 'wallet'],
         solanaClusters: [
