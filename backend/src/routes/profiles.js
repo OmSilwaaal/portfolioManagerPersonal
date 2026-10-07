@@ -2,8 +2,17 @@ const express = require('express')
 const router = express.Router()
 const { supabase } = require('../services/supabaseAdmin')
 const { requireAuth } = require('../middleware/auth')
+const { isUuid } = require('../middleware/validate')
 
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/
+
+// Public-facing name: never fall back to the full email address — that would publish it to every user.
+function publicDisplayName(user) {
+  const meta = user?.user_metadata ?? {}
+  const name = meta.full_name ?? meta.name
+  if (name) return String(name).slice(0, 80)
+  return user?.email ? user.email.split('@')[0] : null
+}
 
 async function upsertProfile(userId, displayName = null) {
   const { data } = await supabase.from('profiles').select('*').eq('user_id', userId).maybeSingle()
@@ -31,12 +40,7 @@ async function upsertProfile(userId, displayName = null) {
 // GET /profiles/me
 router.get('/me', requireAuth, async (req, res) => {
   try {
-    const displayName =
-      req.user.user_metadata?.full_name ??
-      req.user.user_metadata?.name ??
-      req.user.email ??
-      null
-    const profile = await upsertProfile(req.user.id, displayName)
+    const profile = await upsertProfile(req.user.id, publicDisplayName(req.user))
     res.json(profile)
   } catch (err) {
     console.error('GET /profiles/me', err)
@@ -47,10 +51,13 @@ router.get('/me', requireAuth, async (req, res) => {
 // PATCH /profiles/me
 router.patch('/me', requireAuth, async (req, res) => {
   try {
-    const { username, bio, avatar_url } = req.body
+    const { username, bio, avatar_url } = req.body ?? {}
     const updates = { updated_at: new Date().toISOString() }
 
     if (username !== undefined) {
+      if (typeof username !== 'string') {
+        return res.status(400).json({ error: true, message: 'Username must be a string.' })
+      }
       const clean = username.trim().toLowerCase()
       if (clean && !USERNAME_RE.test(clean)) {
         return res.status(400).json({ error: true, message: 'Username must be 3–20 characters: letters, numbers, underscores only.' })
@@ -66,16 +73,24 @@ router.patch('/me', requireAuth, async (req, res) => {
       }
       updates.username = clean || null
     }
-    if (bio !== undefined) updates.bio = bio.trim().slice(0, 200)
+
+    if (bio !== undefined) {
+      if (typeof bio !== 'string') return res.status(400).json({ error: true, message: 'Bio must be a string.' })
+      updates.bio = bio.trim().slice(0, 200)
+    }
+
     if (avatar_url !== undefined) {
+      if (typeof avatar_url !== 'string') {
+        return res.status(400).json({ error: true, message: 'Avatar must be a string.' })
+      }
       const url = avatar_url.trim()
       // Uploaded photos arrive as resized base64 data URLs (~10–30KB); truncating them corrupts the image
-      const isDataUrl = /^data:image\/(jpeg|png|webp|gif);base64,/.test(url)
+      const isDataUrl = /^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(url)
       const maxLen = isDataUrl ? 45000 : 500
       if (url.length > maxLen) {
         return res.status(400).json({ error: true, message: 'Image is too large. Try a smaller photo.' })
       }
-      if (url && !isDataUrl && !/^https?:\/\//.test(url)) {
+      if (url && !isDataUrl && !/^https?:\/\/[^\s]+$/i.test(url)) {
         return res.status(400).json({ error: true, message: 'Avatar must be an uploaded image or an http(s) URL.' })
       }
       updates.avatar_url = url
@@ -86,7 +101,13 @@ router.patch('/me', requireAuth, async (req, res) => {
       .upsert({ user_id: req.user.id, ...updates }, { onConflict: 'user_id' })
       .select()
       .single()
-    if (error) throw error
+    if (error) {
+      // Unique violation = lost a race for the username
+      if (error.code === '23505') {
+        return res.status(400).json({ error: true, message: 'Username is already taken.' })
+      }
+      throw error
+    }
 
     res.json(data)
   } catch (err) {
@@ -95,26 +116,35 @@ router.patch('/me', requireAuth, async (req, res) => {
   }
 })
 
-// GET /profiles/:userId — public profile
+// GET /profiles/:userId — public profile (read-only: never creates rows for other users)
 router.get('/:userId', requireAuth, async (req, res) => {
   try {
     const userId = req.params.userId
+    if (!isUuid(userId)) return res.status(400).json({ error: true, message: 'Invalid user id.' })
 
-    // Try to get real name + join date from Supabase auth
     let displayName = null
     let joined_at = null
     try {
       const { data: authData } = await supabase.auth.admin.getUserById(userId)
-      const meta = authData?.user?.user_metadata ?? {}
-      displayName = meta.full_name ?? meta.name ?? authData?.user?.email ?? null
-      joined_at = authData?.user?.created_at ?? null
-    } catch (_) {}
+      if (!authData?.user) return res.status(404).json({ error: true, message: 'Profile not found.' })
+      displayName = publicDisplayName(authData.user)
+      joined_at = authData.user.created_at ?? null
+    } catch (_) {
+      return res.status(404).json({ error: true, message: 'Profile not found.' })
+    }
 
-    const profile = await upsertProfile(userId, displayName)
-    if (!profile) return res.status(404).json({ error: true, message: 'Profile not found.' })
+    const { data: profile } = await supabase.from('profiles').select('*').eq('user_id', userId).maybeSingle()
 
-    const { user_id, username, bio, avatar_url, display_name, updated_at } = profile
-    res.json({ user_id, username, bio, avatar_url, display_name, updated_at, joined_at })
+    res.json({
+      user_id: userId,
+      username: profile?.username ?? null,
+      bio: profile?.bio ?? '',
+      avatar_url: profile?.avatar_url ?? '',
+      // Stored display_name may predate the email-leak fix, so prefer the freshly derived name
+      display_name: displayName ?? profile?.display_name ?? null,
+      updated_at: profile?.updated_at ?? null,
+      joined_at,
+    })
   } catch (err) {
     console.error('GET /profiles/:userId', err)
     res.status(500).json({ error: true, message: 'Failed to load profile.' })

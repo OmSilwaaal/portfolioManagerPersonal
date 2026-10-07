@@ -1,11 +1,11 @@
 const express = require('express')
 const router = express.Router()
-const { requireAuth } = require('../middleware/auth')
+const { requireAuth, validateTicker } = require('../middleware/auth')
 const { supabase } = require('../services/supabaseAdmin')
 
 const CACHE_DAYS = 7
 
-router.get('/:ticker', requireAuth, async (req, res) => {
+router.get('/:ticker', requireAuth, validateTicker('ticker'), async (req, res) => {
   const ticker = req.params.ticker.toUpperCase()
 
   try {

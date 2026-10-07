@@ -30,6 +30,9 @@ const CONFIG = {
   liquidityDeltaForMax: 0.5, // |liquidity change| of 50% -> 100
   imbalanceMinTrades: 5,     // below this the imbalance is not computed
   imbalanceFullTrust: 30,    // trades needed for the imbalance to count at full strength
+  // The 1h buy/sell split is only a proxy for current flow, so it is trusted less
+  // than the 5m split regardless of how many trades it covers.
+  imbalance1hTrust: 0.6,
   baselineBuckets: 12,       // up to 1h of 5m buckets for "typical" volume
   minBaselineBuckets: 3,
   minReturnSamples: 6,
@@ -61,10 +64,14 @@ function stdev(a) {
   return Math.sqrt(a.reduce((s, x) => s + (x - mean) ** 2, 0) / (a.length - 1));
 }
 
+// Keeps only usable candles and normalises volume to a number or null. An upstream
+// `+undefined` lands here as NaN; left alone it poisons the baseline median (and,
+// depending on where it sorts, threw out of the level lookup).
 function cleanCandles(candles, nowSec) {
   if (!Array.isArray(candles)) return [];
   return candles
     .filter((c) => c && isNum(c.time) && c.time <= nowSec && isNum(c.close) && c.close > 0)
+    .map((c) => (isNum(c.volume) ? c : { ...c, volume: null }))
     .sort((a, b) => a.time - b.time);
 }
 
@@ -73,8 +80,10 @@ function to5m(candles) {
   const buckets = new Map();
   for (const c of candles) {
     const k = Math.floor(c.time / 300) * 300;
-    const b = buckets.get(k) || { time: k, volume: 0, close: c.close, open: c.open };
-    b.volume += isNum(c.volume) ? c.volume : 0;
+    const b = buckets.get(k) || { time: k, volume: null, close: c.close, open: c.open };
+    // A bucket's volume stays null until at least one source candle reports one,
+    // so "no volume data" never masquerades as "zero volume".
+    if (isNum(c.volume)) b.volume = (b.volume ?? 0) + c.volume;
     b.close = c.close;
     buckets.set(k, b);
   }
@@ -112,7 +121,7 @@ function computeSignal(input = {}) {
 
   const features = {
     volume_ratio: null, ret_5m: null, ret_z: null, return_std: null,
-    realized_vol: null, liquidity_delta: null, imbalance: null, trades_n: null,
+    realized_vol: null, liquidity_delta: null, imbalance: null, trades_n: null, imbalance_window: null,
   };
   const comps = { volume_accel: null, price_accel: null, realized_vol: null, liquidity_delta: null, buy_sell_imbalance: null };
   const notes = [];
@@ -121,16 +130,19 @@ function computeSignal(input = {}) {
   let curVol = isNum(token.volume_5m) ? token.volume_5m : null;
   let baseline = null;
   if (c5w.length >= 2) {
-    const prior = c5w.slice(0, -1).slice(-CONFIG.baselineBuckets).map((c) => c.volume);
-    if (curVol === null) curVol = c5w[c5w.length - 1].volume;
+    const prior = c5w.slice(0, -1).slice(-CONFIG.baselineBuckets).map((c) => c.volume).filter(isNum);
+    if (curVol === null) {
+      const lastVol = c5w[c5w.length - 1].volume;
+      curVol = isNum(lastVol) ? lastVol : null;
+    }
     if (prior.length >= CONFIG.minBaselineBuckets) baseline = median(prior);
   }
   let volEstimated = false;
-  if (baseline === null && isNum(token.volume_1h) && token.volume_1h > 0) {
+  if (!isNum(baseline) && isNum(token.volume_1h) && token.volume_1h > 0) {
     baseline = token.volume_1h / 12; // coarse typical 5m volume from list data
     volEstimated = true;
   }
-  if (curVol !== null && baseline !== null) {
+  if (isNum(curVol) && isNum(baseline)) {
     const floor = Math.max(baseline, 1); // $1 floor avoids divide-by-zero on dead tokens
     const ratio = curVol / floor;
     features.volume_ratio = round(ratio, 3);
@@ -181,34 +193,45 @@ function computeSignal(input = {}) {
   }
 
   // ── buy_sell_imbalance ──
+  // buy_count/sell_count are the 1h split; they stand in for the 5m one when it is
+  // missing, but they describe a different window, so they are trusted less rather
+  // than more. (The trade-count ramp alone would have given the proxy FULL trust,
+  // since an hour of trades is almost always past imbalanceFullTrust.)
   let buys = token.buys_5m; let sells = token.sells_5m;
+  let imbWindow = '5m';
   if (!(isNum(buys) && isNum(sells) && buys + sells >= CONFIG.imbalanceMinTrades)) {
-    buys = token.buy_count; sells = token.sell_count;
+    buys = token.buy_count; sells = token.sell_count; imbWindow = '1h';
   }
   if (isNum(buys) && isNum(sells) && buys + sells >= CONFIG.imbalanceMinTrades) {
     const n = buys + sells;
     const imb = (buys - sells) / n;
+    const trust = Math.min(1, n / CONFIG.imbalanceFullTrust)
+      * (imbWindow === '1h' ? CONFIG.imbalance1hTrust : 1);
     features.imbalance = round(imb, 4);
     features.trades_n = n;
-    comps.buy_sell_imbalance = clamp(Math.abs(imb) * Math.min(1, n / CONFIG.imbalanceFullTrust) * 100);
+    features.imbalance_window = imbWindow;
+    comps.buy_sell_imbalance = clamp(Math.abs(imb) * trust * 100);
+    if (imbWindow === '1h') notes.push('buy/sell split from the 1h window (5m unavailable)');
   }
 
   // ── combine ──
   let wSum = 0; let acc = 0;
   for (const key of Object.keys(W)) {
-    if (comps[key] !== null) { wSum += W[key]; acc += W[key] * comps[key]; }
+    if (!isNum(comps[key])) { comps[key] = null; continue; }
+    wSum += W[key]; acc += W[key] * comps[key];
   }
-  const score = wSum > 0 ? clamp(acc / wSum) : 0;
+  const score = wSum > 0 && isNum(acc) ? clamp(acc / wSum) : 0;
   const totalW = Object.values(W).reduce((s, x) => s + x, 0);
   // Confidence: share of weight available, but volume & price are mandatory-ish for a high value
   let confidence = wSum / totalW;
   if (comps.volume_accel === null) confidence *= 0.6;
   if (comps.price_accel === null) confidence *= 0.8;
   if (volEstimated) confidence *= 0.85;
+  if (features.imbalance_window === '1h') confidence *= 0.9;
   if (!c5w.length && !c1.length) confidence *= 0.85;
   confidence = wSum > 0 ? clamp(confidence, 0, 1) : 0;
 
-  const level = CONFIG.levels.find((l) => score >= l.min).level;
+  const level = (CONFIG.levels.find((l) => score >= l.min) || CONFIG.levels[CONFIG.levels.length - 1]).level;
 
   const components = {};
   for (const key of Object.keys(W)) {

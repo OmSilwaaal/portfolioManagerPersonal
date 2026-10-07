@@ -246,6 +246,40 @@ function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_friend_addressee ON friendships(addressee_id);
   `);
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS memecoin_alert_prefs (
+      user_id        TEXT PRIMARY KEY,
+      enabled        INTEGER NOT NULL DEFAULT 0,
+      sms            INTEGER NOT NULL DEFAULT 0,
+      move_pct_5m    REAL    NOT NULL DEFAULT 25,
+      move_pct_1h    REAL    NOT NULL DEFAULT 100,
+      min_score      REAL    NOT NULL DEFAULT 75,
+      min_confidence REAL    NOT NULL DEFAULT 0.5,
+      min_liquidity  REAL    NOT NULL DEFAULT 20000,
+      cooldown_min   INTEGER NOT NULL DEFAULT 60,
+      updated_at     TEXT    NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS memecoin_alert_events (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id    TEXT    NOT NULL,
+      address    TEXT    NOT NULL,
+      symbol     TEXT,
+      kind       TEXT    NOT NULL,
+      direction  TEXT,
+      window     TEXT,
+      change_pct REAL,
+      score      REAL,
+      confidence REAL,
+      message    TEXT    NOT NULL,
+      created_ts INTEGER NOT NULL,
+      read_ts    INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_meme_alert_user_ts ON memecoin_alert_events(user_id, created_ts DESC);
+    -- the cooldown lookup: most recent event for a (user, token, kind)
+    CREATE INDEX IF NOT EXISTS idx_meme_alert_cooldown ON memecoin_alert_events(user_id, address, kind, created_ts DESC);
+  `);
+
   // Migrations — add columns if they don't exist (SQLite lacks ADD COLUMN IF NOT EXISTS)
   // Alerts were previously global; scope them to the owning user (legacy rows keep user_id NULL and become unreachable)
   try { db.exec('ALTER TABLE alerts ADD COLUMN user_id TEXT') } catch (_) {}

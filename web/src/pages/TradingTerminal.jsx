@@ -4,7 +4,7 @@ import { usePrivy } from '@privy-io/react-auth'
 import {
   Zap, Wallet, LogIn, LogOut, Search, Copy, Check, RefreshCw, AlertTriangle,
   ArrowUpRight, ArrowDownRight, Flame, Sparkles, Rocket, X, Loader2, Radar,
-  GripVertical, RotateCcw,
+  RotateCcw,
 } from 'lucide-react'
 import MemeChart from '../components/MemeChart'
 import { useGetPortfolioQuery } from '../api/paperTradingApi'
@@ -27,6 +27,9 @@ import {
   useRateLimited,
   rateLimitedUntil,
 } from '../api/memecoinApi'
+import PanelWorkspace from '../components/terminal/PanelWorkspace'
+import WorkspacePanel from '../components/terminal/Panel'
+import MemecoinAlerts from '../components/alerts/MemecoinAlerts'
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
 const ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/
@@ -251,7 +254,7 @@ function TopBar({ onSelect, solAddress, solBalance, paperCash, onResetLayout }) 
   }
 
   return (
-    <header className="relative z-10 flex flex-col md:flex-row md:items-center gap-2.5 md:gap-4 px-4 py-3 bg-black/30 backdrop-blur-xl">
+    <header className="relative z-30 flex flex-col md:flex-row md:items-center gap-2.5 md:gap-4 px-4 py-3 bg-black/30 backdrop-blur-xl">
       <div className="flex items-center gap-2.5 shrink-0">
         <div className="p-2 rounded-xl bg-gradient-to-br from-[#3e4d26] to-[#1f2910] text-[#9eae84] shadow-[0_0_20px_-4px_rgba(158,174,132,0.6)]">
           <Zap className="w-4 h-4" />
@@ -267,6 +270,7 @@ function TopBar({ onSelect, solAddress, solBalance, paperCash, onResetLayout }) 
           <span className="text-[#555143] mr-1">PAPER</span>
           <span className="text-white font-bold">{paperCash == null ? '--' : fmtUsd(paperCash)}</span>
         </div>
+        <MemecoinAlerts onSelectToken={onSelect} />
         <button onClick={onResetLayout} title="Reset panel layout" className="p-2 rounded-full bg-white/5 hover:bg-white/10 text-[#a39d8d] hover:text-white backdrop-blur-md transition">
           <RotateCcw className="w-3.5 h-3.5" />
         </button>
@@ -1038,46 +1042,22 @@ function SlowDownBanner() {
 }
 
 /* ─── Customizable layout ────────────────────────────────────────────────── */
-// Four fixed grid positions (desktop); panels can be dragged by their grip handle onto a different
-// position and swap places there ("magnet" — it always lands cleanly in a slot, never a loose float).
-const SLOT_POS = {
-  left: 'order-3 lg:order-none lg:col-start-1 lg:row-span-2',
-  top: 'order-1 lg:order-none lg:col-start-2 lg:row-start-1 min-h-0',
-  right: 'order-2 lg:order-none lg:col-start-3 lg:row-span-2 lg:overflow-y-auto',
-  bottom: 'order-4 lg:order-none lg:col-start-2 lg:row-start-2 min-h-0',
-}
-const SLOT_KEYS = ['left', 'top', 'right', 'bottom']
-const DEFAULT_LAYOUT = { left: 'discovery', top: 'chart', right: 'order', bottom: 'bottom' }
-const LAYOUT_KEY = 'axiom_layout_v1'
+// Panels float freely on a bounded canvas: drag by the grip, resize from any
+// edge or corner, lock to freeze everything. Geometry is stored as fractions of
+// the canvas so an arrangement keeps its proportions across displays.
+const LAYOUT_KEY = 'axiom_layout_v2'
 
-function loadLayout() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(LAYOUT_KEY))
-    const ids = Object.values(DEFAULT_LAYOUT)
-    if (saved && SLOT_KEYS.every((k) => ids.includes(saved[k])) && new Set(SLOT_KEYS.map((k) => saved[k])).size === 4) return saved
-  } catch { /* corrupt/missing, use default */ }
-  return { ...DEFAULT_LAYOUT }
-}
+const PANELS = [
+  { id: 'discovery', defaultRect: { x: 0,     y: 0,    w: 0.21, h: 1    }, minW: 240, minH: 240, stackedHeight: 380 },
+  { id: 'chart',     defaultRect: { x: 0.215, y: 0,    w: 0.57, h: 0.62 }, minW: 340, minH: 260, stackedHeight: 460 },
+  { id: 'bottom',    defaultRect: { x: 0.215, y: 0.63, w: 0.57, h: 0.37 }, minW: 340, minH: 180, stackedHeight: 320 },
+  { id: 'order',     defaultRect: { x: 0.79,  y: 0,    w: 0.21, h: 1    }, minW: 260, minH: 320 },
+]
 
-function DraggableSlot({ pos, panelId, dragOver, onDragStart, onDragOver, onDrop, children }) {
-  return (
-    <div
-      className={`relative group ${SLOT_POS[pos]} ${dragOver ? 'ring-2 ring-[#9eae84]/60 rounded-[28px]' : ''}`}
-      onDragOver={(e) => { e.preventDefault(); onDragOver(pos) }}
-      onDrop={(e) => { e.preventDefault(); onDrop(pos) }}
-    >
-      <div
-        draggable
-        onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', pos); onDragStart(pos) }}
-        title="Drag to rearrange"
-        className="absolute top-3 right-3 z-20 p-1.5 rounded-full bg-black/40 backdrop-blur-md text-[#a39d8d] opacity-0 group-hover:opacity-100 hover:text-white cursor-grab active:cursor-grabbing transition"
-      >
-        <GripVertical className="w-3.5 h-3.5" />
-      </div>
-      {children}
-    </div>
-  )
-}
+// The shell only pins itself to the viewport height at `lg`, which with the
+// 200px sidebar and page padding lands the canvas at ~800px. Matching that here
+// keeps "freeform" and "full-height canvas" switching on at the same width.
+const FREEFORM_MIN_CANVAS_WIDTH = 800
 
 /* ─── Page ───────────────────────────────────────────────────────────────── */
 export default function TradingTerminal() {
@@ -1105,34 +1085,8 @@ export default function TradingTerminal() {
   const token = detail.data ?? null
   const position = positionsQuery.data?.positions?.find((p) => p.address === address)
 
-  const [layout, setLayout] = useState(loadLayout)
-  useEffect(() => { try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout)) } catch { /* storage blocked */ } }, [layout])
-  const [dragFrom, setDragFrom] = useState(null)
-  const [dragOverPos, setDragOverPos] = useState(null)
-  const swapSlots = useCallback((fromPos, toPos) => {
-    if (fromPos === toPos) return
-    setLayout((prev) => ({ ...prev, [fromPos]: prev[toPos], [toPos]: prev[fromPos] }))
-  }, [])
-  // Reset on dragend (covers drops outside any slot, or the drag being cancelled) rather than
-  // dragleave, which fires on every child element boundary and would make the highlight flicker.
-  useEffect(() => {
-    const reset = () => { setDragFrom(null); setDragOverPos(null) }
-    window.addEventListener('dragend', reset)
-    return () => window.removeEventListener('dragend', reset)
-  }, [])
-
-  const panelContent = {
-    discovery: <DiscoveryPanel selected={address} onSelect={select} />,
-    chart: (
-      <Panel className="flex flex-col h-full min-h-0">
-        <TokenHeader q={detail} />
-        {address && <SignalPanel address={address} />}
-        <ChartPanel address={address} />
-      </Panel>
-    ),
-    order: <OrderTicket token={token} position={position} />,
-    bottom: <BottomPanel address={address} positionsQuery={positionsQuery} onSelect={select} />,
-  }
+  // Lets the top bar's reset button drive the workspace's own layout state.
+  const workspace = useRef(null)
 
   return (
     <div className="relative flex flex-col text-[#f0ebe0] font-mono lg:h-screen lg:overflow-hidden">
@@ -1144,24 +1098,39 @@ export default function TradingTerminal() {
         solAddress={solAddress}
         solBalance={solBalance}
         paperCash={portfolio?.cashBalance ?? null}
-        onResetLayout={() => setLayout({ ...DEFAULT_LAYOUT })}
+        onResetLayout={() => workspace.current?.reset()}
       />
 
-      <div className="relative z-10 flex-1 min-h-0 grid gap-3 p-3 grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)_300px] lg:grid-rows-[minmax(0,1fr)_260px]">
-        {SLOT_KEYS.map((pos) => (
-          <DraggableSlot
-            key={pos}
-            pos={pos}
-            panelId={layout[pos]}
-            dragOver={dragOverPos === pos && dragFrom !== pos}
-            onDragStart={setDragFrom}
-            onDragOver={setDragOverPos}
-            onDragLeave={() => setDragOverPos(null)}
-            onDrop={(toPos) => { if (dragFrom) swapSlots(dragFrom, toPos); setDragFrom(null); setDragOverPos(null) }}
-          >
-            {panelContent[layout[pos]]}
-          </DraggableSlot>
-        ))}
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col p-3">
+        <PanelWorkspace
+          panels={PANELS}
+          storageKey={LAYOUT_KEY}
+          controls={workspace}
+          surface=""
+          showGrid={false}
+          freeformMinWidth={FREEFORM_MIN_CANVAS_WIDTH}
+          accent="#9eae84"
+        >
+          <WorkspacePanel id="discovery" bare>
+            <DiscoveryPanel selected={address} onSelect={select} />
+          </WorkspacePanel>
+
+          <WorkspacePanel id="chart" bare>
+            <Panel className="flex flex-col h-full min-h-0">
+              <TokenHeader q={detail} />
+              {address && <SignalPanel address={address} />}
+              <ChartPanel address={address} />
+            </Panel>
+          </WorkspacePanel>
+
+          <WorkspacePanel id="bottom" bare>
+            <BottomPanel address={address} positionsQuery={positionsQuery} onSelect={select} />
+          </WorkspacePanel>
+
+          <WorkspacePanel id="order" bare>
+            <OrderTicket token={token} position={position} />
+          </WorkspacePanel>
+        </PanelWorkspace>
       </div>
     </div>
   )

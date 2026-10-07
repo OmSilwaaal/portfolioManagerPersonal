@@ -2,6 +2,7 @@ import { useState } from 'react'
 import UrgencyTag from './UrgencyTag'
 import JargonTooltip from './JargonTooltip'
 import { jargonMap } from '../utils/jargonMap'
+import { safeUrl } from '../utils/safeUrl'
 
 const BORDER = 'var(--on-ink-border)'
 const CREAM  = 'var(--paper)'
@@ -70,7 +71,7 @@ export default function NewsCard({ item }) {
 
       {/* Headline */}
       <a
-        href={item.url || '#'}
+        href={safeUrl(item.url, '#')}
         target="_blank"
         rel="noopener noreferrer"
         style={{

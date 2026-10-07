@@ -1,22 +1,55 @@
 const express = require('express');
 const router = express.Router();
-const { v4: uuidv4 } = require('uuid');
 const {
   getPreferences,
   createPreferences,
   updatePreferences,
 } = require('../db/queries');
 
-// GET /api/preferences/:sessionId
+// Preferences are keyed by the authenticated user's id. Any :sessionId a client sends is ignored,
+// so one user can never read or overwrite another user's preferences.
+const MAX_LIST = 50;
+const MAX_STR = 40;
+
+function cleanStr(v) {
+  return typeof v === 'string' && v.length <= MAX_STR ? v : null;
+}
+
+function cleanStrList(v) {
+  if (!Array.isArray(v)) return null;
+  return v.filter((x) => typeof x === 'string' && x.length <= MAX_STR).slice(0, MAX_LIST);
+}
+
+function cleanWatchlist(v) {
+  if (!Array.isArray(v)) return null;
+  return v
+    .filter((x) => x && typeof x.ticker === 'string' && /^[A-Za-z0-9:.\-]{1,15}$/.test(x.ticker))
+    .slice(0, 200)
+    .map((x) => ({
+      ticker: x.ticker.toUpperCase(),
+      assetType: cleanStr(x.assetType) ?? 'stock',
+      name: typeof x.name === 'string' ? x.name.slice(0, 100) : x.ticker.toUpperCase(),
+    }));
+}
+
+function sanitize(body, userId) {
+  const b = body ?? {};
+  return {
+    sessionId: userId,
+    investorType: cleanStr(b.investorType),
+    riskTolerance: cleanStr(b.riskTolerance),
+    updateFrequency: cleanStr(b.updateFrequency),
+    watchedCategories: cleanStrList(b.watchedCategories),
+    priorityAlerts: cleanStrList(b.priorityAlerts),
+    watchlist: cleanWatchlist(b.watchlist),
+  };
+}
+
+// GET /api/preferences/:sessionId  (param ignored — always the caller's own)
 router.get('/:sessionId', (req, res, next) => {
   try {
-    const { sessionId } = req.params;
-    const prefs = getPreferences(sessionId);
-
-    if (!prefs) {
-      return res.status(404).json({ error: 'Preferences not found for this session' });
-    }
-
+    const prefs = getPreferences(req.user.id);
+    if (!prefs) return res.status(404).json({ error: true, message: 'Preferences not found.' });
     res.json(parsePreferences(prefs));
   } catch (err) {
     next(err);
@@ -26,36 +59,23 @@ router.get('/:sessionId', (req, res, next) => {
 // POST /api/preferences
 router.post('/', (req, res, next) => {
   try {
-    const sessionId = req.body.sessionId || uuidv4();
-    const prefsData = { ...req.body, sessionId };
-
-    const existing = getPreferences(sessionId);
-    let saved;
-
-    if (existing) {
-      saved = updatePreferences(sessionId, prefsData);
-    } else {
-      saved = createPreferences(prefsData);
-    }
-
-    res.status(201).json({ sessionId, preferences: parsePreferences(saved) });
+    const prefsData = sanitize(req.body, req.user.id);
+    const existing = getPreferences(req.user.id);
+    const saved = existing ? updatePreferences(req.user.id, prefsData) : createPreferences(prefsData);
+    res.status(201).json({ sessionId: req.user.id, preferences: parsePreferences(saved) });
   } catch (err) {
     next(err);
   }
 });
 
-// PUT /api/preferences/:sessionId
+// PUT /api/preferences/:sessionId  (param ignored — always the caller's own)
 router.put('/:sessionId', (req, res, next) => {
   try {
-    const { sessionId } = req.params;
-    const existing = getPreferences(sessionId);
-
-    if (!existing) {
-      return res.status(404).json({ error: 'Preferences not found for this session' });
+    if (!getPreferences(req.user.id)) {
+      return res.status(404).json({ error: true, message: 'Preferences not found.' });
     }
-
-    const updated = updatePreferences(sessionId, req.body);
-    res.json({ sessionId, preferences: parsePreferences(updated) });
+    const updated = updatePreferences(req.user.id, sanitize(req.body, req.user.id));
+    res.json({ sessionId: req.user.id, preferences: parsePreferences(updated) });
   } catch (err) {
     next(err);
   }
