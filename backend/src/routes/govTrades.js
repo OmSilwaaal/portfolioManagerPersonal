@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { requireAdminSecret } = require('../middleware/validate');
 const { getRecentGovTrades, getTradesByOfficial, refreshGovTradesCache } = require('../services/govTrades');
 
 const DISCLAIMER =
@@ -13,10 +14,12 @@ router.get('/', async (req, res, next) => {
     const parsedPage = Math.max(parseInt(page, 10) || 1, 1);
 
     const filters = {};
-    if (chamber) filters.chamber = chamber;
-    if (party) filters.party = party;
-    if (ticker) filters.ticker = ticker;
-    if (days) filters.days = days;
+    // Coerce to plain strings (query params may be arrays); cap length
+    const str = (v) => String(v).slice(0, 40);
+    if (chamber) filters.chamber = str(chamber);
+    if (party) filters.party = str(party);
+    if (ticker) filters.ticker = str(ticker);
+    if (days && Number.isFinite(parseInt(days, 10))) filters.days = Math.min(Math.max(parseInt(days, 10), 1), 3650);
 
     // Fetch with higher limit for server-side pagination
     const all = await getRecentGovTrades(parsedLimit * parsedPage, filters);
@@ -111,13 +114,7 @@ router.get('/official/:name', async (req, res, next) => {
 });
 
 // POST /api/gov-trades/refresh — protected by ADMIN_SECRET env var
-router.post('/refresh', (req, res, next) => {
-  const secret = process.env.ADMIN_SECRET;
-  if (!secret || req.headers['x-admin-secret'] !== secret) {
-    return res.status(403).json({ error: true, message: 'Forbidden.' });
-  }
-  next();
-}, async (req, res, next) => {
+router.post('/refresh', requireAdminSecret, async (req, res, next) => {
   try {
     const trades = await refreshGovTradesCache();
     res.json({ message: 'Cache refreshed', count: trades.length });

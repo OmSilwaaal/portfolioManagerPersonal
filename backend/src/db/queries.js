@@ -18,10 +18,21 @@ function removeFromWatchlist(ticker) {
   return stmt.run(ticker.toUpperCase());
 }
 
-// Alert queries
-function getAllAlerts() {
+// Alert queries — every user-facing query is scoped by user_id
+function getAlertsByUser(userId) {
   const db = getDb();
-  return db.prepare('SELECT * FROM alerts ORDER BY createdAt DESC').all();
+  return db.prepare('SELECT * FROM alerts WHERE user_id = ? ORDER BY createdAt DESC').all(userId);
+}
+
+// Poller only: all untriggered alerts across users
+function getAllPendingAlerts() {
+  const db = getDb();
+  return db.prepare('SELECT * FROM alerts WHERE triggered = 0 AND user_id IS NOT NULL').all();
+}
+
+function countAlertsByUser(userId) {
+  const db = getDb();
+  return db.prepare('SELECT COUNT(*) AS n FROM alerts WHERE user_id = ?').get(userId).n;
 }
 
 function getAlertById(id) {
@@ -29,19 +40,23 @@ function getAlertById(id) {
   return db.prepare('SELECT * FROM alerts WHERE id = ?').get(id);
 }
 
-function createAlert(ticker, targetPrice, direction) {
+function getAlertForUser(id, userId) {
+  const db = getDb();
+  return db.prepare('SELECT * FROM alerts WHERE id = ? AND user_id = ?').get(id, userId);
+}
+
+function createAlert(userId, ticker, targetPrice, direction) {
   const db = getDb();
   const stmt = db.prepare(
-    'INSERT INTO alerts (ticker, targetPrice, direction) VALUES (?, ?, ?)'
+    'INSERT INTO alerts (user_id, ticker, targetPrice, direction) VALUES (?, ?, ?, ?)'
   );
-  const result = stmt.run(ticker.toUpperCase(), targetPrice, direction);
+  const result = stmt.run(userId, ticker.toUpperCase(), targetPrice, direction);
   return getAlertById(result.lastInsertRowid);
 }
 
-function deleteAlert(id) {
+function deleteAlertForUser(id, userId) {
   const db = getDb();
-  const stmt = db.prepare('DELETE FROM alerts WHERE id = ?');
-  return stmt.run(id);
+  return db.prepare('DELETE FROM alerts WHERE id = ? AND user_id = ?').run(id, userId);
 }
 
 function markAlertTriggered(id) {
@@ -143,10 +158,12 @@ module.exports = {
   getAllWatchlist,
   addToWatchlist,
   removeFromWatchlist,
-  getAllAlerts,
-  getAlertById,
+  getAlertsByUser,
+  getAllPendingAlerts,
+  countAlertsByUser,
+  getAlertForUser,
   createAlert,
-  deleteAlert,
+  deleteAlertForUser,
   markAlertTriggered,
   getPreferences,
   createPreferences,

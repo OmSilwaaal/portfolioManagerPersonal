@@ -2,6 +2,7 @@ const express = require('express')
 const router = express.Router()
 const { requireAuth } = require('../middleware/auth')
 const { supabase } = require('../services/supabaseAdmin')
+const { safeEqual } = require('../middleware/validate')
 
 const stripe = process.env.STRIPE_SECRET_KEY
   ? require('stripe')(process.env.STRIPE_SECRET_KEY)
@@ -35,8 +36,8 @@ router.post('/pro-checkout', requireAuth, async (req, res) => {
 
 // POST /api/stripe/redeem-code — validate a promo code server-side and grant Pro
 router.post('/redeem-code', requireAuth, async (req, res) => {
-  const { code } = req.body
-  if (!code || typeof code !== 'string') {
+  const { code } = req.body ?? {}
+  if (!code || typeof code !== 'string' || code.length > 100) {
     return res.status(400).json({ error: true, message: 'No code provided.' })
   }
 
@@ -45,7 +46,7 @@ router.post('/redeem-code', requireAuth, async (req, res) => {
     return res.status(503).json({ error: true, message: 'Promo codes not configured.' })
   }
 
-  if (code.trim().toUpperCase() !== validCode.trim().toUpperCase()) {
+  if (!safeEqual(code.trim().toUpperCase(), validCode.trim().toUpperCase())) {
     return res.status(400).json({ error: true, message: 'Invalid code. Please check and try again.' })
   }
 
@@ -60,8 +61,8 @@ router.post('/redeem-code', requireAuth, async (req, res) => {
   res.json({ success: true })
 })
 
-// GET /api/stripe/status — sanity check (no auth needed)
-router.get('/status', (req, res) => {
+// GET /api/stripe/status — sanity check (auth required: don't advertise config to the public)
+router.get('/status', requireAuth, (req, res) => {
   res.json({
     stripeConfigured: !!stripe,
     priceIdConfigured: !!process.env.STRIPE_PRO_PRICE_ID,

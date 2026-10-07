@@ -3,6 +3,7 @@ import SentimentBadge from './SentimentBadge'
 import ShareToGroupModal from './ShareToGroupModal'
 import StockLogo from '../StockLogo'
 import CommodityIcon from '../CommodityIcon'
+import { safeUrl } from '../../utils/safeUrl'
 
 const TYPE_CONFIG = {
   stock:      { label: 'Stock',     colorVar: 'var(--party-dem)',  bgStyle: { background: 'rgba(91,127,187,0.10)',  border: '1px solid rgba(91,127,187,0.22)'  } },
@@ -339,7 +340,7 @@ export default function FeedCard({ type, data, urgency, index = 0 }) {
   const sentiment = data.sentiment || null
   const timestamp = data.timestamp || data.publishedAt || data.disclosureDate || ''
   const level     = urgency || data.urgency || 'Low'
-  const url       = data.url || null
+  const url       = safeUrl(data.url)
   const image     = data.image_url || null
 
   const config  = TYPE_CONFIG[type] || TYPE_CONFIG.macro

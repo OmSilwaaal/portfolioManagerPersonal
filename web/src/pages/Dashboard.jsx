@@ -6,6 +6,7 @@ import { useGetStockQuery } from '../api/stocksApi'
 import { useGetGroupsQuery } from '../api/groupsApi'
 import { useAuth } from '../contexts/AuthContext'
 import MacroCalendar from '../components/MacroCalendar'
+import { safeUrl } from '../utils/safeUrl'
 
 // ── Tokens ─────────────────────────────────────────────────────────────────────
 const CANVAS   = '#0d0d10'
@@ -194,7 +195,7 @@ function NewsRow({ item }) {
   const [hov,setHov]=useState(false)
   const urg = {high:NEG,medium:OCH,low:POS}[item.urgency?.toLowerCase()]||BD
   return (
-    <motion.a href={item.url||'#'} target="_blank" rel="noopener noreferrer"
+    <motion.a href={safeUrl(item.url, '#')} target="_blank" rel="noopener noreferrer"
       onHoverStart={()=>setHov(true)} onHoverEnd={()=>setHov(false)}
       style={{display:'block',textDecoration:'none',padding:'13px 14px',borderRadius:14,marginBottom:6,
         background:hov?'rgba(255,255,255,0.06)':'rgba(255,255,255,0.025)',

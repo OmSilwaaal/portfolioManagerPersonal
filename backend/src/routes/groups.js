@@ -2,12 +2,46 @@ const express = require('express')
 const router = express.Router()
 const { supabase } = require('../services/supabaseAdmin')
 const { requireAuth } = require('../middleware/auth')
+const crypto = require('crypto')
+
+// Group ids appear in URLs — reject anything that isn't a plain id before it reaches the DB
+router.param('id', (req, res, next, id) => {
+  if (!/^[A-Za-z0-9-]{1,40}$/.test(id)) return res.status(400).json({ error: true, message: 'Invalid group id.' })
+  next()
+})
+router.param('userId', (req, res, next, id) => {
+  if (!/^[A-Za-z0-9-]{1,64}$/.test(id)) return res.status(400).json({ error: true, message: 'Invalid user id.' })
+  next()
+})
+router.param('postId', (req, res, next, id) => {
+  if (!/^[A-Za-z0-9-]{1,40}$/.test(id)) return res.status(400).json({ error: true, message: 'Invalid post id.' })
+  next()
+})
+
+const COLOR_RE = /^#[0-9a-fA-F]{3,8}$/
+const IMAGE_DATA_RE = /^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+/=]+$/
+
+// Public-facing name — never the raw email address
+function memberName(user) {
+  const meta = user?.user_metadata ?? {}
+  return String(meta.full_name ?? meta.name ?? (user?.email ? user.email.split('@')[0] : 'Member')).slice(0, 80)
+}
+
+// Returns a cleaned image value, null (clear), or undefined (invalid)
+function cleanImage(v) {
+  if (v === null || v === '') return null
+  if (typeof v !== 'string') return undefined
+  const s = v.trim()
+  if (IMAGE_DATA_RE.test(s)) return s.length <= 45000 ? s : undefined
+  return /^https?:\/\/[^\s]{1,500}$/i.test(s) ? s : undefined
+}
 
 async function generateCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
   let code, exists
   do {
-    code = Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
+    // CSPRNG — join codes are the only secret protecting a private group
+    code = Array.from({ length: 8 }, () => chars[crypto.randomInt(chars.length)]).join('')
     const { data } = await supabase.from('groups').select('id').eq('code', code).maybeSingle()
     exists = !!data
   } while (exists)
@@ -17,7 +51,7 @@ async function generateCode() {
 async function getMembership(groupId, userId) {
   const { data } = await supabase
     .from('group_members')
-    .select('role')
+    .select('role, can_post')
     .eq('group_id', groupId)
     .eq('user_id', userId)
     .maybeSingle()
@@ -62,8 +96,13 @@ router.get('/', requireAuth, async (req, res) => {
 // POST / — create group
 router.post('/', requireAuth, async (req, res) => {
   try {
-    const { name, description = '', color = '#e2e8f0', image_url = null } = req.body
-    if (!name?.trim()) return res.status(400).json({ error: true, message: 'Group name is required.' })
+    const { name, description = '', color = '#e2e8f0', image_url = null } = req.body ?? {}
+    if (typeof name !== 'string' || !name.trim()) return res.status(400).json({ error: true, message: 'Group name is required.' })
+    if (name.trim().length > 60) return res.status(400).json({ error: true, message: 'Group name cannot exceed 60 characters.' })
+    if (typeof description !== 'string' || description.length > 300) return res.status(400).json({ error: true, message: 'Description cannot exceed 300 characters.' })
+    if (typeof color !== 'string' || !COLOR_RE.test(color)) return res.status(400).json({ error: true, message: 'Invalid color.' })
+    const cleanImg = cleanImage(image_url)
+    if (cleanImg === undefined) return res.status(400).json({ error: true, message: 'Invalid or too-large group image.' })
 
     const { count: ownedCount } = await supabase
       .from('groups')
@@ -72,10 +111,10 @@ router.post('/', requireAuth, async (req, res) => {
     if (ownedCount >= 3) return res.status(400).json({ error: true, message: 'You can only create up to 3 groups.' })
 
     const code = await generateCode()
-    const displayName = req.user.user_metadata?.full_name ?? req.user.email ?? req.user.id
+    const displayName = memberName(req.user)
 
     const insertPayload = { name: name.trim(), description: description.trim(), color, emoji: '', code, created_by: req.user.id }
-    if (image_url) insertPayload.image_url = image_url
+    if (cleanImg) insertPayload.image_url = cleanImg
 
     const { data: group, error: gErr } = await supabase
       .from('groups')
@@ -88,7 +127,6 @@ router.post('/', requireAuth, async (req, res) => {
       group_id: group.id,
       user_id: req.user.id,
       display_name: displayName,
-      email: req.user.email ?? null,
       role: 'admin',
       can_post: true,
     })
@@ -104,8 +142,10 @@ router.post('/', requireAuth, async (req, res) => {
 // POST /join — join via code
 router.post('/join', requireAuth, async (req, res) => {
   try {
-    const { code } = req.body
-    if (!code?.trim()) return res.status(400).json({ error: true, message: 'Code is required.' })
+    const { code } = req.body ?? {}
+    if (typeof code !== 'string' || !/^[A-Za-z0-9]{4,12}$/.test(code.trim())) {
+      return res.status(400).json({ error: true, message: 'Invalid group code.' })
+    }
 
     const { data: group, error: gErr } = await supabase
       .from('groups')
@@ -118,12 +158,11 @@ router.post('/join', requireAuth, async (req, res) => {
     const existing = await getMembership(group.id, req.user.id)
     if (existing) return res.json({ ...group, role: existing.role, alreadyMember: true })
 
-    const displayName = req.user.user_metadata?.full_name ?? req.user.email ?? req.user.id
+    const displayName = memberName(req.user)
     const { error: mErr } = await supabase.from('group_members').insert({
       group_id: group.id,
       user_id: req.user.id,
       display_name: displayName,
-      email: req.user.email ?? null,
       role: 'member',
       can_post: false,
     })
@@ -161,7 +200,9 @@ router.get('/:id', requireAuth, async (req, res) => {
       .order('created_at', { ascending: false })
       .limit(50)
 
-    res.json({ ...group, role: member.role, members: members ?? [], posts: posts ?? [] })
+    // Member emails are private — strip them from the response
+    const safeMembers = (members ?? []).map(({ email, ...rest }) => rest)
+    res.json({ ...group, role: member.role, members: safeMembers, posts: posts ?? [] })
   } catch (err) {
     console.error('GET /groups/:id', err)
     res.status(500).json({ error: true, message: 'Failed to load group.' })
@@ -175,13 +216,31 @@ router.patch('/:id', requireAuth, async (req, res) => {
     const member = await getMembership(groupId, req.user.id)
     if (member?.role !== 'admin') return res.status(403).json({ error: true, message: 'Admin only.' })
 
-    const { name, description, color, emoji, image_url } = req.body
+    const { name, description, color, emoji, image_url } = req.body ?? {}
     const updates = {}
-    if (name !== undefined) updates.name = name
-    if (description !== undefined) updates.description = description
-    if (color !== undefined) updates.color = color
-    if (emoji !== undefined) updates.emoji = emoji
-    if (image_url !== undefined) updates.image_url = image_url || null
+    const bad = (msg) => res.status(400).json({ error: true, message: msg })
+    if (name !== undefined) {
+      if (typeof name !== 'string' || !name.trim() || name.trim().length > 60) return bad('Group name must be 1–60 characters.')
+      updates.name = name.trim()
+    }
+    if (description !== undefined) {
+      if (typeof description !== 'string' || description.length > 300) return bad('Description cannot exceed 300 characters.')
+      updates.description = description.trim()
+    }
+    if (color !== undefined) {
+      if (typeof color !== 'string' || !COLOR_RE.test(color)) return bad('Invalid color.')
+      updates.color = color
+    }
+    if (emoji !== undefined) {
+      if (typeof emoji !== 'string' || emoji.length > 16) return bad('Invalid emoji.')
+      updates.emoji = emoji
+    }
+    if (image_url !== undefined) {
+      const img = cleanImage(image_url)
+      if (img === undefined) return bad('Invalid or too-large group image.')
+      updates.image_url = img
+    }
+    if (Object.keys(updates).length === 0) return bad('Nothing to update.')
 
     const { data: group, error } = await supabase
       .from('groups')
@@ -208,8 +267,8 @@ router.post('/:id/posts', requireAuth, async (req, res) => {
       return res.status(403).json({ error: true, message: 'You do not have permission to post in this group.' })
     }
 
-    const { content, type = 'post' } = req.body
-    if (!content?.trim()) return res.status(400).json({ error: true, message: 'Content is required.' })
+    const { content, type = 'post' } = req.body ?? {}
+    if (typeof content !== 'string' || !content.trim()) return res.status(400).json({ error: true, message: 'Content is required.' })
     if (content.length > 2000) return res.status(400).json({ error: true, message: 'Post content cannot exceed 2000 characters.' })
     if (!['post', 'announcement', 'notification'].includes(type)) {
       return res.status(400).json({ error: true, message: 'Invalid post type.' })
@@ -218,7 +277,7 @@ router.post('/:id/posts', requireAuth, async (req, res) => {
       return res.status(403).json({ error: true, message: 'Only admins can post announcements.' })
     }
 
-    const authorName = req.user.user_metadata?.full_name ?? req.user.email ?? req.user.id
+    const authorName = memberName(req.user)
     const { data: post, error } = await supabase
       .from('group_posts')
       .insert({ group_id: groupId, author_id: req.user.id, author_name: authorName, content: content.trim(), type })
@@ -321,7 +380,10 @@ router.patch('/:id/members/:userId', requireAuth, async (req, res) => {
     if (member?.role !== 'admin') return res.status(403).json({ error: true, message: 'Admin only.' })
     if (targetUserId === req.user.id) return res.status(400).json({ error: true, message: 'Cannot change your own role.' })
 
-    const { role, rank, can_post } = req.body
+    const { role, rank, can_post } = req.body ?? {}
+    if (rank !== undefined && rank !== null && typeof rank !== 'string') {
+      return res.status(400).json({ error: true, message: 'Invalid rank.' })
+    }
     if (role !== undefined && !['admin', 'member'].includes(role)) {
       return res.status(400).json({ error: true, message: 'Invalid role.' })
     }
@@ -334,10 +396,11 @@ router.patch('/:id/members/:userId', requireAuth, async (req, res) => {
       updates.role = role
       if (role === 'admin') updates.can_post = true
     }
-    if (rank !== undefined) updates.rank = rank.trim().slice(0, 30) || null
+    if (rank !== undefined) updates.rank = (rank ?? '').trim().slice(0, 30) || null
     if (can_post !== undefined) updates.can_post = Boolean(can_post)
 
-    await supabase.from('group_members').update(updates).eq('group_id', groupId).eq('user_id', targetUserId)
+    const { error: upErr } = await supabase.from('group_members').update(updates).eq('group_id', groupId).eq('user_id', targetUserId)
+    if (upErr) throw upErr
     res.json({ success: true })
   } catch (err) {
     console.error('PATCH /groups/:id/members/:userId', err)

@@ -27,3 +27,15 @@ function safeHttpUrl(v, maxLen = 500) {
 }
 
 module.exports = { isUuid, isTicker, safeEqual, safeHttpUrl };
+
+// Express middleware: requires header `x-admin-secret` to match ADMIN_SECRET (constant-time compare)
+function requireAdminSecret(req, res, next) {
+  const secret = process.env.ADMIN_SECRET;
+  const provided = req.headers['x-admin-secret'];
+  if (!secret || typeof provided !== 'string' || !safeEqual(provided, secret)) {
+    return res.status(403).json({ error: true, message: 'Forbidden.' });
+  }
+  next();
+}
+
+module.exports.requireAdminSecret = requireAdminSecret;
