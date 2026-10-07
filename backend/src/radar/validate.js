@@ -7,6 +7,9 @@
 // W: real pumps led by many buyers, fake spikes by one wallet → wallet-flow model must beat volume alone.
 // S: like A, plus security flags predict rugs → the *_safe filter must cut the rug rate.
 // M: smart-money buys genuinely LEAD pumps (plus decoys and unskilled wallets) → market_v1_sm must beat market_v1.
+// L: like M but skilled wallets buy ~40 min BEFORE the pump (a lead long enough for a per-row classifier to learn) ->
+//    'fitted + smartmoney' must beat the plain fitted model on the held-out slice.
+// N: like M but the skilled-wallet bursts are unrelated to pumps (noise) -> 'fitted + smartmoney' must NOT improve the fit.
 // R: social mentions FOLLOW the pump (plus shill decoys)  → social model must be flagged reactive, with no lift over market.
 //    (M and R feed the optional smartmoney / social feature groups through an in-memory provider; the old worlds never
 //    touch them, so A/C/G/W/S results are unaffected.)
@@ -15,7 +18,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-function buildWorld(mode, N, dbPath) {
+function buildWorld(mode, N, dbPath, reportOpts = {}) {
   for (const x of ['', '-wal', '-shm']) fs.rmSync(dbPath + x, { force: true });
   process.env.RADAR_DB_PATH = dbPath;
   // fresh module instances per world so each gets its own DB handle
@@ -76,16 +79,17 @@ function buildWorld(mode, N, dbPath) {
         const onCurve = !(migrates && m >= migMin);
         rows.push([tok, created + m * 60, 'pool' + tok, price, onCurve ? 12000 : 40000, onCurve ? 1 : 0, price * 1e9, vm5, vh1, Math.round(20 * br), Math.round(20 * (1 - br)), 120, 120]);
       }
-      if (mode === 'M' || mode === 'R') {
+      if (mode === 'M' || mode === 'R' || mode === 'N' || mode === 'L') {
         const at = (m) => created + m * 60 + Math.floor(rnd2() * 50);
-        if (mode === 'M') {
+        if (mode === 'M' || mode === 'N' || mode === 'L') {
           const evs = [];
           const burst = (m0, skill) => {
             const n = 3 + Math.floor(rnd2() * 3);
             for (let q = 0; q < n; q++) evs.push({ wallet: `sw${Math.floor(rnd2() * 300)}`, ts: at(m0 + Math.floor(rnd2() * 3)), side: 'buy',
               amount_usd: 800 + rnd2() * 2200, skill_as_of_ts: created - 86400, skill_score: skill, passed_holdout: 1 });
           };
-          if (pump) burst(tPump - 4, 0.6 + 0.3 * rnd2());                              // skilled wallets get in BEFORE the pump
+          if (mode === 'N') { if (rnd2() < 0.19) burst(30 + Math.floor(rnd2() * 90), 0.6 + 0.3 * rnd2()); }   // same event rate as M, no link to pumps
+          else if (pump) burst(mode === 'L' ? Math.max(0, tPump - 40) : tPump - 4, 0.6 + 0.3 * rnd2());                         // skilled wallets get in BEFORE the pump
           else if (rnd2() < 0.10) burst(30 + Math.floor(rnd2() * 90), 0.6 + 0.3 * rnd2());   // decoy: skilled buys, no pump
           if (rnd2() < 0.15) burst(30 + Math.floor(rnd2() * 90), 0.2);                  // unskilled wallets: must be ignored
           extraData.sm.set(tok, evs);
@@ -115,15 +119,15 @@ function buildWorld(mode, N, dbPath) {
   })();
   
   db.exec('UPDATE token SET last_snapshot_ts = (SELECT MAX(ts) FROM market_snapshot s WHERE s.token_address = token.token_address)');
-  if (mode === 'M' || mode === 'R') {
+  if (mode === 'M' || mode === 'R' || mode === 'N' || mode === 'L') {
     const { createMemoryProvider } = require('./extraFeatures');
-    const group = mode === 'M' ? 'smartmoney' : 'social';
+    const group = mode === 'R' ? 'social' : 'smartmoney';
     const from = now - 4 * 86400;
     require('./features').setExtraFeatureSource({ provider: createMemoryProvider({ sm: extraData.sm, social: extraData.social, smFrom: from, socialFrom: from }), groups: [group] });
-    const models = mode === 'M' ? ['market_v1', 'market_v2', 'market_v1_sm', 'smartmoney_only'] : ['market_v1', 'market_v2', 'market_v1_social', 'social_only'];
-    return require('./report').runReport({ horizons: [15, 60], models, featureGroups: [group] });
+    const models = mode === 'R' ? ['market_v1', 'market_v2', 'market_v1_social', 'social_only'] : ['market_v1', 'market_v2', 'market_v1_sm', 'smartmoney_only'];
+    return require('./report').runReport({ horizons: [15, 60], models, featureGroups: [group], ...reportOpts });
   }
-  return require('./report').runReport({ horizons: [15, 60] });
+  return require('./report').runReport({ horizons: [15, 60], ...reportOpts });
 }
 
 function check(name, cond, detail) {
@@ -173,6 +177,19 @@ if (require.main === module) {
   ok &= check('M: smart-money group beats market-only when skilled wallets lead pumps', m1.n >= 10 && m1.significantAfterCorrection && m1.mean > mBest + 0.1,
     `best market-only mean=${pct(mBest === -Infinity ? null : mBest)} (market_v1 n=${row(M, 'all', 'market_v1', '60m').n}, market_v2 n=${row(M, 'all', 'market_v2', '60m').n}) vs market_v1_sm mean=${pct(m1.mean)} (n=${m1.n}) p=${m1.pVsRandom}`);
   ok &= check('M: smart-money signals are early, not reactive', m1.precedence.shareReactive < 0.2, `reactive=${pct(m1.precedence.shareReactive)}`);
+
+  // fitted + smartmoney: the fitted model may use smart-money features. They must help when skilled wallets truly lead
+  // pumps (L) and must not when the same events are noise (N). "Help" = better than the plain fitted model on the SAME
+  // held-out slice: positive mean-return difference whose day-block bootstrap CI excludes 0.
+  const vs = (o) => { const r = o.results.find((x) => x.window === 'test' && x.model === 'fitted_lr+smartmoney' && x.strategy === '60m'); return r && r.vsPlainFitted; };
+  const Lw = buildWorld('L', N, path.join(dir, 'L.sqlite'));
+  const mv = vs(Lw);
+  ok &= check('L: fitted + smartmoney beats the plain fitted model on the held-out slice when skilled wallets lead pumps', !!mv && mv.meanDelta > 0 && mv.deltaCI95.lo > 0,
+    mv ? `mean delta ${pct(mv.meanDelta)} (CI ${pct(mv.deltaCI95.lo)}..${pct(mv.deltaCI95.hi)}, p=${mv.pDeltaLE0}; n ${mv.nPlain} -> ${mv.n})` : 'variant unavailable');
+  const Nw = buildWorld('N', N, path.join(dir, 'N.sqlite'));
+  const nv = vs(Nw);
+  ok &= check('N: fitted + smartmoney does NOT beat the plain fitted model when smart-money buys are noise', !nv || (!nv.significantlyBetterAfterCorrection && !(nv.deltaCI95.lo > 0)),
+    nv ? `mean delta ${pct(nv.meanDelta)} (CI ${pct(nv.deltaCI95.lo)}..${pct(nv.deltaCI95.hi)}, p=${nv.pDeltaLE0})` : 'variant unavailable');
 
   const R = buildWorld('R', N, path.join(dir, 'R.sqlite'));
   const r1 = row(R, 'all', 'market_v1_social', '60m'), r2 = row(R, 'all', 'social_only', '60m');

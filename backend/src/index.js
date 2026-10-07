@@ -215,6 +215,14 @@ try {
   console.log(`[social] collector ${socialOn ? 'started' : 'disabled (SOCIAL_COLLECTOR != 1)'}`);
   console.log(`[eval] hourly job ${require('./research/eval/report').start(rdb) ? 'started' : 'disabled (EVAL_JOB != 1)'}`);
   console.log(`[winnerFirst] job ${require('./research/eval/winnerFirst').start(() => require('./radar/db').getRadarDb(), rdb) ? 'started' : 'disabled (WINNER_FIRST_JOB != 1)'}`);
+  // one compact "what is on / is data flowing" block at startup and every 30 min (RESEARCH_SELFCHECK_MS=0 disables)
+  require('./research/selfCheck').start({
+    getContext: () => {
+      const feat = require('./radar/features');
+      const src = typeof feat.getExtraSource === 'function' ? feat.getExtraSource() : null;
+      return { db: rdb, extraGroups: src ? src.groups : [], liveModel: src ? feat.liveModelFor(src.groups) : 'market_v2' };
+    },
+  });
 } catch (err) {
   console.error('[research] failed to start collectors:', err.message);
 }

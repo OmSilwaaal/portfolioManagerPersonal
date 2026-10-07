@@ -166,6 +166,10 @@ function start(db, opts = {}) {
     };
     timer = setTimeout(tick, opts.initialDelayMs != null ? opts.initialDelayMs : 15_000);
     if (timer.unref) timer.unref();
+    // fast loop: polls only skilled wallets' recent trades so fresh buys reach smart_money_event within ~1 min
+    // (SMART_MONEY_FAST_MS=0 disables). Never throws; shares the Birdeye daily budget with this loop.
+    try { require('./fast').start(db, { env, log, providers: active, birdeyeBudget: budget }); }
+    catch (e) { log.warn(`[smart-money] fast loop not started: ${e.message}`); }
     log.log(`[smart-money] collector started (every ${interval}ms; providers: ${active.map((p) => p.name).join(', ')}; discovery: ${discoverySources.filter((s) => s.enabled).map((s) => s.name).join(', ') || 'none'})`);
     return { started: true };
   } catch (e) {
@@ -175,6 +179,7 @@ function start(db, opts = {}) {
 }
 
 function stop() {
+  try { require('./fast').stop(); } catch { /* ignore */ }
   stopped = true;
   if (timer) clearTimeout(timer);
   timer = null;

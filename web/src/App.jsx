@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import PriceAlertBanner from './components/PriceAlertBanner'
@@ -7,32 +7,8 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { setPreferences, setIsPro } from './store/preferencesSlice'
 import Sidebar from './components/Sidebar'
 import BottomNav from './components/BottomNav'
-import Dashboard from './pages/Dashboard'
-import Stocks from './pages/Stocks'
-import Crypto from './pages/Crypto'
-import CopyTrading from './pages/CopyTrading'
-import Alerts from './pages/Alerts'
-import Onboarding from './pages/Onboarding'
-import Welcome from './pages/Welcome'
-import Feed from './pages/Feed'
-import GovTrades from './pages/GovTrades'
-import Commodities from './pages/Commodities'
-import Settings from './pages/Settings'
-import PaperTrading from './pages/PaperTrading'
-import Groups from './pages/Groups'
-import GroupDetail from './pages/GroupDetail'
-import CreateGroup from './pages/CreateGroup'
-import Profile from './pages/Profile'
-import Landing from './pages/Landing'
-import Pricing from './pages/Pricing'
-import Portfolio from './pages/Portfolio'
-import PrivacyPolicy from './pages/PrivacyPolicy'
-import Terms from './pages/Terms'
-import Disclaimer from './pages/Disclaimer'
-import TradingTerminal from './pages/TradingTerminal'
-import ResearchDashboard from './pages/ResearchDashboard'
 import { CelebrationProvider } from './components/ProfitCelebration'
-import PrivyProviderWrapper from './providers/PrivyProviderWrapper'
+import PageFallback from './components/PageFallback'
 
 // Import API modules to register endpoints
 import './api/stocksApi'
@@ -43,6 +19,38 @@ import './api/searchApi'
 import './api/notificationsApi'
 import './api/explainerApi'
 import './api/snaptradeApi'
+
+// Route-level code splitting: pages load on demand
+const Stocks = lazy(() => import('./pages/Stocks'))
+const Crypto = lazy(() => import('./pages/Crypto'))
+const CopyTrading = lazy(() => import('./pages/CopyTrading'))
+const Alerts = lazy(() => import('./pages/Alerts'))
+const Onboarding = lazy(() => import('./pages/Onboarding'))
+const Welcome = lazy(() => import('./pages/Welcome'))
+const Feed = lazy(() => import('./pages/Feed'))
+const GovTrades = lazy(() => import('./pages/GovTrades'))
+const Commodities = lazy(() => import('./pages/Commodities'))
+const Settings = lazy(() => import('./pages/Settings'))
+const PaperTrading = lazy(() => import('./pages/PaperTrading'))
+const Groups = lazy(() => import('./pages/Groups'))
+const GroupDetail = lazy(() => import('./pages/GroupDetail'))
+const CreateGroup = lazy(() => import('./pages/CreateGroup'))
+const Profile = lazy(() => import('./pages/Profile'))
+const Landing = lazy(() => import('./pages/Landing'))
+const Pricing = lazy(() => import('./pages/Pricing'))
+const Portfolio = lazy(() => import('./pages/Portfolio'))
+const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'))
+const Terms = lazy(() => import('./pages/Terms'))
+const Disclaimer = lazy(() => import('./pages/Disclaimer'))
+const ResearchDashboard = lazy(() => import('./pages/ResearchDashboard'))
+// Privy (and its wallet stack) is only needed by the terminal, so it loads with that route
+const TradingTerminal = lazy(async () => {
+  const [{ default: Page }, { default: PrivyProviderWrapper }] = await Promise.all([
+    import('./pages/TradingTerminal'),
+    import('./providers/PrivyProviderWrapper'),
+  ])
+  return { default: () => <PrivyProviderWrapper><Page /></PrivyProviderWrapper> }
+})
 
 function Spinner() {
   return (
@@ -60,6 +68,8 @@ function ProtectedLayout() {
 
   if (loading) return <Spinner />
   if (!user) return <Navigate to="/" replace />
+  // Preferences hydrate from user metadata in an effect; wait for it so a hard reload on a deep link is not bounced to /onboarding
+  if (!onboardingComplete && user.user_metadata?.onboardingComplete) return <Spinner />
   if (!onboardingComplete) return <Navigate to="/onboarding" replace />
 
   return (
@@ -68,7 +78,9 @@ function ProtectedLayout() {
       <PriceAlertBanner tickers={watchlistTickers} />
       <Sidebar />
       <div className="flex-1 md:ml-[200px] flex flex-col min-h-screen pb-16 md:pb-0">
-        <Outlet />
+        <Suspense fallback={<PageFallback />}>
+          <Outlet />
+        </Suspense>
       </div>
       <BottomNav />
     </div>
@@ -82,12 +94,16 @@ function ProtectedLayoutMinimal() {
 
   if (loading) return <Spinner />
   if (!user) return <Navigate to="/" replace />
+  // Preferences hydrate from user metadata in an effect; wait for it so a hard reload on a deep link is not bounced to /onboarding
+  if (!onboardingComplete && user.user_metadata?.onboardingComplete) return <Spinner />
   if (!onboardingComplete) return <Navigate to="/onboarding" replace />
 
   return (
     <div className={`flex min-h-screen ${isDark ? 'bg-[#0f0f0f] text-white' : 'bg-white text-[#0f0f0f]'}`}>
       <div className="flex-1 flex flex-col min-h-screen">
-        <Outlet />
+        <Suspense fallback={<PageFallback />}>
+          <Outlet />
+        </Suspense>
       </div>
     </div>
   )
@@ -131,6 +147,7 @@ function AppInner() {
   }, [user, dispatch])
 
   return (
+    <Suspense fallback={<PageFallback fullScreen />}>
     <Routes>
       {/* Public */}
       <Route path="/" element={<Landing />} />
@@ -164,22 +181,21 @@ function AppInner() {
         <Route path="/settings" element={<Settings />} />
         <Route path="/pricing" element={<Pricing />} />
         <Route path="/terminal" element={<TradingTerminal />} />
-<Route path="/research" element={<ResearchDashboard />} />
+        <Route path="/research" element={<ResearchDashboard />} />
       </Route>
     </Routes>
+    </Suspense>
   )
 }
 
 export default function App() {
   return (
     <BrowserRouter>
-      <PrivyProviderWrapper>
-        <AuthProvider>
-          <CelebrationProvider>
-            <AppInner />
-          </CelebrationProvider>
-        </AuthProvider>
-      </PrivyProviderWrapper>
+      <AuthProvider>
+        <CelebrationProvider>
+          <AppInner />
+        </CelebrationProvider>
+      </AuthProvider>
     </BrowserRouter>
   )
 }

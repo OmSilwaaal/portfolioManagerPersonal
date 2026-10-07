@@ -4,6 +4,7 @@ const data = require('../services/memecoinData');
 
 const { computeSignal, MODEL_VERSION } = require('../services/signalScore');
 const radarSignals = require('../services/radarSignals');
+const positionsSvc = require('../services/memecoinPositions');
 
 // The radar is the primary signal engine: tokens it tracks get the radar score; others fall back to activity-v0.
 // Radar problems (disabled, empty, DB error) always degrade to an empty result, never an error.
@@ -12,7 +13,7 @@ function radarLookup(addresses) {
 }
 // Radar score + radar risk flags merged with the activity-v0 flags computed from list data.
 function radarShape(token, r, mineSig) {
-  return radarSignals.toMemecoinSignal({ ...r, symbol: r.symbol || token.symbol }, mineSig);
+  return radarSignals.toMemecoinSignal({ ...r, symbol: data.cleanSymbol(r.symbol || token.symbol, token.address) }, mineSig);
 }
 
 // DB persistence is best-effort and loaded lazily so a DB problem never breaks the API.
@@ -30,6 +31,7 @@ function getSupabase() {
   if (!supabase) supabase = require('../services/supabaseAdmin').supabase;
   return supabase;
 }
+router.__setSupabase = (client) => { supabase = client; }; // test hook
 
 // Wrap async handlers: map known data errors to status codes, never crash.
 const h = (fn) => async (req, res) => {
@@ -53,12 +55,6 @@ router.get('/trending', h(async (_req, res) => res.json(await data.getTrending()
 router.get('/new', h(async (_req, res) => res.json(await data.getNew())));
 router.get('/search', h(async (req, res) => res.json(await data.search(req.query.q))));
 
-router.post('/quote', h(async (req, res) => {
-  const { address, side, amountSol, amountTokens, slippageBps } = req.body || {};
-  if (!data.isValidAddress(address)) throw new data.MemecoinDataError('Invalid Solana address', 400);
-  res.json(await data.getQuote({ address, side, amountSol, amountTokens, slippageBps }));
-}));
-
 async function ensurePortfolio(userId) {
   const sb = getSupabase();
   const { data: existing, error: e1 } = await sb.from('paper_portfolios').select('*').eq('user_id', userId).maybeSingle();
@@ -70,98 +66,225 @@ async function ensurePortfolio(userId) {
   return created;
 }
 
-router.post('/trade', h(async (req, res) => {
-  const { address, side, amountSol, amountTokens, slippageBps } = req.body || {};
+// ── order input validation ──────────────────────────────────────────────────
+const NUM_RE = /^(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/;
+// number | numeric string -> finite positive number, else null (rejects booleans, arrays, NaN, Infinity, negatives)
+function positiveNumber(v) {
+  if (typeof v === 'number') return Number.isFinite(v) && v > 0 ? v : null;
+  if (typeof v === 'string' && NUM_RE.test(v.trim())) { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : null; }
+  return null;
+}
+function parseOrder(body) {
+  const { address, side, amountSol, amountTokens, slippageBps, clientOrderId } = body || {};
   if (!data.isValidAddress(address)) throw new data.MemecoinDataError('Invalid Solana address', 400);
+  if (side !== 'buy' && side !== 'sell') throw new data.MemecoinDataError("side must be 'buy' or 'sell'", 400);
+  const hasTokens = amountTokens !== undefined && amountTokens !== null && amountTokens !== '';
+  let sol;
+  let tokens;
+  if (side === 'sell' && hasTokens) {
+    tokens = positiveNumber(amountTokens);
+    if (tokens == null || tokens > 1e21) throw new data.MemecoinDataError('amountTokens must be a positive number', 400);
+  } else {
+    sol = positiveNumber(amountSol);
+    if (sol == null) throw new data.MemecoinDataError('amountSol must be a positive number', 400);
+    if (sol > 1000) throw new data.MemecoinDataError('amountSol too large', 400);
+  }
+  const noSlip = slippageBps === undefined || slippageBps === null || slippageBps === '';
+  const slip = noSlip ? 100 : Number(slippageBps);
+  if (!Number.isFinite(slip) || typeof slippageBps === 'boolean') throw new data.MemecoinDataError('slippageBps must be a number', 400);
+  const cid = typeof clientOrderId === 'string' && /^[\w.:-]{1,64}$/.test(clientOrderId) ? clientOrderId : null;
+  return { address, side, amountSol: sol, amountTokens: tokens, slippageBps: slip, clientOrderId: cid };
+}
+
+router.post('/quote', h(async (req, res) => {
+  const o = parseOrder(req.body);
+  res.json(await data.getQuote(o));
+}));
+
+// ── trade execution ─────────────────────────────────────────────────────────
+// DB precision: paper_portfolios.cash_balance NUMERIC(15,4), paper_transactions.total NUMERIC(15,4),
+// shares NUMERIC(38,9), avg_cost/price NUMERIC(38,18) (supabase-memecoin-migration.sql). We round to the column
+// precision ourselves so the compare-and-swap on cash_balance compares exactly what the DB stores.
+const r4 = (x) => Math.round(x * 1e4) / 1e4;
+const floor9 = (x) => Math.floor(x * 1e9) / 1e9;
+const DUST = 1e-9;
+
+// Serialise trades per user inside this process. Position rows are read-modify-write; the cash CAS below also protects
+// against other writers (the stock paper-trading routes, a second instance) but only for the cash column.
+// RESIDUAL RACE: with >1 backend instance two concurrent trades by one user on different instances can interleave their
+// position read/write (one trade's cash change is applied but its position update is overwritten). Closing that needs a
+// single SQL function (RPC) doing cash+position+transaction atomically; Railway currently runs one instance.
+const userLocks = new Map();
+function withUserLock(userId, fn) {
+  const prev = userLocks.get(userId) || Promise.resolve();
+  const run = prev.then(fn, fn);
+  const tail = run.catch(() => {});
+  userLocks.set(userId, tail);
+  tail.then(() => { if (userLocks.get(userId) === tail) userLocks.delete(userId); });
+  return run;
+}
+
+// Replay protection for double-submits carrying the same clientOrderId (kept 2 minutes, in-memory)
+const recentOrders = new Map(); // `${userId}:${cid}` -> { p, exp }
+function rememberOrder(key, p) {
+  const now = Date.now();
+  if (recentOrders.size > 1000) for (const [k, v] of recentOrders) if (v.exp < now) recentOrders.delete(k);
+  recentOrders.set(key, { p, exp: now + 120_000 });
+  p.catch(() => recentOrders.delete(key)); // failures may be retried
+}
+
+class TradeReject extends Error {
+  constructor(status, body) { super(body.message); this.status = status; this.body = body; }
+}
+
+async function casCash(sb, userId, expected, next) {
+  const { data: rows, error } = await sb.from('paper_portfolios')
+    .update({ cash_balance: next, updated_at: new Date().toISOString() })
+    .eq('user_id', userId).eq('cash_balance', expected).select('user_id');
+  if (error) throw error;
+  return (rows?.length ?? 0) > 0;
+}
+
+async function applyTrade(sb, userId, address, side, quote) {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const portfolio = await ensurePortfolio(userId);
+    const cash = Number(portfolio.cash_balance);
+    const { data: pos, error: posReadErr } = await sb.from('paper_positions')
+      .select('shares, avg_cost').eq('user_id', userId).eq('ticker', address).maybeSingle();
+    if (posReadErr) throw posReadErr;
+    const held = pos ? Number(pos.shares) : 0;
+    const avgCost = pos ? Number(pos.avg_cost) : 0;
+
+    let tokens;
+    let total;
+    let newCash;
+    let newShares;
+    let newAvg = avgCost;
+
+    if (side === 'buy') {
+      tokens = floor9(quote.tokens);
+      total = r4(quote.usd);
+      if (!(tokens > 0) || !(total > 0)) throw new TradeReject(400, { error: true, message: 'Order too small' });
+      if (cash < total) {
+        throw new TradeReject(400, { error: true, message: 'Insufficient cash balance', required: total, available: cash });
+      }
+      newCash = r4(cash - total);
+      newShares = held + tokens;
+      newAvg = (avgCost * held + quote.fillPrice * tokens) / newShares;
+    } else {
+      if (held <= DUST) throw new TradeReject(400, { error: true, message: 'No position to sell', held: 0 });
+      tokens = floor9(quote.tokens);
+      if (tokens >= held - DUST) { tokens = held; total = r4(tokens * quote.fillPrice); } // cap ("sell all")
+      else total = r4(quote.usd);
+      if (!(tokens > 0) || !(total > 0)) throw new TradeReject(400, { error: true, message: 'Order too small' });
+      newCash = r4(cash + total);
+      newShares = tokens === held ? 0 : held - tokens;
+    }
+
+    if (!(await casCash(sb, userId, cash, newCash))) continue; // cash changed under us: re-read and recompute
+
+    // Cash is committed; if the position write fails put the cash back so no money is lost or created.
+    try {
+      if (newShares <= DUST) {
+        const { error } = await sb.from('paper_positions').delete().eq('user_id', userId).eq('ticker', address);
+        if (error) throw error;
+      } else {
+        const { error } = await sb.from('paper_positions').upsert({
+          user_id: userId, ticker: address, shares: newShares, avg_cost: newAvg, updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id,ticker' });
+        if (error) throw error;
+      }
+    } catch (err) {
+      try { await casCash(sb, userId, newCash, cash); } catch (e2) { console.error('[memecoins] cash rollback failed', userId, e2.message); }
+      throw err;
+    }
+
+    const { error: txErr } = await sb.from('paper_transactions')
+      .insert({ user_id: userId, type: side, ticker: address, shares: tokens, price: quote.fillPrice, total });
+    if (txErr) console.error('[memecoins] transaction log failed (trade applied)', userId, address, txErr.message);
+
+    return { tokens, total, newCash, newShares, newAvg, avgCost };
+  }
+  throw new TradeReject(409, { error: true, message: 'Balance changed while trading, please retry' });
+}
+
+router.post('/trade', h(async (req, res) => {
+  const o = parseOrder(req.body);
   const userId = req.user?.id;
   if (!userId) return res.status(401).json({ error: true, message: 'Authentication required.' });
+  const { address, side } = o;
 
-  const sb = getSupabase();
-  const quote = await data.getQuote({ address, side, amountSol, amountTokens, slippageBps });
-  if (quote.exceedsSlippage) {
-    return res.status(400).json({
-      error: true,
-      message: `Price impact ${quote.priceImpactPct.toFixed(2)}% exceeds slippage tolerance`,
-      quote,
-    });
-  }
-
-  const portfolio = await ensurePortfolio(userId);
-  const cash = Number(portfolio.cash_balance);
-  const { data: pos, error: posReadErr } = await sb.from('paper_positions')
-    .select('shares, avg_cost').eq('user_id', userId).eq('ticker', address).maybeSingle();
-  if (posReadErr) throw posReadErr;
-  const held = pos ? Number(pos.shares) : 0;
-  const avgCost = pos ? Number(pos.avg_cost) : 0;
-
-  let tokens = quote.tokens;
-  let total = quote.usd;
-  let newCash;
-  let newShares;
-  let newAvg = avgCost;
-
-  if (side === 'buy') {
-    if (cash < total) {
-      return res.status(400).json({ error: true, message: 'Insufficient cash balance', required: total, available: cash });
+  const key = o.clientOrderId ? `${userId}:${o.clientOrderId}` : null;
+  const dup = key && recentOrders.get(key);
+  if (dup && dup.exp > Date.now()) {
+    try { return res.json(await dup.p); } catch (err) {
+      if (err instanceof TradeReject) return res.status(err.status).json(err.body);
+      throw err;
     }
-    newCash = cash - total;
-    newShares = held + tokens;
-    newAvg = (avgCost * held + quote.fillPrice * tokens) / newShares;
-  } else {
-    if (held <= 0) return res.status(400).json({ error: true, message: 'No position to sell', held: 0 });
-    if (tokens > held) { // cap to what is held (e.g. "sell all")
-      tokens = held;
-      total = tokens * quote.fillPrice;
+  }
+
+  const exec = (async () => {
+    const sb = getSupabase();
+    const quote = await data.getQuote(o);
+    if (quote.exceedsSlippage) {
+      throw new TradeReject(400, {
+        error: true,
+        message: `Price impact ${quote.priceImpactPct.toFixed(2)}% exceeds slippage tolerance`,
+        quote,
+      });
     }
-    newCash = cash + total;
-    newShares = held - tokens;
-  }
-
-  const { error: cashErr } = await sb.from('paper_portfolios')
-    .update({ cash_balance: newCash, updated_at: new Date().toISOString() }).eq('user_id', userId);
-  if (cashErr) throw cashErr;
-
-  if (newShares <= 1e-9) {
-    const { error } = await sb.from('paper_positions').delete().eq('user_id', userId).eq('ticker', address);
-    if (error) throw error;
-  } else {
-    const { error } = await sb.from('paper_positions').upsert({
-      user_id: userId, ticker: address, shares: newShares, avg_cost: newAvg, updated_at: new Date().toISOString(),
-    }, { onConflict: 'user_id,ticker' });
-    if (error) throw error;
-  }
-
-  const { error: txErr } = await sb.from('paper_transactions')
-    .insert({ user_id: userId, type: side, ticker: address, shares: tokens, price: quote.fillPrice, total });
-  if (txErr) throw txErr;
-
-  const pnl = side === 'sell' ? (quote.fillPrice - avgCost) * tokens : null;
-  res.json({
-    success: true,
-    paper: true,
-    side,
-    address,
-    symbol: quote.symbol,
-    fillPrice: quote.fillPrice,
-    marketPrice: quote.marketPrice,
-    priceImpactPct: quote.priceImpactPct,
-    tokens,
-    usd: total,
-    amountSol: total / quote.solPrice,
-    solPrice: quote.solPrice,
-    realizedPnl: pnl,
-    cashBalance: newCash,
-    position: newShares > 1e-9 ? {
+    const r = await withUserLock(userId, () => applyTrade(sb, userId, address, side, quote));
+    const pnl = side === 'sell' ? (quote.fillPrice - r.avgCost) * r.tokens : null;
+    return {
+      success: true,
+      paper: true,
+      side,
       address,
       symbol: quote.symbol,
-      tokens: newShares,
-      avgCost: newAvg,
-      currentPrice: quote.marketPrice,
-      value: newShares * quote.marketPrice,
-      pnl: (quote.marketPrice - newAvg) * newShares,
-      pnlPct: newAvg > 0 ? ((quote.marketPrice - newAvg) / newAvg) * 100 : null,
-    } : null,
-  });
+      fillPrice: quote.fillPrice,
+      marketPrice: quote.marketPrice,
+      priceImpactPct: quote.priceImpactPct,
+      tokens: r.tokens,
+      usd: r.total,
+      amountSol: r.total / quote.solPrice,
+      solPrice: quote.solPrice,
+      realizedPnl: pnl,
+      cashBalance: r.newCash,
+      position: r.newShares > DUST ? {
+        address,
+        symbol: quote.symbol,
+        tokens: r.newShares,
+        avgCost: r.newAvg,
+        currentPrice: quote.marketPrice,
+        value: r.newShares * quote.marketPrice,
+        pnl: (quote.marketPrice - r.newAvg) * r.newShares,
+        pnlPct: r.newAvg > 0 ? ((quote.marketPrice - r.newAvg) / r.newAvg) * 100 : null,
+      } : null,
+    };
+  })();
+  if (key) rememberOrder(key, exec);
+
+  try {
+    res.json(await exec);
+  } catch (err) {
+    if (err instanceof TradeReject) return res.status(err.status).json(err.body);
+    throw err;
+  }
+}));
+
+// ── positions & history (server-side source of truth for the terminal) ──────
+router.get('/positions', h(async (req, res) => {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ error: true, message: 'Authentication required.' });
+  const portfolio = await ensurePortfolio(userId);
+  const out = await positionsSvc.listPositions(getSupabase(), userId, (a) => data.getToken(a));
+  res.json({ cashBalance: Number(portfolio.cash_balance), ...out, asOf: Date.now() });
+}));
+
+router.get('/history', h(async (req, res) => {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ error: true, message: 'Authentication required.' });
+  res.json(await positionsSvc.listHistory(getSupabase(), userId, req.query, (a) => data.getToken(a)));
 }));
 
 // ── Unusual-activity signal (NOT a price prediction) ────────────────────────
@@ -191,7 +314,7 @@ function cacheSignal(address, sig) {
 
 function shape(token, sig) {
   return {
-    address: token.address, symbol: token.symbol,
+    address: token.address, symbol: data.cleanSymbol(token.symbol, token.address),
     score: sig.score, level: sig.level, confidence: sig.confidence, mode: sig.mode,
     source: sig.source || 'activity-v0', model: sig.model || MODEL_VERSION, radar: sig.radar,
     components: sig.components, riskFlags: sig.riskFlags, asOf: sig.asOf,
