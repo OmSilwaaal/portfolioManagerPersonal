@@ -95,7 +95,7 @@ const trade = (token, ts, usd, tx) => ({ token_id: token, ts, side: 'buy', amoun
 
 test('driver in use is reported (real better-sqlite3 on Node 20 / Railway)', () => {
   console.log(`# e2e driver: ${driver}, node ${process.version}`);
-  if (process.version.startsWith('v20')) assert.equal(driver, 'better-sqlite3', 'Node 20 must exercise the production driver');
+  if (/^v(20|22)\./.test(process.version)) assert.equal(driver, 'better-sqlite3', 'Node 20/22 (Railway) must exercise the production driver');
 });
 
 test('(a) wallet collector writes smart_money_event keyed by MINT ADDRESS for tokens that are NOT in the trending list', async () => {
