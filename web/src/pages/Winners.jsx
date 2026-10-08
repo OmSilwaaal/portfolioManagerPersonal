@@ -102,7 +102,7 @@ function WinCard({ w, mine }) {
 export default function Winners() {
   const { user } = useAuth()
   const [range, setRange] = useState('week')
-  const q = useGetWinnersQuery({ range, limit: 12 }, { pollingInterval: 60000, skipPollingIfUnfocused: true })
+  const q = useGetWinnersQuery({ range, limit: 24 }, { pollingInterval: 60000, skipPollingIfUnfocused: true })
   const wins = q.data?.wins ?? []
 
   return (
