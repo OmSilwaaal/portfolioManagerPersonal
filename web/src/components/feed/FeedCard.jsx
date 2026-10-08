@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import SentimentBadge from './SentimentBadge'
-import ShareToGroupModal from './ShareToGroupModal'
+import ShareToClanModal from './ShareToClanModal'
 import StockLogo from '../StockLogo'
 import CommodityIcon from '../CommodityIcon'
 import { safeUrl } from '../../utils/safeUrl'
@@ -80,7 +80,7 @@ function ThreeDotMenu({ url, onShare }) {
               <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
               <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
             </svg>
-            Share to group
+            Share to clan
           </button>
           {url && (
             <a
@@ -359,7 +359,7 @@ export default function FeedCard({ type, data, urgency, index = 0 }) {
       {variant === 'compact'   && <CompactCard {...props} />}
       {variant === 'standard'  && <StandardCard {...props} />}
 
-      {shareOpen && <ShareToGroupModal article={data} onClose={() => setShareOpen(false)} />}
+      {shareOpen && <ShareToClanModal article={data} onClose={() => setShareOpen(false)} />}
     </>
   )
 }

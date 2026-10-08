@@ -10,8 +10,8 @@ import { useGetFeedQuery, useGetFeedBriefQuery } from '../api/feedApi'
 import { useGetStockQuery } from '../api/stocksApi'
 import { usePersonalizedFeed } from '../hooks/usePersonalizedFeed'
 import ProGate from '../components/ProGate'
-import { AsciiDonut } from '../ascii/effects'
 import SectionShape from '../ascii/shapes'
+import SpinLogo from '../ascii/SpinLogo'
 
 const INK8   = 'var(--ink-800)'
 const BORDER = 'var(--on-ink-border)'
@@ -77,7 +77,7 @@ function BriefSkeleton() {
   )
 }
 
-function BriefCard({ brief, bullets }) {
+function BriefCard({ brief, bullets, kind }) {
   const bulletColor = (bullet) => {
     const key = Object.keys(BULLET_COLORS).find((k) => bullet.startsWith(k))
     return key ? BULLET_COLORS[key] : MUTED
@@ -110,7 +110,7 @@ function BriefCard({ brief, bullets }) {
       </div>
       </div>
       <div className="hidden md:flex" aria-hidden="true" style={{ alignItems: 'center', justifyContent: 'center', padding: '8px 18px 8px 4px', borderLeft: `1px dashed ${BORDER}` }}>
-        <AsciiDonut cols={42} rows={20} fontPx={8} palette="violet" />
+        <SectionShape kind={kind} cols={42} rows={20} fontPx={8} />
       </div>
     </div>
   )
@@ -226,7 +226,7 @@ export default function Feed() {
         </h1>
         </div>
         <div className="hidden sm:block" style={{ flexShrink: 0, marginTop: -6 }}>
-          <SectionShape kind={activeFilter} />
+          <SpinLogo />
         </div>
       </div>
 
@@ -235,7 +235,7 @@ export default function Feed() {
         {briefLoading ? (
           <BriefSkeleton />
         ) : briefData?.brief ? (
-          <BriefCard brief={briefData.brief} bullets={briefData.bullets} />
+          <BriefCard brief={briefData.brief} bullets={briefData.bullets} kind={activeFilter} />
         ) : null}
       </div>
 

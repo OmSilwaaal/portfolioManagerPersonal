@@ -11,7 +11,8 @@ import cosmeticsReducer from './cosmeticsSlice'
 import '../api/govTradesApi'
 import '../api/commoditiesApi'
 import '../api/preferencesApi'
-import '../api/groupsApi'
+import '../api/eloApi'
+import '../api/clansApi'
 import '../api/explainerApi'
 
 export const store = configureStore({

@@ -7,7 +7,8 @@ const tabs = [
   { path: '/feed', label: 'Feed', glyph: 'feed' },
   { path: '/terminal', label: 'Terminal', glyph: 'terminal' },
   { path: '/friends', label: 'Friends', glyph: 'dm' },
-  { path: '/winners', label: 'Winners', glyph: 'trophy' },
+  { path: '/leaderboard', label: 'Ranks', glyph: 'trophy' },
+  { path: '/clans', label: 'Clans', glyph: 'groups' },
   { path: '/settings', label: 'Settings', glyph: 'settings' },
 ]
 

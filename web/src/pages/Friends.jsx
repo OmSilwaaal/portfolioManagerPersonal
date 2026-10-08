@@ -9,6 +9,7 @@ import {
 import { setSelectedTicker } from '../store/watchlistSlice'
 import StockLogo from '../components/StockLogo'
 import { FriendsPanel } from '../components/welcome/panels'
+import PlayerName from '../components/PlayerName'
 
 const BORDER = 'var(--on-ink-border)'
 const MONO = { fontFamily: 'var(--font-sans)' }
@@ -168,7 +169,7 @@ function Thread({ friend, meId, onBack }) {
         <Link to={friend.username ? `/u/${friend.username}` : `/profile/${friend.userId}`} style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', minWidth: 0 }}>
           <Avatar user={friend} />
           <div style={{ minWidth: 0 }}>
-            <div style={{ ...MONO, fontWeight: 700, fontSize: 14, color: 'var(--paper)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nameOf(friend)}</div>
+            <PlayerName user={friend} size="md" link={false} aura={false} />
             {friend.displayName && friend.username && <div style={{ ...MONO, fontSize: 11, color: 'var(--on-ink-text-3)' }}>{friend.displayName}</div>}
           </div>
         </Link>
@@ -202,6 +203,7 @@ export default function Friends() {
   const [decline] = useRemoveFriendMutation()
   const list = convos.data?.conversations ?? []
   const incoming = lists.data?.incoming ?? []
+  const outgoing = lists.data?.outgoing ?? []
   const active = list.find((c) => c.user.userId === userId)?.user
 
   return (
@@ -223,9 +225,22 @@ export default function Friends() {
             {incoming.map((p) => (
               <div key={p.userId} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0' }}>
                 <Avatar user={p} size={28} />
-                <span style={{ ...MONO, fontSize: 13, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--paper)' }}>{nameOf(p)}</span>
+                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}><PlayerName user={p} size="sm" /></span>
                 <button className="t-btn t-btn-primary px-2 py-1" style={{ ...MONO, fontSize: 11 }} onClick={() => accept(p.userId)}>Accept</button>
                 <button className="t-btn px-2 py-1" style={{ ...MONO, fontSize: 11 }} onClick={() => decline(p.userId)}>No</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {outgoing.length > 0 && (
+          <div style={{ padding: '8px 14px', borderBottom: `1px solid ${BORDER}` }}>
+            <p style={{ ...MONO, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--on-ink-text-3)', margin: '0 0 6px' }}>Sent · {outgoing.length}</p>
+            {outgoing.map((p) => (
+              <div key={p.userId} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
+                <Avatar user={p} size={24} />
+                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}><PlayerName user={p} size="sm" elo={false} /></span>
+                <button className="t-btn px-2 py-1" style={{ ...MONO, fontSize: 11 }} onClick={() => decline(p.userId)}>Cancel</button>
               </div>
             ))}
           </div>
@@ -249,7 +264,7 @@ export default function Friends() {
                 <Avatar user={c.user} />
                 <span style={{ minWidth: 0, flex: 1 }}>
                   <span style={{ ...MONO, display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 14, fontWeight: c.unread ? 700 : 600, color: 'var(--paper)' }}>
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nameOf(c.user)}</span>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}><PlayerName user={c.user} size="sm" link={false} aura={false} /></span>
                     {c.last && <span style={{ fontSize: 10, color: 'var(--on-ink-text-3)', flexShrink: 0 }}>{timeShort(c.last.at)}</span>}
                   </span>
                   <span style={{ ...MONO, display: 'block', fontSize: 12, color: c.unread ? 'var(--paper)' : 'var(--on-ink-text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

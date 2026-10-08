@@ -11,15 +11,15 @@ export const socialApi = baseApi.injectEndpoints({
     }),
     requestFriend: builder.mutation({
       query: (userId) => ({ url: '/friends/request', method: 'POST', body: { userId } }),
-      invalidatesTags: ['Friends'],
+      invalidatesTags: ['Friends', 'Messages', 'Elo'],
     }),
     acceptFriend: builder.mutation({
       query: (userId) => ({ url: `/friends/${userId}/accept`, method: 'POST' }),
-      invalidatesTags: ['Friends'],
+      invalidatesTags: ['Friends', 'Messages', 'Elo'],
     }),
     removeFriend: builder.mutation({
       query: (userId) => ({ url: `/friends/${userId}`, method: 'DELETE' }),
-      invalidatesTags: ['Friends'],
+      invalidatesTags: ['Friends', 'Messages', 'Elo'],
     }),
     getConversations: builder.query({
       query: () => '/messages/conversations',

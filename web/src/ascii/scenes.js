@@ -379,3 +379,6 @@ export function capitol(ctx, { U, V, t }) {
 }
 
 export const SCENES = { sunrise, skyline, ocean, orbit, forest, dunes, storm, aurora, gilded, capitol }
+
+// shared painting helpers for the extra scenes in scenes2.js
+export { sky, glow, disc, stars, ridge, ridgeY, rgba, TAU }

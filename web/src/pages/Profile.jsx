@@ -1,4 +1,5 @@
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useSelector } from 'react-redux'
 import { useAuth } from '../contexts/AuthContext'
 import { useGetProfileQuery, useGetProfileByUsernameQuery } from '../api/profilesApi'
 import {
@@ -8,7 +9,9 @@ import CallingCard from '../ascii/CallingCard'
 import AsciiIcon from '../ascii/icons'
 import { AsciiAura } from '../ascii/effects'
 import useCosmetics from '../ascii/useCosmetics'
-import { ACHIEVEMENTS, evaluate, statsFromProfile } from '../ascii/achievements'
+import { ACHIEVEMENTS, GROUPS, evaluate, statsFromProfile } from '../ascii/achievements'
+import { ClanTag, EloBadge } from '../components/PlayerName'
+import { tierById, formatElo, pct } from '../utils/elo'
 
 const BORDER = 'var(--on-ink-border)'
 const MONO = { fontFamily: 'var(--font-sans)' }
@@ -28,12 +31,12 @@ function Stat({ label, value, tone }) {
   )
 }
 
-function Achievement({ a, state, equipped, canEquip, onEquip }) {
+function Achievement({ a, state, equipped, canEquip, onEquip, needsPro, progress }) {
   const pct = Math.round((state.value / state.goal) * 100)
   return (
     <div style={{ border: `${equipped ? 2 : 1}px solid ${equipped ? 'var(--paper)' : BORDER}`, background: 'var(--ink-800)', borderRadius: 2 }}>
       <div style={{ position: 'relative' }}>
-        <CallingCard scene={a.scene} cols={110} rows={16} style={{ border: 0, filter: state.unlocked ? 'none' : 'grayscale(1) brightness(0.45)' }} label={`${a.name} calling card`} />
+        <CallingCard scene={a.scene} cols={110} rows={16} progress={progress} style={{ border: 0, filter: state.unlocked ? 'none' : 'grayscale(1) brightness(0.45)' }} label={`${a.name} calling card`} />
         {!state.unlocked && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <AsciiIcon name="lock" palette={['#b9b9b0', '#ffffff']} size={56} label="Locked" />
@@ -47,7 +50,7 @@ function Achievement({ a, state, equipped, canEquip, onEquip }) {
         </div>
         <span style={{ ...MONO, fontSize: 11, color: 'var(--on-ink-text-3)' }}>{a.how}</span>
         {state.unlocked ? (
-          canEquip && !equipped && <button className="t-btn t-btn-primary px-2 py-1" style={{ ...MONO, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em', marginTop: 2 }} onClick={onEquip}>Equip</button>
+          canEquip && !equipped && (needsPro ? <Link to="/pricing" className="t-btn px-2 py-1" style={{ ...MONO, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em', marginTop: 2, textAlign: 'center', textDecoration: 'none' }}>Pro to equip</Link> : <button className="t-btn t-btn-primary px-2 py-1" style={{ ...MONO, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em', marginTop: 2 }} onClick={onEquip}>Equip</button>)
         ) : (
           <div>
             <div style={{ height: 5, border: `1px solid ${BORDER}`, marginTop: 2 }}><div style={{ width: `${pct}%`, height: '100%', background: 'var(--paper)', opacity: 0.8 }} /></div>
@@ -112,9 +115,14 @@ export default function Profile() {
   const handle = profile.username ? `@${profile.username}` : (realName ?? 'Member')
   const joinedDate = profile.joined_at ? new Date(profile.joined_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : null
   const stats = statsFromProfile(profile)
-  const equippedScene = isOwn ? myBanner : profile.banner
+  const viewerPro = useSelector((st) => st.preferences.isPro)
+  const equippedScene = isOwn ? (viewerPro ? myBanner : null) : profile.banner
   const states = ACHIEVEMENTS.map((a) => [a, evaluate(a, stats)])
-  const heroScene = states.find(([a, s]) => a.scene === equippedScene && s.unlocked)?.[0]?.scene ?? 'sunrise'
+  // calling cards are a Pro perk: free profiles get a plain header in their tier colour
+  const heroScene = profile.is_pro || (isOwn && viewerPro) ? (states.find(([a, s]) => a.scene === equippedScene && s.unlocked)?.[0]?.scene ?? null) : null
+  const e = profile.elo
+  const tier = tierById(e?.tier)
+  const eloProgress = (e?.pct ?? 35) / 100 * 0.9 + 0.05
   const unlocked = states.filter(([, s]) => s.unlocked).length
   const s = profile.stats ?? {}
 
@@ -123,7 +131,11 @@ export default function Profile() {
       <main className="flex-1 overflow-y-auto" style={{ padding: 'clamp(14px, 3vw, 32px)' }}>
         <div style={{ maxWidth: 880, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
           <div style={{ position: 'relative' }}>
-            <CallingCard scene={heroScene} cols={150} rows={20} fps={6} label={`${handle}'s calling card`} />
+            {heroScene ? (
+              <CallingCard scene={heroScene} cols={150} rows={20} fps={6} progress={eloProgress} label={`${handle}'s calling card`} />
+            ) : (
+              <div role="img" aria-label="Plain header" style={{ height: 150, border: '1px solid var(--on-ink-border)', background: `linear-gradient(110deg, ${tier.color}26, #07070a 70%)` }} />
+            )}
             <div style={{ position: 'absolute', left: 18, bottom: -34, display: 'flex', alignItems: 'flex-end', gap: 14 }}>
               <div style={{ position: 'relative', width: 88, height: 88 }}>
                 {profile.is_pro && profile.effect && profile.effect !== 'none' && <AsciiAura effect={profile.effect} bleed={{ top: 22, side: 14, bottom: 10 }} />}
@@ -136,7 +148,7 @@ export default function Profile() {
 
           <header style={{ marginTop: 34, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
             <div style={{ minWidth: 0 }}>
-              <h1 style={{ fontFamily: 'var(--font-display)', fontStretch: '125%', fontWeight: 800, fontSize: 28, margin: 0, textTransform: 'uppercase', color: 'var(--paper)', overflowWrap: 'anywhere' }}>{handle}</h1>
+              <h1 style={{ fontFamily: 'var(--font-display)', fontStretch: '125%', fontWeight: 800, fontSize: 28, margin: 0, textTransform: 'uppercase', color: profile.name_color || 'var(--paper)', overflowWrap: 'anywhere', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>{profile.clan && <Link to={`/clans/${profile.clan.id}`} style={{ textDecoration: 'none' }}><ClanTag tag={profile.clan.tag} color={profile.clan.color} /></Link>}{handle}{e && <EloBadge elo={e.elo} tier={e.tier} size="lg" />}</h1>
               <p style={{ ...MONO, fontSize: 13, color: 'var(--on-ink-text-3)', margin: '4px 0 0', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
                 {profile.username && realName && realName !== profile.username && <span>{realName}</span>}
                 {joinedDate && <span>Joined {joinedDate}</span>}
@@ -162,8 +174,9 @@ export default function Profile() {
 
           <section aria-label="Stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
             <Stat label="Friends" value={s.friends ?? 0} />
-            <Stat label="Groups" value={s.groups ?? 0} />
-            <Stat label="Winning trades" value={s.wins ?? 0} />
+            <Stat label={`Elo · ${tier.name}`} value={formatElo(e?.elo ?? 500)} tone={tier.color} />
+            <Stat label="Win rate" value={e?.trades ? pct(e.winRate) : '--'} />
+            <Stat label="Trades" value={e?.trades ?? 0} />
             <Stat label="Best win" value={s.bestWinUsd > 0 ? `+${usd(s.bestWinUsd)}` : '--'} tone={s.bestWinUsd > 0 ? 'var(--positive)' : undefined} />
           </section>
 
@@ -172,11 +185,16 @@ export default function Profile() {
               <h2 style={{ fontFamily: 'var(--font-display)', fontStretch: '125%', fontWeight: 800, fontSize: 16, textTransform: 'uppercase', margin: 0, color: 'var(--paper)' }}>Calling cards</h2>
               <span style={LABEL}>{unlocked} / {ACHIEVEMENTS.length} unlocked</span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 12 }}>
-              {states.map(([a, st]) => (
-                <Achievement key={a.id} a={a} state={st} equipped={a.scene === equippedScene && st.unlocked} canEquip={isOwn} onEquip={() => equipBanner(a.scene)} />
-              ))}
-            </div>
+            {GROUPS.map((g) => (
+              <div key={g.id} style={{ marginBottom: 16 }}>
+                <p style={{ ...MONO, fontSize: 12, color: 'var(--on-ink-text-3)', margin: '0 0 8px' }}><b style={{ color: 'var(--paper)' }}>{g.title}.</b> {g.note}</p>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 12 }}>
+                  {states.filter(([a]) => a.group === g.id).map(([a, st]) => (
+                    <Achievement key={a.id} a={a} state={st} progress={eloProgress} equipped={a.scene === equippedScene && st.unlocked && viewerPro} canEquip={isOwn} needsPro={!viewerPro} onEquip={() => equipBanner(a.scene)} />
+                  ))}
+                </div>
+              </div>
+            ))}
           </section>
         </div>
       </main>

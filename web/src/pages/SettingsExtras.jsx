@@ -6,7 +6,8 @@ import AsciiIcon from '../ascii/icons'
 import { AsciiAura, EFFECTS } from '../ascii/effects'
 import CallingCard from '../ascii/CallingCard'
 import useCosmetics from '../ascii/useCosmetics'
-import { ACHIEVEMENTS, evaluate, useAchievementStats } from '../ascii/achievements'
+import { ACHIEVEMENTS, GROUPS, evaluate, useAchievementStats } from '../ascii/achievements'
+import { NAME_COLORS, formatElo } from '../utils/elo'
 
 const BORDER = 'var(--on-ink-border)'
 const LABEL = { fontFamily: 'var(--font-sans)', fontSize: 10, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--on-ink-text-3)' }
@@ -114,7 +115,7 @@ export function EffectsView({ onBack }) {
 }
 
 /* ── Calling cards ──────────────────────────────────────────────────────── */
-function CardTile({ a, state, equipped, onEquip }) {
+function CardTile({ a, state, equipped, onEquip, pro }) {
   const [hover, setHover] = useState(false)
   const pct = Math.round((state.value / state.goal) * 100)
   return (
@@ -124,7 +125,7 @@ function CardTile({ a, state, equipped, onEquip }) {
       style={{ border: `${equipped ? 2 : 1}px solid ${equipped ? 'var(--paper)' : BORDER}`, background: 'var(--ink-800)', borderRadius: 2 }}
     >
       <div style={{ position: 'relative' }}>
-        <CallingCard scene={a.scene} fps={state.unlocked && hover ? 10 : 0} style={{ border: 0, filter: state.unlocked ? 'none' : 'grayscale(1) brightness(0.45)' }} />
+        <CallingCard scene={a.scene} fps={state.unlocked && hover ? 10 : 0} progress={0.55} style={{ border: 0, filter: state.unlocked ? 'none' : 'grayscale(1) brightness(0.45)' }} />
         {!state.unlocked && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <AsciiIcon name="lock" palette={['#b9b9b0', '#ffffff']} size={64} label="Locked" />
@@ -137,7 +138,9 @@ function CardTile({ a, state, equipped, onEquip }) {
           {equipped && <span style={{ ...LABEL, color: 'var(--paper)' }}>[equipped]</span>}
         </div>
         <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: 'var(--on-ink-text-3)' }}>{a.how}</span>
-        {state.unlocked ? (
+        {state.unlocked && !pro ? (
+          <Link to="/pricing" style={{ marginTop: 4, padding: '7px 10px', textAlign: 'center', fontFamily: 'var(--font-sans)', fontWeight: 700, fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--paper)', border: `1px solid ${BORDER}`, borderRadius: 2, textDecoration: 'none' }}>Pro to equip</Link>
+        ) : state.unlocked ? (
           <button
             onClick={onEquip}
             disabled={equipped}
@@ -150,7 +153,7 @@ function CardTile({ a, state, equipped, onEquip }) {
             <div style={{ height: 6, border: `1px solid ${BORDER}`, borderRadius: 1 }}>
               <div style={{ height: '100%', width: `${pct}%`, background: 'var(--paper)', opacity: 0.8 }} />
             </div>
-            <span style={{ ...LABEL, display: 'block', marginTop: 5 }}>{state.value} / {state.goal}</span>
+            <span style={{ ...LABEL, display: 'block', marginTop: 5 }}>{formatElo(state.value)} / {formatElo(state.goal)}</span>
           </div>
         )}
       </div>
@@ -160,18 +163,33 @@ function CardTile({ a, state, equipped, onEquip }) {
 
 export function CardsView({ onBack }) {
   const stats = useAchievementStats()
-  const { banner, equipBanner } = useCosmetics()
+  const { banner, nameColor, isPro, equipBanner, equipNameColor } = useCosmetics()
   const states = ACHIEVEMENTS.map((a) => [a, evaluate(a, stats)])
   const unlocked = states.filter(([, s]) => s.unlocked).length
   return (
     <>
       <Back onBack={onBack} />
-      <Heading title="Calling cards" note={`${unlocked} of ${ACHIEVEMENTS.length} unlocked. Equip one and it shows at the top of your settings and profile. Hover an unlocked card to see it move.`} />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
-        {states.map(([a, s]) => (
-          <CardTile key={a.id} a={a} state={s} equipped={banner === a.scene} onEquip={() => equipBanner(a.scene)} />
-        ))}
+      <Heading title="Calling cards" note={`${unlocked} of ${ACHIEVEMENTS.length} unlocked. Anyone can earn them. Pro members equip one to show on the leaderboard and their profile, with a live animation. Hover an unlocked card to see it move.`} />
+      <div style={{ marginBottom: 22 }}>
+        <p style={{ ...LABEL, margin: '0 0 8px' }}>Name colour {isPro ? '' : '(free accounts: solid colours only)'}</p>
+        <div role="radiogroup" aria-label="Name colour" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          {NAME_COLORS.map((c) => (
+            <button key={c} role="radio" aria-checked={nameColor === c} aria-label={c} onClick={() => equipNameColor(c)} style={{ width: 30, height: 30, background: c, border: nameColor === c ? '2px solid var(--paper)' : `1px solid ${BORDER}`, cursor: 'pointer' }} />
+          ))}
+          <button onClick={() => equipNameColor(null)} style={{ ...LABEL, padding: '7px 10px', border: `1px solid ${BORDER}`, background: 'transparent', cursor: 'pointer' }}>Default</button>
+        </div>
       </div>
+      {GROUPS.map((g) => (
+        <section key={g.id} style={{ marginBottom: 24 }}>
+          <h2 style={{ ...TITLE, fontSize: 15, marginBottom: 4 }}>{g.title}</h2>
+          <p style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: 'var(--on-ink-text-3)', margin: '0 0 12px' }}>{g.note}</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
+            {states.filter(([a]) => a.group === g.id).map(([a, s]) => (
+              <CardTile key={a.id} a={a} state={s} pro={isPro} equipped={isPro && banner === a.scene} onEquip={() => equipBanner(a.scene)} />
+            ))}
+          </div>
+        </section>
+      ))}
     </>
   )
 }
@@ -179,8 +197,9 @@ export function CardsView({ onBack }) {
 /** The equipped calling card, for the top of Settings and Profile. Falls back to the first card if the saved one is unknown or locked. */
 export function EquippedBanner({ fps = 6, style }) {
   const stats = useAchievementStats()
-  const { banner } = useCosmetics()
-  const owned = ACHIEVEMENTS.find((a) => a.scene === banner && evaluate(a, stats).unlocked)
+  const { banner, isPro } = useCosmetics()
+  const owned = isPro && ACHIEVEMENTS.find((a) => a.scene === banner && evaluate(a, stats).unlocked)
   const scene = owned ? owned.scene : 'sunrise'
-  return <CallingCard scene={scene} fps={fps} style={style} />
+  // free accounts get the default card, still: animation is a Pro perk
+  return <CallingCard scene={scene} fps={isPro ? fps : 0} style={style} />
 }
