@@ -294,10 +294,18 @@ export default function PanelWorkspace({
       drag.current = null
       canvasRef.current?.removeAttribute('data-interacting')
       if (d?.node) {
+        // Write the final box back explicitly rather than clearing to ''. React
+        // owns these properties, and on a move the width/height it would render
+        // are unchanged from the previous render -- so its style diff skips them
+        // and a cleared value is never restored, leaving the panel to collapse to
+        // its content size.
+        const final = commitRect || d.startPx
         d.node.style.transform = ''
-        d.node.style.width = ''
-        d.node.style.height = ''
         d.node.style.willChange = ''
+        d.node.style.left = `${final.x}px`
+        d.node.style.top = `${final.y}px`
+        d.node.style.width = `${final.w}px`
+        d.node.style.height = `${final.h}px`
       }
       if (d && commitRect) {
         setLayout((prev) => (prev[d.id]
