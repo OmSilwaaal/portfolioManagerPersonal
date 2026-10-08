@@ -11,6 +11,7 @@ import Sidebar from './components/Sidebar'
 import BottomNav from './components/BottomNav'
 import { CelebrationProvider } from './components/ProfitCelebration'
 import PageFallback from './components/PageFallback'
+import GuidedTour from './components/GuidedTour'
 
 // Import API modules to register endpoints
 import './api/stocksApi'
@@ -86,6 +87,7 @@ function ProtectedLayout() {
         </Suspense>
       </div>
       <BottomNav />
+      <GuidedTour />
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import Logo from '../Logo'
+import ClassicLogo from '../ClassicLogo'
 import { useNavigate } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
 import { setPreferences, setOnboardingComplete } from '../../store/preferencesSlice'
@@ -91,7 +91,7 @@ const QUESTIONS = [
 ]
 
 // ─── Design tokens (match Landing.jsx) ───────────────────────────────────────
-const INK   = '#0b0b0b'
+const INK   = 'var(--ink-900)'
 const CREAM = 'var(--paper)'
 const MUTED = 'rgba(240,235,224,0.36)'
 const BORDER_COLOR = 'rgba(240,235,224,0.10)'
@@ -159,7 +159,7 @@ function RecoverySignIn({ onBack }) {
       <button onClick={onBack} style={{ position: 'absolute', top: 24, left: 32, background: 'none', border: 0, cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.10em', color: MUTED }}>
         ← Back
       </button>
-      <div style={{ marginBottom: 48 }}><Logo size="lg" /></div>
+      <div style={{ marginBottom: 48 }}><ClassicLogo size={34} /></div>
       <form onSubmit={submit} style={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 16 }}>
         <h1 style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(28px,5vw,36px)', letterSpacing: '-0.04em', lineHeight: 0.95, color: CREAM, textAlign: 'center', margin: '0 0 2px' }}>
           Use recovery phrase
@@ -284,7 +284,7 @@ function SignUpScreen({ onNameStored }) {
 
       {/* Logo */}
       <div style={{ marginBottom: 48 }}>
-        <Logo size="lg" />
+        <ClassicLogo size={34} />
       </div>
 
       <div style={{ width: '100%', maxWidth: 360 }}>
@@ -488,12 +488,9 @@ export default function QuizContainer() {
   }
 
   // Wait for Supabase session to resolve before rendering anything
+  const spinner = <div aria-label="Loading" role="status" style={{ width: 28, height: 28, border: '2px solid var(--paper)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
   if (loading) {
-    return (
-      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-[#3b82f6] border-t-transparent rounded-full animate-spin" />
-      </div>
-    )
+    return <div style={{ minHeight: '100vh', background: INK, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{spinner}</div>
   }
 
   if (stage === -1) {
@@ -502,72 +499,50 @@ export default function QuizContainer() {
 
   if (building) {
     return (
-      <div className="min-h-screen bg-[#0a0a0a] flex flex-col items-center justify-center">
-        <div className="text-center">
-          <div className="w-12 h-12 border-2 border-[#3b82f6] border-t-transparent rounded-full animate-spin mx-auto mb-6" />
-          <p className="text-white text-2xl font-semibold">Building your feed...</p>
-          <p className="text-[#6b7280] mt-2 text-sm">Personalizing your experience</p>
-        </div>
+      <div style={{ minHeight: '100vh', background: INK, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18, textAlign: 'center', padding: 24 }}>
+        {spinner}
+        <p style={{ fontFamily: 'var(--font-display)', fontStretch: '125%', fontWeight: 800, fontSize: 26, textTransform: 'uppercase', color: CREAM, margin: 0 }}>Building your feed</p>
+        <p style={{ fontFamily: 'var(--font-sans)', fontSize: 14, color: MUTED, margin: 0 }}>Personalizing your experience</p>
       </div>
     )
   }
 
+  const total = QUESTIONS.length
+  const barWidth = 24
+  const filled = Math.round(((current + 1) / total) * barWidth)
   return (
-    <div className="min-h-screen bg-[#0a0a0a] flex flex-col">
-      <div className="flex items-center justify-between px-6 pt-6">
+    <div style={{ minHeight: '100vh', background: INK, display: 'flex', flexDirection: 'column', color: CREAM }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '22px 24px 0' }}>
         <button
           onClick={current > 0 ? handleBack : () => navigate('/')}
-          className="text-[#6b7280] hover:text-white transition-colors text-sm"
+          style={{ background: 'none', border: 0, cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.1em', color: MUTED }}
         >
-          ← Back
+          &larr; Back
         </button>
-
-        <div className="flex gap-2">
-          {QUESTIONS.map((_, i) => (
-            <div
-              key={i}
-              className={`h-1.5 rounded-full transition-all duration-300 ${
-                i === current ? 'bg-[#3b82f6] w-6' : i < current ? 'bg-[#3b82f6]/40 w-3' : 'bg-[#1f1f1f] w-3'
-              }`}
-            />
-          ))}
+        <div role="progressbar" aria-valuemin={1} aria-valuemax={total} aria-valuenow={current + 1} aria-label="Quiz progress" style={{ fontFamily: "'Courier Prime', 'Courier New', monospace", fontWeight: 700, fontSize: 13, whiteSpace: 'pre', color: CREAM }}>
+          [{'#'.repeat(filled)}<span style={{ color: 'rgba(240,235,224,0.22)' }}>{'-'.repeat(barWidth - filled)}</span>] <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: MUTED }}>{current + 1}/{total}</span>
         </div>
-
-        <span className="text-[#4b5563] text-xs truncate max-w-[120px]">
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'rgba(240,235,224,0.3)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {user?.user_metadata?.full_name ?? user?.user_metadata?.display_name ?? ''}
         </span>
       </div>
 
-      <div
-        className={`flex-1 flex flex-col items-center justify-center px-6 transition-opacity duration-200 ${
-          transitioning ? 'opacity-0' : 'opacity-100'
-        }`}
-      >
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px', opacity: transitioning ? 0 : 1, transition: 'opacity 200ms' }}>
         {q.type === 'watchlist' ? (
-          <WatchlistBuilder
-            onUpdate={(tags) => handleAnswer(tags)}
-            initialTags={answers.watchlist}
-          />
+          <WatchlistBuilder onUpdate={(tags) => handleAnswer(tags)} initialTags={answers.watchlist} />
         ) : (
-          <QuizQuestion
-            question={q.question}
-            options={q.options}
-            type={q.type}
-            onAnswer={handleAnswer}
-            selected={answers[q.id]}
-          />
+          <QuizQuestion question={q.question} options={q.options} type={q.type} onAnswer={handleAnswer} selected={answers[q.id]} />
         )}
       </div>
 
-      <div className="px-6 pb-10 flex justify-center">
+      <div style={{ padding: '0 24px 36px', display: 'flex', justifyContent: 'center' }}>
         <button
           onClick={handleContinue}
           disabled={!canContinue()}
-          className={`px-8 py-3 rounded-lg font-medium text-base transition-all ${
-            canContinue()
-              ? 'bg-[#3b82f6] text-white hover:bg-[#2563eb]'
-              : 'bg-[#1a1a1a] text-[#3a3a3a] cursor-not-allowed'
-          }`}
+          style={{
+            minWidth: 200, padding: '13px 28px', border: 'none', borderRadius: 2, fontFamily: 'var(--font-sans)', fontSize: 14, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase',
+            background: canContinue() ? CREAM : 'rgba(240,235,224,0.06)', color: canContinue() ? 'var(--ink-900)' : 'rgba(240,235,224,0.22)', cursor: canContinue() ? 'pointer' : 'not-allowed',
+          }}
         >
           {current === QUESTIONS.length - 1 ? 'Finish' : 'Continue'}
         </button>

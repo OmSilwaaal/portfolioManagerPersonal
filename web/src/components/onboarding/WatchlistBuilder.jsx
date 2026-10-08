@@ -37,12 +37,8 @@ function useDebounce(value, delay) {
   return debounced
 }
 
-function typeBadge(type) {
-  const t = (type || '').toLowerCase()
-  if (t === 'etf') return 'text-yellow-400 bg-yellow-400/10'
-  if (t === 'crypto') return 'text-[#3b82f6] bg-[#3b82f6]/10'
-  return 'text-[#a1a1aa] bg-[#1f1f1f]'
-}
+const BORDER = 'var(--on-ink-border)'
+const MONO = { fontFamily: 'var(--font-sans)' }
 
 function typeLabel(type) {
   const t = (type || '').toLowerCase()
@@ -87,97 +83,64 @@ export default function WatchlistBuilder({ onUpdate, initialTags = [] }) {
   }
 
   return (
-    <div className="w-full max-w-xl">
-      <h2 className="text-3xl font-semibold text-white mb-3 text-center">
+    <div className="w-full" style={{ maxWidth: 560 }}>
+      <h2 style={{ fontFamily: 'var(--font-display)', fontStretch: '125%', fontWeight: 800, fontSize: 'clamp(24px, 4.4vw, 34px)', lineHeight: 1.1, letterSpacing: '-0.02em', textTransform: 'uppercase', color: 'var(--paper)', margin: '0 0 8px' }}>
         Build your watchlist
       </h2>
-      <p className="text-[#a1a1aa] text-center mb-6 text-sm">
-        Click suggestions or type a ticker and press Enter
+      <p style={{ ...MONO, fontSize: 14, color: 'var(--on-ink-text-3)', margin: '0 0 22px' }}>
+        Tap suggestions, or type a ticker and press Enter.
       </p>
 
       {tags.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-4">
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
           {tags.map((tag) => (
-            <span
-              key={tag.ticker}
-              className="flex items-center gap-1 bg-[#3b82f6]/20 border border-[#3b82f6] text-[#3b82f6] text-sm px-3 py-1 rounded-full"
-            >
+            <span key={tag.ticker} style={{ ...MONO, display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, padding: '5px 10px', background: 'var(--paper)', color: 'var(--ink-900)', borderRadius: 2 }}>
               {tag.ticker}
-              <button
-                onClick={() => removeTag(tag.ticker)}
-                className="ml-1 text-[#3b82f6] hover:text-white leading-none"
-              >
-                &times;
-              </button>
+              <button onClick={() => removeTag(tag.ticker)} aria-label={`Remove ${tag.ticker}`} style={{ background: 'none', border: 0, cursor: 'pointer', color: 'inherit', fontSize: 16, lineHeight: 1, padding: 0 }}>&times;</button>
             </span>
           ))}
         </div>
       )}
 
-      <div className="relative mb-4">
+      <div style={{ position: 'relative', marginBottom: 18 }}>
         <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Search or type a ticker..."
-          className="w-full bg-[#1a1a1a] border border-[#2a2a2a] text-white placeholder-gray-500 rounded-lg px-4 py-3 focus:outline-none focus:border-[#3b82f6] text-sm"
+          type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyDown}
+          placeholder="Search or type a ticker..." aria-label="Search tickers" className="t-input" style={{ padding: '12px 14px', fontSize: 14 }}
         />
-
         {showDropdown && (
-          <div className="absolute top-full left-0 right-0 z-10 mt-1 bg-[#141414] border border-[#1f1f1f] rounded-lg overflow-hidden shadow-lg">
-            {isFetching && (
-              <div className="flex items-center justify-center py-4">
-                <div className="w-4 h-4 border-2 border-[#3b82f6] border-t-transparent rounded-full animate-spin" />
-              </div>
-            )}
-
-            {!isFetching && searchResults.length === 0 && (
-              <p className="text-[#a1a1aa] text-sm text-center py-4">No results</p>
-            )}
-
-            {!isFetching &&
-              searchResults.map((s) => (
-                <button
-                  key={s.ticker}
-                  onClick={() => addTag({ ticker: s.ticker, assetType: s.type || 'stock', name: s.name })}
-                  className="w-full text-left px-4 py-2.5 text-sm text-gray-300 hover:bg-[#1f1f1f] hover:text-white border-b border-[#1f1f1f] last:border-b-0 flex items-center gap-2"
-                >
-                  <span className="font-bold text-white">{s.ticker}</span>
-                  <span className="text-[#a1a1aa] flex-1 truncate">{s.name}</span>
-                  <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${typeBadge(s.type)}`}>
-                    {typeLabel(s.type)}
-                  </span>
-                </button>
-              ))}
+          <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10, marginTop: 4, background: 'var(--ink-800)', border: `1px solid ${BORDER}`, maxHeight: 280, overflowY: 'auto' }}>
+            {isFetching && <p style={{ ...MONO, fontSize: 13, color: 'var(--on-ink-text-3)', textAlign: 'center', padding: 14, margin: 0 }}>Searching...</p>}
+            {!isFetching && searchResults.length === 0 && <p style={{ ...MONO, fontSize: 13, color: 'var(--on-ink-text-3)', textAlign: 'center', padding: 14, margin: 0 }}>No results. Press Enter to add it anyway.</p>}
+            {!isFetching && searchResults.map((s) => (
+              <button
+                key={s.ticker} onClick={() => addTag({ ticker: s.ticker, assetType: s.type || 'stock', name: s.name })} className="tvx-navrow"
+                style={{ ...MONO, width: '100%', textAlign: 'left', padding: '10px 14px', fontSize: 13, background: 'transparent', border: 0, borderBottom: `1px solid ${BORDER}`, color: 'var(--paper)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }}
+              >
+                <b>{s.ticker}</b>
+                <span style={{ color: 'var(--on-ink-text-3)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
+                <span className="t-chip">{typeLabel(s.type)}</span>
+              </button>
+            ))}
           </div>
         )}
       </div>
 
-      {showGrid &&
-        Object.entries(SUGGESTIONS).map(([category, items]) => (
-          <div key={category} className="mb-4">
-            <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">{category}</p>
-            <div className="flex flex-wrap gap-2">
-              {items.map((s) => {
-                const isAdded = tags.some((t) => t.ticker === s.ticker)
-                return (
-                  <button
-                    key={s.ticker}
-                    onClick={() => (isAdded ? removeTag(s.ticker) : addTag(s))}
-                    className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
-                      isAdded
-                        ? 'bg-[#3b82f6] border-[#3b82f6] text-white'
-                        : 'bg-[#1a1a1a] border-[#2a2a2a] text-gray-300 hover:border-[#3b82f6] hover:text-white'
-                    }`}
-                  >
-                    {s.ticker}
-                  </button>
-                )
-              })}
-            </div>
+      {showGrid && Object.entries(SUGGESTIONS).map(([category, items]) => (
+        <div key={category} style={{ marginBottom: 16 }}>
+          <p style={{ ...MONO, fontSize: 12, fontWeight: 700, color: 'var(--on-ink-text-3)', margin: '0 0 8px' }}>{category}</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {items.map((s) => {
+              const isAdded = tags.some((t) => t.ticker === s.ticker)
+              return (
+                <button
+                  key={s.ticker} onClick={() => (isAdded ? removeTag(s.ticker) : addTag(s))} aria-pressed={isAdded}
+                  className={`t-btn ${isAdded ? 't-on' : ''}`} style={{ ...MONO, padding: '6px 12px', fontSize: 13 }}
+                >{s.ticker}</button>
+              )
+            })}
           </div>
-        ))}
+        </div>
+      ))}
     </div>
   )
 }
