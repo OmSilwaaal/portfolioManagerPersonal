@@ -4,7 +4,9 @@ const { supabase } = require('../services/supabaseAdmin')
 const { requireAuth } = require('../middleware/auth')
 const { isUuid } = require('../middleware/validate')
 const { getDb } = require('../db/schema')
-const { BANNERS, EFFECTS, winStats } = require('../services/wins')
+const { winStats } = require('../services/wins')
+const { BANNERS, EFFECTS, COLOR_RE, isProMeta, forgetPro, clanOf } = require('../services/identity')
+const elo = require('../services/elo')
 
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/
 
@@ -17,26 +19,32 @@ function publicDisplayName(user) {
 }
 
 // Cosmetics plus the numbers behind each calling card, computed here so one user's page can show another's progress.
+// Calling cards and effects are Pro cosmetics: they are only reported (and only ever shown) for Pro members.
 function publicExtras(userId, authUser) {
   const db = getDb()
-  const cos = db.prepare('SELECT banner, effect FROM user_cosmetics WHERE user_id = ?').get(userId) ?? {}
+  const cos = db.prepare('SELECT banner, effect, name_color FROM user_cosmetics WHERE user_id = ?').get(userId) ?? {}
   const count = (sql) => db.prepare(sql).get(userId, userId).n
   const meta = authUser?.user_metadata ?? {}
-  const app = authUser?.app_metadata ?? {}
-  const proUntil = Date.parse(app.referralProUntil ?? '')
+  const isPro = isProMeta(authUser?.app_metadata)
   const w = winStats(userId, db)
+  const e = elo.statsFor(userId, db)
+  const clan = clanOf(db, userId)
   return {
-    banner: BANNERS.includes(cos.banner) ? cos.banner : null,
-    effect: EFFECTS.includes(cos.effect) ? cos.effect : null,
-    is_pro: Boolean(app.isPro) || (Number.isFinite(proUntil) && proUntil > Date.now()),
+    banner: isPro && BANNERS.includes(cos.banner) ? cos.banner : null,
+    effect: isPro && EFFECTS.includes(cos.effect) ? cos.effect : null,
+    name_color: COLOR_RE.test(cos.name_color ?? '') ? cos.name_color : null,
+    is_pro: isPro,
+    elo: { elo: e.elo, peak: e.peak, tier: e.tier, tierName: e.tierName, color: e.color, next: e.next, pct: e.pct, trades: e.trades, wins: e.wins, losses: e.losses, winRate: e.winRate, totalPnl: e.totalPnl, bestWin: e.bestWin, streak: elo.streakOf(userId, db) },
+    clan: clan ? { id: clan.id, name: clan.name, tag: clan.tag.toUpperCase(), color: clan.color } : null,
     stats: {
       friends: count("SELECT COUNT(*) AS n FROM friendships WHERE status = 'accepted' AND (requester_id = ? OR addressee_id = ?)"),
-      groups: db.prepare('SELECT COUNT(*) AS n FROM group_members WHERE userId = ?').get(userId).n,
+      clans: clan ? 1 : 0,
       watchlist: Array.isArray(meta.watchlist) ? meta.watchlist.length : 0,
       referrals: db.prepare('SELECT COUNT(*) AS n FROM referrals WHERE referrer_id = ?').get(userId).n,
       wins: w.wins,
       bestWinUsd: w.bestUsd,
       totalWinUsd: w.totalUsd,
+      trades: e.trades, losses: e.losses, winRate: e.winRate, bestWin: e.bestWin, peakElo: e.peak,
     },
   }
 }
@@ -143,18 +151,31 @@ router.patch('/me', requireAuth, async (req, res) => {
   }
 })
 
-// PUT /profiles/me/cosmetics { banner?, effect? } — what other people see next to your name
+// PUT /profiles/me/cosmetics { banner?, effect?, nameColor? } — what other people see next to your name.
+// Free accounts get a solid name colour only. Calling cards and animated effects need Pro.
 router.put('/me/cosmetics', requireAuth, (req, res) => {
-  const { banner, effect } = req.body ?? {}
+  const { banner, effect, nameColor } = req.body ?? {}
+  const pro = isProMeta(req.user.app_metadata)
+  const wantsPro = (banner !== undefined && banner !== null) || (effect !== undefined && effect !== null && effect !== 'none')
+  if (wantsPro && !pro) return res.status(403).json({ error: true, code: 'pro_required', message: 'Calling cards and name effects are Pro features. Free accounts can pick a solid name colour.' })
   if (banner !== undefined && banner !== null && !BANNERS.includes(banner)) return res.status(400).json({ error: true, message: 'Unknown calling card.' })
   if (effect !== undefined && effect !== null && !EFFECTS.includes(effect)) return res.status(400).json({ error: true, message: 'Unknown effect.' })
+  if (nameColor !== undefined && nameColor !== null && !COLOR_RE.test(nameColor)) return res.status(400).json({ error: true, message: 'Name colour must be a hex colour like #38bdf8.' })
+  if (banner && elo.TRADING_CARDS[banner] && !elo.TRADING_CARDS[banner](elo.statsFor(req.user.id))) {
+    return res.status(403).json({ error: true, message: 'You have not unlocked that calling card yet.' })
+  }
   const db = getDb()
-  const cur = db.prepare('SELECT banner, effect FROM user_cosmetics WHERE user_id = ?').get(req.user.id) ?? {}
-  const next = { banner: banner === undefined ? cur.banner ?? null : banner, effect: effect === undefined ? cur.effect ?? null : effect }
+  forgetPro(req.user.id)
+  const cur = db.prepare('SELECT banner, effect, name_color FROM user_cosmetics WHERE user_id = ?').get(req.user.id) ?? {}
+  const next = {
+    banner: banner === undefined ? cur.banner ?? null : banner,
+    effect: effect === undefined ? cur.effect ?? null : effect,
+    nameColor: nameColor === undefined ? cur.name_color ?? null : nameColor,
+  }
   db.prepare(
-    `INSERT INTO user_cosmetics (user_id, banner, effect, updated_at) VALUES (?, ?, ?, datetime('now'))
-     ON CONFLICT(user_id) DO UPDATE SET banner = excluded.banner, effect = excluded.effect, updated_at = excluded.updated_at`
-  ).run(req.user.id, next.banner, next.effect)
+    `INSERT INTO user_cosmetics (user_id, banner, effect, name_color, updated_at) VALUES (?, ?, ?, ?, datetime('now'))
+     ON CONFLICT(user_id) DO UPDATE SET banner = excluded.banner, effect = excluded.effect, name_color = excluded.name_color, updated_at = excluded.updated_at`
+  ).run(req.user.id, next.banner, next.effect, next.nameColor)
   res.json(next)
 })
 

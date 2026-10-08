@@ -28,7 +28,8 @@ const commoditiesRouter = require('./routes/commodities');
 const preferencesRouter = require('./routes/preferences');
 const searchRouter = require('./routes/search');
 const { router: paperTradingRouter } = require('./routes/paperTrading');
-const groupsRouter = require('./routes/groups');
+const clansRouter = require('./routes/clans');
+const eloRouter = require('./routes/elo');
 const profilesRouter = require('./routes/profiles');
 const notificationsRouter = require('./routes/notifications');
 const { router: explainRouter } = require('./routes/stockExplainer');
@@ -143,7 +144,7 @@ const recoveryCreateLimiter = makeLimiter(60 * 60 * 1000, 6, 'Too many requests.
 const smsVerifyLimiter = makeLimiter(15 * 60 * 1000, 10, 'Too many attempts. Please try again later.');
 
 app.use('/api', globalLimiter);
-app.use('/api/groups/join', joinLimiter);
+app.use('/api/clans/:id/join', joinLimiter);
 app.use('/api/stripe/redeem-code', promoLimiter);
 app.use('/api/user', destructiveLimiter);
 app.use('/api/recover/login', recoverLimiter);
@@ -184,7 +185,8 @@ app.use('/api/portfolio', requireAuth, portfolioRouter);
 app.use('/api/calendar', calendarRouter);
 app.use('/api/search', searchRouter);
 app.use('/api/paper-trading', paperTradingRouter);
-app.use('/api/groups', requireAuth, groupsRouter);
+app.use('/api/clans', requireAuth, clansRouter);
+app.use('/api/elo', requireAuth, eloRouter);
 app.use('/api/profiles', requireAuth, profilesRouter);
 app.use('/api/notifications', notificationsRouter);
 app.use('/api/explain', aiLimiter, explainRouter);

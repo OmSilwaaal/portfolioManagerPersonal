@@ -1,5 +1,6 @@
 const express = require('express')
 const { recordWin } = require('../services/wins')
+const { recordTrade } = require('../services/elo')
 const router = express.Router()
 const { supabase } = require('../services/supabaseAdmin')
 const { getStockQuote } = require('../services/finnhub')
@@ -354,6 +355,11 @@ router.post('/sell', requireAuth, async (req, res, next) => {
 
     boardCache = null
     const gain = (price - Number(position.avg_cost)) * shares
+    // wins AND losses count towards Elo
+    const eloChange = recordTrade({
+      userId, kind: 'stock', symbol: ticker, pnlUsd: gain,
+      pnlPct: Number(position.avg_cost) > 0 ? ((price - Number(position.avg_cost)) / Number(position.avg_cost)) * 100 : null,
+    })
     if (gain > 0) {
       let solPrice = null
       try { solPrice = await require('../services/memecoinData').getSolPrice() } catch { /* default applies */ }
@@ -365,6 +371,7 @@ router.post('/sell', requireAuth, async (req, res, next) => {
     res.json({
       success: true, ticker, shares, price, total,
       avgCost: Number(position.avg_cost),
+      elo: eloChange,
       ...realizedResult(position.avg_cost, shares, price),
     })
   } catch (err) {

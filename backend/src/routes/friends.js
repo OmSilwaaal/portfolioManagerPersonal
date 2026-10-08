@@ -3,6 +3,7 @@ const router = express.Router();
 const { getDb } = require('../db/schema');
 const { supabase } = require('../services/supabaseAdmin');
 const { isUuid } = require('../middleware/validate');
+const { decorate } = require('../services/identity');
 
 const MAX_FRIENDS = 500;
 const MAX_PENDING_OUT = 100;
@@ -23,6 +24,8 @@ async function cardsFor(ids) {
       avatarUrl: typeof p.avatar_url === 'string' && /^https?:\/\//i.test(p.avatar_url) ? p.avatar_url : null,
     });
   }
+  // Elo, clan tag and cosmetics ride along on every card
+  for (const c of await decorate([...map.values()], { supabase })) map.set(c.userId, c);
   return map;
 }
 
@@ -68,15 +71,14 @@ router.get('/search', async (req, res, next) => {
     if (error) throw error;
 
     const db = getDb();
-    res.json({
-      users: (data ?? []).map((p) => ({
-        userId: p.user_id,
-        username: p.username,
-        displayName: cleanName(p.display_name),
-        avatarUrl: typeof p.avatar_url === 'string' && /^https?:\/\//i.test(p.avatar_url) ? p.avatar_url : null,
-        relationship: relationship(db, req.user.id, p.user_id),
-      })),
-    });
+    const users = (data ?? []).map((p) => ({
+      userId: p.user_id,
+      username: p.username,
+      displayName: cleanName(p.display_name),
+      avatarUrl: typeof p.avatar_url === 'string' && /^https?:\/\//i.test(p.avatar_url) ? p.avatar_url : null,
+      relationship: relationship(db, req.user.id, p.user_id),
+    }));
+    res.json({ users: await decorate(users, { supabase }) });
   } catch (err) { next(err); }
 });
 

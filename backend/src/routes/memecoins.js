@@ -1,5 +1,6 @@
 const express = require('express');
 const { recordWin } = require('../services/wins');
+const { recordTrade } = require('../services/elo');
 const router = express.Router();
 const data = require('../services/memecoinData');
 
@@ -236,6 +237,10 @@ router.post('/trade', h(async (req, res) => {
     }
     const r = await withUserLock(userId, () => applyTrade(sb, userId, address, side, quote));
     const pnl = side === 'sell' ? (quote.fillPrice - r.avgCost) * r.tokens : null;
+    let eloChange = null;
+    if (pnl != null) {
+      eloChange = recordTrade({ userId, kind: 'meme', symbol: quote.symbol, pnlUsd: pnl, pnlPct: r.avgCost > 0 ? ((quote.fillPrice - r.avgCost) / r.avgCost) * 100 : null });
+    }
     if (pnl != null && pnl > 0) {
       recordWin({
         userId, kind: 'meme', symbol: quote.symbol, address, entry: r.avgCost, exit: quote.fillPrice, qty: r.tokens,
@@ -256,6 +261,7 @@ router.post('/trade', h(async (req, res) => {
       amountSol: r.total / quote.solPrice,
       solPrice: quote.solPrice,
       realizedPnl: pnl,
+      elo: eloChange,
       cashBalance: r.newCash,
       position: r.newShares > DUST ? {
         address,

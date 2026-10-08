@@ -4,6 +4,7 @@ const express = require('express');
 const { getDb } = require('../db/schema');
 const { supabase } = require('../services/supabaseAdmin');
 const { isUuid, isTicker } = require('../middleware/validate');
+const { decorate } = require('../services/identity');
 
 const router = express.Router();
 
@@ -66,6 +67,7 @@ async function cards(ids) {
       avatarUrl: typeof p.avatar_url === 'string' && /^https?:\/\//i.test(p.avatar_url) ? p.avatar_url : null,
     });
   }
+  for (const c of await decorate([...map.values()], { supabase })) map.set(c.userId, c);
   return map;
 }
 
@@ -98,8 +100,11 @@ router.get('/conversations', async (req, res, next) => {
 
 // GET /api/messages/unread — cheap badge count
 router.get('/unread', (req, res) => {
-  const n = getDb().prepare('SELECT COUNT(*) AS n FROM messages WHERE recipient_id = ? AND read_at IS NULL').get(req.user.id).n;
-  res.json({ unread: n });
+  const db = getDb();
+  const n = db.prepare('SELECT COUNT(*) AS n FROM messages WHERE recipient_id = ? AND read_at IS NULL').get(req.user.id).n;
+  // pending friend requests ride along so the sidebar can badge them too
+  const requests = db.prepare("SELECT COUNT(*) AS n FROM friendships WHERE addressee_id = ? AND status = 'pending'").get(req.user.id).n;
+  res.json({ unread: n, requests });
 });
 
 // GET /api/messages/with/:userId?after=<id>
