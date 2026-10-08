@@ -119,7 +119,7 @@ test('a win that cannot be logged never throws (the trade it describes must stil
   assert.strictEqual(wins.recordWin({ userId: BOB, symbol: 'PEPE', pnlUsd: 100 }, broken), null);
 });
 
-test('winners feed: only real wins, ranked by profit, USD + SOL on every row', async () => {
+test('winners feed: real + seeded wins, ranked by profit, USD + SOL on every row', async () => {
   const db = getDb();
   db.prepare("INSERT INTO user_cosmetics (user_id, banner, effect) VALUES (?, 'storm', 'fire')").run(BOB);
   wins.recordWin({ userId: LARP, kind: 'meme', symbol: 'sol', pnlUsd: 5000, pnlPct: 60, solPrice: 200 }, db);
@@ -128,12 +128,16 @@ test('winners feed: only real wins, ranked by profit, USD + SOL on every row', a
   const usd = out.wins.map((w) => w.pnlUsd);
   assert.deepStrictEqual(usd, [...usd].sort((a, b) => b - a), 'sorted biggest first');
   assert.deepStrictEqual(out.wins.map((w) => w.rank), out.wins.map((_, i) => i + 1));
-  assert.strictEqual(out.wins.length, 2, 'no seeded entries');
-  assert.ok(out.wins.every((w) => w.demo === undefined && wins.ANIMS.includes(w.anim)));
+  assert.ok(out.wins.every((w) => wins.ANIMS.includes(w.anim)));
+  const banners = new Set(out.wins.filter((w) => w.id.startsWith('seed-')).map((w) => w.banner));
+  assert.strictEqual(banners.size, wins.BANNERS.length, 'one seeded win per calling card');
+  assert.ok(out.wins.every((w) => w.pnlSol > 0));
+  assert.strictEqual(out.wins.find((w) => w.symbol === 'ADA').pnlUsd, 4000);
 
-  const larp = out.wins.find((w) => w.username === 'larp');
+  const larp = out.wins.find((w) => w.username === 'larp' && w.id.startsWith('seed-'));
   assert.strictEqual(larp.pnlUsd, 5000);
   assert.strictEqual(larp.pnlSol, 25, '$5,000 at $200/SOL');
+  assert.strictEqual(larp.userId, LARP, 'the seeded handle links the real account when it exists');
   assert.strictEqual(larp.avatarUrl, 'https://img.example/larp.png');
 
   const real = out.wins.find((w) => w.username === 'bob');
@@ -155,6 +159,8 @@ test('killcams are randomised per win and never repeat back to back', () => {
 test('ranges filter by age', async () => {
   const db = getDb();
   const sb = require('../src/services/supabaseAdmin').supabase;
+  const off = await wins.listWins({ range: 'all', solPrice: 150, supabase: sb, db, demo: false });
+  assert.ok(off.wins.every((w) => !w.id.startsWith('seed-')), 'seeds can be switched off');
   const day = await wins.listWins({ range: 'day', solPrice: 150, supabase: sb, db });
   assert.ok(day.wins.every((w) => Date.now() - Date.parse(w.at) <= 86_400_000 + 5000));
 });

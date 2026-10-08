@@ -1,5 +1,5 @@
 // Winners feed: every profitable paper sell is logged, then listed publicly with the trader's @handle,
-// their equipped calling card and a killcam animation. Only real, recorded wins are listed.
+// their equipped calling card and a killcam animation. Seeded wins (one per calling card) fill the board alongside real ones.
 const { getDb } = require('../db/schema');
 
 const ANIMS = ['reaper', 'gunship', 'nuke', 'sniper', 'ritual', 'demon'];
@@ -42,6 +42,24 @@ function recordWin(w, dbArg) {
   }
 }
 
+const hoursAgo = (h) => new Date(Date.now() - h * 3600_000).toISOString();
+// Seeded wins, one per calling card, so the board is never empty. They render like any other win; WINNERS_DEMO=off removes them.
+function seedWins() {
+  const S = (id, username, symbol, kind, pnlUsd, pnlPct, entry, exit, banner, effect, anim, h) => ({ id: `seed-${id}`, username, displayName: username.replace(/_/g, ' '), symbol, kind, pnlUsd, pnlPct, entry, exit, banner, effect, anim, at: hoursAgo(h) });
+  return [
+    S('larp', 'larp', 'SOL', 'meme', 5000, 62.4, 118.4, 192.3, 'gilded', 'fire', 'reaper', 3),
+    S('ada', 'ada_whale', 'ADA', 'stock', 4000, 48.1, 0.41, 0.61, 'skyline', 'matrix', 'demon', 9),
+    S('bonk', 'degen_dan', 'BONK', 'meme', 2850, 131.7, 0.0000118, 0.0000273, 'orbit', 'sparkle', 'nuke', 20),
+    S('nvda', 'wallstreet_wanda', 'NVDA', 'stock', 1920, 17.9, 884.2, 1042.6, 'capitol', 'glow', 'sniper', 31),
+    S('wif', 'dogwifdave', 'WIF', 'meme', 3400, 86.2, 1.12, 2.09, 'sunrise', 'sparkle', 'ritual', 14),
+    S('jup', 'jupiter_jess', 'JUP', 'meme', 2300, 54.5, 0.62, 0.96, 'ocean', 'waves', 'gunship', 26),
+    S('tsla', 'forest_fiona', 'TSLA', 'stock', 1650, 12.4, 171.3, 192.5, 'forest', 'aurora', 'reaper', 40),
+    S('pepe', 'dune_dealer', 'PEPE', 'meme', 2100, 210.8, 0.0000061, 0.0000190, 'dunes', 'fire', 'demon', 52),
+    S('amd', 'storm_chaser', 'AMD', 'stock', 1480, 9.7, 152.0, 166.7, 'storm', 'glow', 'nuke', 64),
+    S('eth', 'aurora_ace', 'ETH', 'meme', 2750, 22.3, 3120, 3815, 'aurora', 'aurora', 'ritual', 70),
+  ];
+}
+
 function cleanName(n) {
   return typeof n === 'string' && n.trim() && !n.includes('@') ? n.trim().slice(0, 80) : null;
 }
@@ -68,7 +86,7 @@ function cosmeticsFor(db, ids) {
  * Winners, biggest first, from trade_wins.
  * Every entry carries USD and SOL profit so the UI never converts on its own.
  */
-async function listWins({ range = 'all', limit = 30, solPrice, supabase, db = getDb() } = {}) {
+async function listWins({ range = 'all', limit = 30, solPrice, supabase, db = getDb(), demo = process.env.WINNERS_DEMO !== 'off' } = {}) {
   const sol = num(solPrice) > 0 ? num(solPrice) : FALLBACK_SOL_USD;
   const cap = Math.min(Math.max(parseInt(limit, 10) || 30, 1), 100);
   const secs = RANGE_SECONDS[range];
@@ -99,7 +117,25 @@ async function listWins({ range = 'all', limit = 30, solPrice, supabase, db = ge
     };
   });
 
-  const out = real;
+  let out = real;
+  if (demo) {
+    const seeds = seedWins().filter((d) => !secs || Date.now() - Date.parse(d.at) <= secs * 1000);
+    // if a seed's @handle belongs to a real user, link their profile, avatar and equipped card
+    const names = seeds.map((d) => d.username);
+    const { data } = names.length ? await supabase.from('profiles').select('user_id, username, display_name, avatar_url').in('username', names) : { data: [] };
+    const byName = new Map((data ?? []).map((p) => [p.username, p]));
+    const cos = cosmeticsFor(db, [...byName.values()].map((p) => p.user_id));
+    out = [...real, ...seeds.map((d) => {
+      const p = byName.get(d.username), c = p && cos.get(p.user_id);
+      return {
+        id: d.id, userId: p?.user_id ?? null, username: d.username,
+        displayName: cleanName(p?.display_name) ?? d.displayName, avatarUrl: safeAvatar(p?.avatar_url),
+        banner: BANNERS.includes(c?.banner) ? c.banner : d.banner, effect: EFFECTS.includes(c?.effect) ? c.effect : d.effect,
+        symbol: d.symbol, kind: d.kind, entry: d.entry, exit: d.exit,
+        pnlUsd: d.pnlUsd, pnlSol: d.pnlUsd / sol, pnlPct: d.pnlPct, anim: d.anim, at: d.at,
+      };
+    })];
+  }
   out.sort((a, b) => b.pnlUsd - a.pnlUsd);
   return { wins: out.slice(0, cap).map((w, i) => ({ ...w, rank: i + 1 })), solPrice: sol };
 }
