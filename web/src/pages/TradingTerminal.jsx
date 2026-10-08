@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { usePrivy } from '@privy-io/react-auth'
 import {
-  Zap, Wallet, LogIn, LogOut, Search, Copy, Check, RefreshCw, AlertTriangle,
+  Wallet, LogIn, LogOut, Search, Copy, Check, RefreshCw, AlertTriangle,
   ArrowUpRight, ArrowDownRight, Flame, Sparkles, Rocket, X, Loader2, Radar,
   RotateCcw,
 } from 'lucide-react'
@@ -30,6 +30,7 @@ import {
 import PanelWorkspace from '../components/terminal/PanelWorkspace'
 import WorkspacePanel from '../components/terminal/Panel'
 import MemecoinAlerts from '../components/alerts/MemecoinAlerts'
+import { Glyph } from '../ascii/glyphs'
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
 const ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/
@@ -88,23 +89,26 @@ function timeAgo(ts) {
 const errMsg = (e) => e?.status === 429
   ? 'Slow down: too many requests. Live updates are paused for a moment.'
   : e?.data?.error || e?.data?.message || e?.error || (e?.status ? `Request failed (${e.status})` : 'Request failed')
-const pctColor = (v) => (v == null ? 'text-[#a39d8d]' : v >= 0 ? 'text-[#7ea968]' : 'text-[#d35c4a]')
+const pctColor = (v) => (v == null ? 'tv-dim' : v >= 0 ? 'tv-up' : 'tv-down')
 const fmtPct = (v) => (v == null || isNaN(v) ? '--' : `${v >= 0 ? '+' : ''}${Number(v).toFixed(2)}%`)
+
+// API bodies are untrusted: anything that is not a list is treated as empty instead of crashing the panel
+const asArray = (d) => (Array.isArray(d) ? d : [])
 
 const newOrderId = () => (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`)
 const fmtTokens = (n) => (n == null || isNaN(n) ? '--' : Math.abs(n) >= 1 ? fmtNum(n) : Number(n).toPrecision(3))
 
 /* ─── Small UI primitives ────────────────────────────────────────────────── */
-const Skel = ({ className = '' }) => <div className={`bg-white/[0.06] animate-pulse rounded-lg ${className}`} />
+const Skel = ({ className = '' }) => <div className={`animate-pulse ${className}`} style={{ background: 'var(--on-ink-2)', borderRadius: 2 }} />
 
 function ErrorBox({ error, onRetry, label = 'Failed to load' }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-2 p-4 text-center text-xs text-[#a39d8d]">
-      <AlertTriangle className="w-5 h-5 text-[#d6b87a]" />
-      <div>{label}</div>
-      <div className="text-[10px] text-[#555143] break-words max-w-full">{errMsg(error)}</div>
+    <div role="alert" className="flex flex-col items-center justify-center gap-2 p-4 text-center text-xs" style={{ color: 'var(--on-ink-text-2)' }}>
+      <AlertTriangle className="w-5 h-5" style={{ color: 'var(--ochre-300)' }} />
+      <div style={{ fontWeight: 700 }}>{label}</div>
+      <div className="text-[11px] break-words max-w-full" style={{ color: 'var(--on-ink-text-3)' }}>{errMsg(error)}</div>
       {onRetry && error?.status !== 429 && (
-        <button onClick={onRetry} className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-white/5 hover:bg-[#9eae84]/15 text-[#9eae84] transition">
+        <button onClick={onRetry} className="t-btn flex items-center gap-1 px-3 py-1.5">
           <RefreshCw className="w-3 h-3" /> Retry
         </button>
       )}
@@ -112,13 +116,10 @@ function ErrorBox({ error, onRetry, label = 'Failed to load' }) {
   )
 }
 
-/* Glass panel: translucent surface, soft lift shadow, hairline top highlight. No hard edges —
- * depth comes from the shadow + a vertical gradient fill instead of a border. */
-function Panel({ className = '', tint = 'from-white/[0.05] to-white/[0.015]', children }) {
+/* Flat panel: solid surface and a hairline. Buy/sell tone is a 2px rule on top, nothing glows. */
+function Panel({ className = '', tone, children }) {
   return (
-    <section
-      className={`relative min-w-0 overflow-hidden rounded-[28px] bg-[#121212]/60 bg-gradient-to-b ${tint} backdrop-blur-2xl shadow-[0_30px_70px_-30px_rgba(0,0,0,0.85)] before:content-[''] before:absolute before:inset-x-6 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/20 before:to-transparent ${className}`}
-    >
+    <section data-tone={tone} className={`t-panel relative min-w-0 overflow-hidden ${className}`}>
       {children}
     </section>
   )
@@ -126,37 +127,19 @@ function Panel({ className = '', tint = 'from-white/[0.05] to-white/[0.015]', ch
 
 function Tabs({ tabs, value, onChange }) {
   return (
-    <div className="flex items-center gap-1 overflow-x-auto no-scrollbar rounded-full bg-black/25 p-1">
+    <div role="tablist" className="flex flex-wrap items-center gap-1">
       {tabs.map((t) => (
         <button
           key={t.id}
+          role="tab"
+          aria-selected={value === t.id}
+          aria-pressed={value === t.id}
           onClick={() => onChange(t.id)}
-          className={`flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full whitespace-nowrap transition-all ${
-            value === t.id
-              ? 'bg-[#3e4d26]/70 text-[#dce8c9] shadow-[0_4px_14px_-4px_rgba(158,174,132,0.55)]'
-              : 'text-[#a39d8d] hover:text-white hover:bg-white/5'
-          }`}
+          className="t-tab flex items-center gap-1.5 whitespace-nowrap"
         >
           {t.icon}{t.label}
         </button>
       ))}
-    </div>
-  )
-}
-
-/* Ambient backdrop: slow drifting color blobs + hairline scan texture behind the glass panels */
-function GlassBackground() {
-  return (
-    <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
-      <div className="absolute inset-0 bg-[#070706]" />
-      <div className="absolute -top-1/4 -left-1/4 w-[60vw] h-[60vw] rounded-full bg-[#3e4d26]/25 blur-[120px] animate-[auroraDriftA_24s_ease-in-out_infinite]" />
-      <div className="absolute top-1/4 -right-1/4 w-[55vw] h-[55vw] rounded-full bg-[#a88847]/12 blur-[130px] animate-[auroraDriftB_28s_ease-in-out_infinite]" />
-      <div className="absolute -bottom-1/3 left-1/4 w-[50vw] h-[50vw] rounded-full bg-[#803e26]/15 blur-[120px] animate-[auroraDriftC_32s_ease-in-out_infinite]" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,#050504_88%)]" />
-      <div
-        className="absolute inset-0 opacity-[0.035] mix-blend-overlay"
-        style={{ backgroundImage: 'repeating-linear-gradient(0deg, rgba(255,255,255,0.5) 0px, rgba(255,255,255,0.5) 1px, transparent 1px, transparent 3px)' }}
-      />
     </div>
   )
 }
@@ -206,24 +189,24 @@ function TokenSearch({ onSelect }) {
   return (
     <div ref={boxRef} className="relative w-full md:max-w-md">
       <form onSubmit={(e) => { e.preventDefault(); if (isAddr) pick(dq); else if (results[0]) pick(results[0].address) }}>
-        <Search className="w-3.5 h-3.5 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#555143]" />
+        <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--on-ink-text-3)' }} />
         <input
           value={q}
           onChange={(e) => { setQ(e.target.value); setOpen(true) }}
           onFocus={() => setOpen(true)}
           placeholder="Search name, symbol or contract address"
-          className="w-full rounded-full bg-black/30 backdrop-blur-md pl-9 pr-9 py-2.5 text-sm text-white placeholder-[#6b6657] focus:outline-none focus:ring-2 focus:ring-[#9eae84]/25 transition"
+          className="t-input w-full pl-9 pr-9 py-2 text-sm" aria-label="Search tokens"
         />
         {q && (
-          <button type="button" onClick={() => { setQ(''); setDq('') }} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#555143] hover:text-white">
+          <button type="button" aria-label="Clear search" onClick={() => { setQ(''); setDq('') }} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--on-ink-text-3)' }}>
             <X className="w-3.5 h-3.5" />
           </button>
         )}
       </form>
       {open && dq.length >= 2 && (
-        <div className="absolute z-30 mt-2 w-full rounded-2xl bg-[#141414]/90 backdrop-blur-2xl shadow-[0_24px_60px_-20px_rgba(0,0,0,0.8)] max-h-80 overflow-y-auto overflow-hidden">
+        <div className="t-panel absolute z-30 mt-1 w-full max-h-80 overflow-y-auto" style={{ boxShadow: '0 12px 28px -12px rgba(0,0,0,0.55)' }}>
           {isAddr && (
-            <button onClick={() => pick(dq)} className="w-full text-left px-3.5 py-2.5 text-xs hover:bg-white/5 bg-gradient-to-b from-white/[0.04] to-transparent text-[#d6b87a]">
+            <button onClick={() => pick(dq)} className="t-row w-full text-left text-xs" style={{ color: 'var(--ochre-300)', fontWeight: 700 }}>
               Open contract {short(dq, 6)}
             </button>
           )}
@@ -233,7 +216,7 @@ function TokenSearch({ onSelect }) {
             <div className="p-3 text-xs text-[#a39d8d]">No tokens found for "{dq}"</div>
           )}
           {!isFetching && results.map((t) => (
-            <button key={t.address} onClick={() => pick(t.address)} className="w-full flex items-center justify-between gap-2 px-3.5 py-2.5 text-xs hover:bg-white/5 text-left">
+            <button key={t.address} onClick={() => pick(t.address)} className="t-row w-full flex items-center justify-between gap-2 text-xs text-left">
               <span className="truncate"><span className="font-bold text-white">{safeText(t.symbol)}</span> <span className="text-[#a39d8d]">{safeText(t.name, 48)}</span></span>
               <span className="text-[#555143] shrink-0">{fmtUsd(t.marketCap)}</span>
             </button>
@@ -254,47 +237,45 @@ function TopBar({ onSelect, solAddress, solBalance, paperCash, onResetLayout }) 
   }
 
   return (
-    <header className="relative z-30 flex flex-col md:flex-row md:items-center gap-2.5 md:gap-4 px-4 py-3 bg-black/30 backdrop-blur-xl">
-      <div className="flex items-center gap-2.5 shrink-0">
-        <div className="p-2 rounded-xl bg-gradient-to-br from-[#3e4d26] to-[#1f2910] text-[#9eae84] shadow-[0_0_20px_-4px_rgba(158,174,132,0.6)]">
-          <Zap className="w-4 h-4" />
-        </div>
-        <h1 className="text-sm font-bold font-display tracking-tight text-white">AXIOM TERMINAL</h1>
-        <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#d6b87a]/15 text-[#d6b87a] uppercase tracking-wider">Paper</span>
+    <header className="relative z-30 flex flex-col md:flex-row md:items-center gap-2.5 md:gap-4 px-4 py-2.5" style={{ background: 'var(--ink-800)', borderBottom: '1px solid var(--on-ink-border)' }}>
+      <div className="flex items-center gap-3 shrink-0">
+        <Glyph name="terminal" size={7} palette="lime" />
+        <h1 style={{ fontFamily: 'var(--font-display)', fontStretch: '125%', fontWeight: 800, fontSize: 14, letterSpacing: '0.02em', textTransform: 'uppercase', margin: 0, color: 'var(--paper)' }}>Axiom Terminal</h1>
+        <span className="t-chip" data-tone="warn" title="All trades are simulated">Paper</span>
       </div>
 
       <TokenSearch onSelect={onSelect} />
 
       <div className="flex items-center gap-2 md:ml-auto text-xs flex-wrap">
-        <div className="px-3 py-1.5 rounded-full bg-white/5 backdrop-blur-md" title="Paper-trading cash balance">
-          <span className="text-[#555143] mr-1">PAPER</span>
-          <span className="text-white font-bold">{paperCash == null ? '--' : fmtUsd(paperCash)}</span>
+        <div className="t-stat" title="Paper-trading cash balance">
+          <span style={{ color: 'var(--on-ink-text-3)' }}>PAPER</span>
+          <b style={{ color: 'var(--paper)' }}>{paperCash == null ? '--' : fmtUsd(paperCash)}</b>
         </div>
         <MemecoinAlerts onSelectToken={onSelect} />
-        <button onClick={onResetLayout} title="Reset panel layout" className="p-2 rounded-full bg-white/5 hover:bg-white/10 text-[#a39d8d] hover:text-white backdrop-blur-md transition">
+        <button onClick={onResetLayout} title="Reset panel layout" aria-label="Reset panel layout" className="t-btn p-2">
           <RotateCcw className="w-3.5 h-3.5" />
         </button>
         {!ready ? (
-          <Skel className="h-8 w-28 rounded-full" />
+          <Skel className="h-8 w-28" />
         ) : !authenticated ? (
-          <button onClick={login} className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-gradient-to-r from-[#3e4d26] to-[#566838] hover:brightness-110 text-white font-semibold shadow-[0_8px_24px_-8px_rgba(158,174,132,0.5)] transition">
+          <button onClick={login} className="t-btn t-btn-primary flex items-center gap-1.5 px-4 py-2">
             <LogIn className="w-3.5 h-3.5" /> Connect Wallet
           </button>
         ) : (
-          <div className="flex items-center gap-2 rounded-full bg-white/5 backdrop-blur-md px-3 py-1.5">
-            <Wallet className="w-3.5 h-3.5 text-[#9eae84]" />
+          <div className="t-stat flex items-center gap-2">
+            <Wallet className="w-3.5 h-3.5" style={{ color: 'var(--moss-200)' }} />
             {solAddress ? (
               <>
-                <span className="font-bold text-white">{short(solAddress)}</span>
-                <span className="text-[#d6b87a]">{solBalance == null ? '-- SOL' : `${solBalance.toFixed(3)} SOL`}</span>
-                <button onClick={copy} title="Copy address" className="text-[#a39d8d] hover:text-white">
-                  {copied ? <Check className="w-3.5 h-3.5 text-[#7ea968]" /> : <Copy className="w-3.5 h-3.5" />}
+                <b style={{ color: 'var(--paper)' }}>{short(solAddress)}</b>
+                <span style={{ color: 'var(--ochre-300)' }}>{solBalance == null ? '-- SOL' : `${solBalance.toFixed(3)} SOL`}</span>
+                <button onClick={copy} title="Copy address" aria-label="Copy address" style={{ color: 'var(--on-ink-text-2)' }}>
+                  {copied ? <Check className="w-3.5 h-3.5" style={{ color: 'var(--positive)' }} /> : <Copy className="w-3.5 h-3.5" />}
                 </button>
               </>
             ) : (
-              <span className="text-[#a39d8d] flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> No Solana wallet yet</span>
+              <span className="flex items-center gap-1" style={{ color: 'var(--on-ink-text-2)' }}><Loader2 className="w-3 h-3 animate-spin" /> No Solana wallet yet</span>
             )}
-            <button onClick={logout} title="Disconnect" className="text-[#a39d8d] hover:text-[#d35c4a]"><LogOut className="w-3.5 h-3.5" /></button>
+            <button onClick={logout} title="Disconnect" aria-label="Disconnect wallet" style={{ color: 'var(--on-ink-text-2)' }}><LogOut className="w-3.5 h-3.5" /></button>
           </div>
         )}
       </div>
@@ -429,7 +410,7 @@ function MiniTrend({ points }) {
           <div
             key={i}
             className="flex-1 rounded-full"
-            style={{ height: `${h}%`, background: v == null ? 'rgba(255,255,255,0.12)' : v >= 0 ? '#7ea968' : '#d35c4a' }}
+            style={{ height: `${h}%`, background: v == null ? 'var(--on-ink-3)' : v >= 0 ? 'var(--positive)' : 'var(--negative)' }}
           />
         )
       })}
@@ -441,11 +422,11 @@ function TokenRow({ t, active, onSelect, sig }) {
   return (
     <button
       onClick={() => onSelect(t.address)}
-      className={`block text-left mx-2 my-1 px-3 py-2.5 rounded-xl transition w-[calc(100%-1rem)] ${active ? 'bg-[#9eae84]/10 ring-1 ring-[#9eae84]/40' : 'hover:bg-white/5'}`}
+      className="t-row block w-full text-left" aria-current={active ? 'true' : undefined}
     >
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0 flex items-center gap-2">
-          <div className="w-9 h-9 shrink-0 rounded-full bg-white/5 ring-1 ring-white/10 text-[11px] flex items-center justify-center font-bold text-[#9eae84] overflow-hidden">
+          <div className="tvx-keep-round w-9 h-9 shrink-0 rounded-full text-[11px] flex items-center justify-center font-bold overflow-hidden" style={{ background: 'var(--on-ink-2)', border: '1px solid var(--on-ink-border)', color: 'var(--paper)' }}>
             {t.image ? <img src={t.image} alt="" className="w-full h-full object-cover" loading="lazy" /> : safeText(t.symbol || '?', 4).slice(0, 2)}
           </div>
           <div className="min-w-0">
@@ -481,7 +462,7 @@ function RadarRow({ s, active, onSelect }) {
   return (
     <button
       onClick={() => onSelect(s.address)}
-      className={`block text-left mx-2 my-1 px-3 py-2.5 rounded-xl transition w-[calc(100%-1rem)] ${active ? 'bg-[#9eae84]/10 ring-1 ring-[#9eae84]/40' : 'hover:bg-white/5'}`}
+      className="t-row block w-full text-left" aria-current={active ? 'true' : undefined}
     >
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
@@ -563,7 +544,7 @@ function DiscoveryPanel({ selected, onSelect }) {
   const fresh = useGetNewMemecoinsQuery(undefined, { pollingInterval: listPoll })
 
   const finalStretch = useMemo(() => {
-    const all = [...(fresh.data || []), ...(trending.data || [])]
+    const all = [...asArray(fresh.data), ...asArray(trending.data)]
     const seen = new Set()
     return all
       .filter((t) => t.bondingProgress != null && t.bondingProgress >= 60 && !seen.has(t.address) && seen.add(t.address))
@@ -576,7 +557,7 @@ function DiscoveryPanel({ selected, onSelect }) {
   const sigTrend = useGetMemecoinSignalsQuery('trending', { skip: tab === 'radar', pollingInterval: sigPoll })
   const sigMap = useMemo(() => {
     const m = new Map()
-    for (const s of [...(sigNew.data || []), ...(sigTrend.data || [])]) m.set(s.address, s)
+    for (const s of [...asArray(sigNew.data), ...asArray(sigTrend.data)]) m.set(s.address, s)
     return m
   }, [sigNew.data, sigTrend.data])
   const sigFailed = sigNew.isError && sigTrend.isError
@@ -780,19 +761,15 @@ function OrderTicket({ token, position }) {
 
   const buy = side === 'buy'
   return (
-    <Panel className="flex flex-col" tint={buy ? 'from-[#7ea968]/[0.08] to-transparent' : 'from-[#d35c4a]/[0.08] to-transparent'}>
-      <div className="grid grid-cols-2 gap-1.5 m-3 mb-0 p-1.5 rounded-full bg-black/30">
+    <Panel className="flex flex-col" tone={buy ? 'buy' : 'sell'}>
+      <div className="grid grid-cols-2 gap-2 m-3 mb-0">
         {['buy', 'sell'].map((s) => (
           <button
             key={s}
             onClick={() => { setSide(s); setStatus(null) }}
-            className={`flex items-center justify-center gap-1.5 py-3 rounded-full text-sm font-extrabold uppercase tracking-wider transition-all ${
-              side === s
-                ? (s === 'buy'
-                    ? 'bg-gradient-to-r from-[#3e4d26] to-[#7ea968] text-white shadow-[0_8px_26px_-6px_rgba(126,169,104,0.75)] scale-[1.02]'
-                    : 'bg-gradient-to-r from-[#803e26] to-[#d35c4a] text-white shadow-[0_8px_26px_-6px_rgba(211,92,74,0.75)] scale-[1.02]')
-                : 'text-[#a39d8d] hover:text-white'
-            }`}
+            className="t-side flex items-center justify-center gap-1.5 py-2.5 text-sm font-extrabold uppercase tracking-wider"
+            data-side={s}
+            aria-pressed={side === s}
           >
             {s === 'buy' ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
             {s}
@@ -801,8 +778,8 @@ function OrderTicket({ token, position }) {
       </div>
 
       <div className="p-4 space-y-3.5">
-        <div className={`text-sm truncate px-3 py-2 rounded-xl ${buy ? 'bg-[#7ea968]/10 text-[#9fc488]' : 'bg-[#d35c4a]/10 text-[#e08a7a]'}`}>
-          {token ? <><span className="font-extrabold text-white">{buy ? 'Buying' : 'Selling'} {safeText(token.symbol)}</span> @ {fmtPrice(token.price)}</> : 'Select a token to trade'}
+        <div className="text-sm truncate px-3 py-2" style={{ border: '1px solid var(--on-ink-border)', color: 'var(--on-ink-text-1)' }}>
+          {token ? <><span className="font-extrabold" style={{ color: buy ? 'var(--positive)' : 'var(--negative)' }}>{buy ? 'Buying' : 'Selling'} {safeText(token.symbol)}</span> @ {fmtPrice(token.price)}</> : 'Select a token to trade'}
         </div>
 
         <div className="space-y-1.5">
@@ -810,19 +787,19 @@ function OrderTicket({ token, position }) {
           <div className="grid grid-cols-5 gap-1.5">
             {SOL_PRESETS.map((v) => (
               <button key={v} onClick={() => { setAmount(String(v)); setSellPct(null) }}
-                className={`py-1.5 rounded-lg text-[11px] font-bold transition ${amountNum === v ? 'bg-[#3e4d26]/70 text-white shadow-[0_0_0_1px_rgba(158,174,132,0.3)]' : 'bg-black/30 text-[#a39d8d] hover:bg-white/10'}`}>
+                className={`t-btn py-1.5 text-[11px] font-bold ${amountNum === v ? 't-on' : ''}`} aria-pressed={amountNum === v}>
                 {v}
               </button>
             ))}
           </div>
           <input type="number" min="0" step="any" value={sellTokens != null ? '' : amount} onChange={(e) => { setAmount(e.target.value); setSellPct(null) }} placeholder={sellTokens != null ? `${sellPct}% of position (${fmtTokens(sellTokens)})` : 'Custom amount'}
-            className="w-full rounded-xl bg-black/30 backdrop-blur-md px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-[#9eae84]/25 transition" />
+            className="t-input w-full text-xs" aria-label="Custom amount in SOL" />
           {!buy && (
             <div className="grid grid-cols-4 gap-1.5">
               {SELL_PCTS.map((p) => (
                 <button key={p} disabled={!heldTokens}
                   onClick={() => setSellPct(p)}
-                  className="py-1.5 rounded-lg text-[11px] text-[#a39d8d] bg-black/30 hover:bg-[#d35c4a]/15 hover:text-white disabled:opacity-40 disabled:hover:bg-black/30 disabled:hover:text-[#a39d8d] transition">
+                  className="t-btn py-1.5 text-[11px] disabled:opacity-40">
                   {p}%
                 </button>
               ))}
@@ -834,17 +811,17 @@ function OrderTicket({ token, position }) {
           <div>
             <label className="text-[11px] text-[#8a8574] uppercase tracking-wide">Slippage (%)</label>
             <input type="number" min="0" max="100" step="0.5" value={slippage} onChange={(e) => setSlippage(e.target.value)}
-              className={`w-full rounded-xl bg-black/30 backdrop-blur-md px-3 py-1.5 text-xs text-[#9eae84] focus:outline-none focus:ring-2 transition ${validSlip ? 'focus:ring-[#9eae84]/25' : 'ring-2 ring-[#d35c4a]/60'}`} />
+              className="t-input w-full text-xs" aria-invalid={!validSlip} aria-label="Slippage percent" />
           </div>
           <div>
             <label className="text-[11px] text-[#8a8574] uppercase tracking-wide">Priority fee (SOL)</label>
             <input type="number" min="0" step="0.0005" value={priority} onChange={(e) => setPriority(e.target.value)}
-              className="w-full rounded-xl bg-black/30 backdrop-blur-md px-3 py-1.5 text-xs text-[#d6b87a] focus:outline-none focus:ring-2 focus:ring-[#9eae84]/25 transition" />
+              className="t-input w-full text-xs" aria-label="Priority fee in SOL" />
           </div>
         </div>
 
         {/* Quote */}
-        <div className="rounded-xl bg-black/30 backdrop-blur-md p-3 text-[11px] space-y-1.5 min-h-[68px]">
+        <div className="p-3 text-[11px] space-y-1.5 min-h-[68px]" style={{ border: '1px dashed var(--on-ink-border)' }}>
           {quoting ? (
             <><Skel className="h-3 w-full" /><Skel className="h-3 w-2/3" /><Skel className="h-3 w-1/2" /></>
           ) : quoteErr ? (
@@ -865,18 +842,15 @@ function OrderTicket({ token, position }) {
         <button
           onClick={submit}
           disabled={!token || !validAmount || !validSlip || trading}
-          className={`w-full py-3.5 rounded-full text-sm font-extrabold uppercase tracking-wider flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none ${
-            buy
-              ? 'bg-gradient-to-r from-[#3e4d26] to-[#7ea968] hover:brightness-110 text-white shadow-[0_14px_36px_-10px_rgba(126,169,104,0.8)]'
-              : 'bg-gradient-to-r from-[#803e26] to-[#d35c4a] hover:brightness-110 text-white shadow-[0_14px_36px_-10px_rgba(211,92,74,0.8)]'
-          }`}
+          className="t-submit w-full py-3 text-sm font-extrabold uppercase tracking-wider flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+          data-side={buy ? 'buy' : 'sell'}
         >
           {trading ? <Loader2 className="w-4 h-4 animate-spin" /> : buy ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
           {trading ? 'Submitting...' : `${buy ? 'Buy' : 'Sell'} ${token?.symbol || ''}`}
         </button>
 
         {status && (
-          <div className={`p-2.5 rounded-xl text-xs font-semibold backdrop-blur-md break-words ${status.ok ? 'text-[#9fc488] bg-[#1f2910]/60' : 'text-[#e08a7a] bg-[#803e26]/30'}`}>
+          <div role="status" className="p-2.5 text-xs font-semibold break-words" style={{ border: `1px solid ${status.ok ? 'var(--positive)' : 'var(--negative)'}`, color: status.ok ? 'var(--positive)' : 'var(--negative)' }}>
             {status.msg}
           </div>
         )}
@@ -887,16 +861,16 @@ function OrderTicket({ token, position }) {
 }
 
 function Row({ k, v, warn }) {
-  return <div className="flex justify-between gap-2"><span className="text-[#555143]">{k}</span><span className={warn ? 'text-[#d35c4a]' : 'text-white'}>{v}</span></div>
+  return <div className="flex justify-between gap-2"><span style={{ color: 'var(--on-ink-text-3)' }}>{k}</span><span style={{ color: warn ? 'var(--negative)' : 'var(--paper)', fontWeight: 600 }}>{v}</span></div>
 }
 
 /* ─── Bottom tabs ────────────────────────────────────────────────────────── */
-function Table({ head, children, empty }) {
+function Table({ head, children, empty, right = [] }) {
   return (
     <div className="overflow-auto h-full">
-      <table className="w-full text-xs min-w-[480px]">
-        <thead className="sticky top-0 bg-[#141414]/90 backdrop-blur-md text-[#555143] uppercase">
-          <tr>{head.map((h) => <th key={h} className="text-left font-normal px-3 py-2 whitespace-nowrap">{h}</th>)}</tr>
+      <table className="t-table w-full text-xs min-w-[480px]" data-right={right.join(' ')}>
+        <thead className="t-thead sticky top-0 uppercase">
+          <tr>{head.map((h, i) => <th key={h} scope="col" className={`font-normal px-3 py-2 whitespace-nowrap ${right.includes(i) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr>
         </thead>
         <tbody>{children}</tbody>
       </table>
@@ -904,7 +878,7 @@ function Table({ head, children, empty }) {
     </div>
   )
 }
-const Empty = ({ text }) => <div className="p-6 text-center text-xs text-[#555143]">{text}</div>
+const Empty = ({ text }) => <div className="p-6 text-center text-xs" style={{ color: 'var(--on-ink-text-3)' }}>{text}</div>
 
 const fmtUsdSigned = (n) => (n == null || isNaN(n) ? '--' : `${n >= 0 ? '+' : '-'}${fmtUsd(Math.abs(n))}`)
 
@@ -918,12 +892,12 @@ function HistoryTab({ onSelect }) {
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 min-h-0">
-        <Table head={['Time', 'Token', 'Side', 'Qty', 'Price', 'Total']} empty={items.length === 0 && <Empty text="No memecoin trades yet." />}>
+        <Table head={['Time', 'Token', 'Side', 'Qty', 'Price', 'Total']} right={[3, 4, 5]} empty={items.length === 0 && <Empty text="No memecoin trades yet." />}>
           {items.map((f) => (
             <tr key={f.id} onClick={() => onSelect(f.address)} className="odd:bg-white/[0.025] hover:bg-white/10 cursor-pointer transition-colors">
               <td className="px-3 py-1.5 text-[#a39d8d]" title={f.createdAt}>{f.createdAt ? `${timeAgo(Date.parse(f.createdAt))} ago` : '--'}</td>
               <td className="px-3 py-1.5 font-bold text-white">{safeText(f.symbol)}</td>
-              <td className={`px-3 py-1.5 uppercase ${f.type === 'buy' ? 'text-[#7ea968]' : 'text-[#d35c4a]'}`}>{f.type}</td>
+              <td className={`px-3 py-1.5 uppercase ${f.type === 'buy' ? 'tv-up' : 'tv-down'}`}>{f.type}</td>
               <td className="px-3 py-1.5">{fmtTokens(f.tokens)}</td>
               <td className="px-3 py-1.5">{fmtPrice(f.price)}</td>
               <td className="px-3 py-1.5">{fmtUsd(f.totalUsd)}</td>
@@ -950,7 +924,7 @@ function PositionsTab({ q, onSelect }) {
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 min-h-0">
-        <Table head={['Token', 'Qty', 'Avg price', 'Price', 'Cost', 'Value', 'PnL']} empty={positions.length === 0 && <Empty text="No open positions. Buy a token to get started." />}>
+        <Table head={['Token', 'Qty', 'Avg price', 'Price', 'Cost', 'Value', 'PnL']} right={[1, 2, 3, 4, 5, 6]} empty={positions.length === 0 && <Empty text="No open positions. Buy a token to get started." />}>
           {positions.map((p) => (
             <tr key={p.address} onClick={() => onSelect(p.address)} className="odd:bg-white/[0.025] hover:bg-white/10 cursor-pointer transition-colors">
               <td className="px-3 py-1.5 font-bold text-white">{safeText(p.symbol)}</td>
@@ -1004,11 +978,11 @@ function BottomPanel({ address, positionsQuery, onSelect }) {
           : trades.isLoading ? <div className="p-3 space-y-2">{Array.from({ length: 6 }).map((_, i) => <Skel key={i} className="h-4 w-full" />)}</div>
           : trades.isError ? <ErrorBox error={trades.error} onRetry={trades.refetch} label="Live trades unavailable" />
           : (
-            <Table head={['Age', 'Side', 'Size', 'Price', 'Maker']} empty={list.length === 0 && <Empty text="No trades yet for this token." />}>
+            <Table head={['Age', 'Side', 'Size', 'Price', 'Maker']} right={[2, 3]} empty={list.length === 0 && <Empty text="No trades yet for this token." />}>
               {list.map((t, i) => (
                 <tr key={t.id ?? t.signature ?? i} className="odd:bg-white/[0.025] hover:bg-white/10 transition-colors">
                   <td className="px-3 py-1 text-[#a39d8d]">{t.timestamp ? timeAgo(t.timestamp) : '--'}</td>
-                  <td className={`px-3 py-1 uppercase font-bold ${t.side === 'buy' ? 'text-[#7ea968]' : 'text-[#d35c4a]'}`}>{t.side}</td>
+                  <td className={`px-3 py-1 uppercase font-bold ${t.side === 'buy' ? 'tv-up' : 'tv-down'}`}>{t.side}</td>
                   <td className="px-3 py-1">{t.amountSol != null ? `${fmtNum(t.amountSol)} SOL` : fmtUsd(t.amountUsd)}</td>
                   <td className="px-3 py-1">{fmtPrice(t.price)}</td>
                   <td className="px-3 py-1 text-[#555143]">{short(t.maker)}</td>
@@ -1034,7 +1008,7 @@ function SlowDownBanner() {
   if (!limited) return null
   const secs = Math.max(0, Math.ceil((rateLimitedUntil() - now) / 1000))
   return (
-    <div role="status" className="relative z-10 flex items-center gap-2 px-3 py-1.5 text-[11px] text-[#d6b87a] bg-[#d6b87a]/15 backdrop-blur-md">
+    <div role="status" className="relative z-10 flex items-center gap-2 px-3 py-1.5 text-[11px]" style={{ color: 'var(--ochre-300)', background: 'var(--on-ink-2)', borderBottom: '1px solid var(--on-ink-border)' }}>
       <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
       <span>Slow down: too many requests. Live updates are paused and will resume automatically{secs > 0 ? ` in ~${secs}s` : ''}.</span>
     </div>
@@ -1089,8 +1063,7 @@ export default function TradingTerminal() {
   const workspace = useRef(null)
 
   return (
-    <div className="relative flex flex-col text-[#f0ebe0] font-mono lg:h-screen lg:overflow-hidden">
-      <GlassBackground />
+    <div className="tvx-terminal relative flex flex-col lg:h-screen lg:overflow-hidden" style={{ background: 'var(--ink-900)', color: 'var(--paper)' }}>
 
       <SlowDownBanner />
       <TopBar

@@ -5,6 +5,8 @@ import { updateWatchlist, resetPreferences } from '../store/preferencesSlice'
 import { supabase } from '../utils/supabase/client'
 import { useAuth } from '../contexts/AuthContext'
 import { UserAvatar } from '../components/Sidebar'
+import AsciiIcon from '../ascii/icons'
+import { AppearanceView, EffectsView, CardsView, EquippedBanner } from './SettingsExtras'
 import { useGetMyProfileQuery, useUpdateProfileMutation } from '../api/profilesApi'
 import { API_BASE } from '../api/baseApi'
 import { getIdentity } from '../utils/identity'
@@ -83,23 +85,24 @@ function Row({ label, value }) {
   )
 }
 
-function Card({ icon, title, subtitle, preview, onClick }) {
+function Card({ iconName, palette, title, subtitle, preview, onClick, tag }) {
   return (
     <button
       onClick={onClick}
-      className="w-full bg-[#141414] hover:bg-[#1a1a1a] border border-[#2a2a2a] hover:border-[#3a3a3a] rounded-xl px-5 py-4 flex items-center gap-4 transition-all group text-left"
+      className="tvx-card w-full px-4 py-3 flex items-center gap-4 text-left"
+      style={{ background: 'var(--ink-800)', border: '1px solid var(--on-ink-border)', borderRadius: 2, cursor: 'pointer', color: 'var(--paper)' }}
     >
-      <div className="w-11 h-11 rounded-lg bg-[#1f1f1f] group-hover:bg-[#252525] flex items-center justify-center flex-shrink-0 transition-colors">
-        {icon}
+      <div style={{ width: 84, height: 84, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <AsciiIcon name={iconName} palette={palette} size={84} />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-white font-semibold text-sm">{title}</p>
-        {subtitle && <p className="text-[#6b7280] text-xs mt-0.5 truncate">{subtitle}</p>}
-        {preview && <p className="text-[#3b82f6] text-xs mt-0.5 truncate">{preview}</p>}
+        <p style={{ fontFamily: 'var(--font-display)', fontStretch: '125%', fontWeight: 800, fontSize: 14, textTransform: 'uppercase', letterSpacing: '0.01em', margin: 0 }}>
+          {title}{tag && <span style={{ marginLeft: 8, fontFamily: 'var(--font-sans)', fontSize: 10, letterSpacing: '0.16em', color: 'var(--on-ink-text-3)' }}>[{tag}]</span>}
+        </p>
+        {subtitle && <p style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: 'var(--on-ink-text-3)', margin: '3px 0 0' }} className="truncate">{subtitle}</p>}
+        {preview && <p style={{ fontFamily: 'var(--font-sans)', fontSize: 12, fontWeight: 700, color: 'var(--paper)', margin: '3px 0 0' }} className="truncate">{preview}</p>}
       </div>
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#6b7280] group-hover:text-[#a1a1aa] flex-shrink-0 transition-colors">
-        <polyline points="9 18 15 12 9 6"/>
-      </svg>
+      <span style={{ fontFamily: 'var(--font-sans)', fontSize: 16, color: 'var(--on-ink-text-3)', flexShrink: 0 }}>{'->'}</span>
     </button>
   )
 }
@@ -864,136 +867,57 @@ export default function Settings() {
   const { user } = useAuth()
   const { data: profile } = useGetMyProfileQuery()
   const preferences = useSelector((state) => state.preferences)
+  const themeMode = useSelector((state) => state.theme.mode)
+  const { effect } = useSelector((state) => state.cosmetics)
 
   const { name: displayName, handle } = getIdentity(user, profile)
   const watchlistCount = preferences.watchlist?.length ?? 0
   const investorLabel = INVESTOR_LABELS[preferences.investorType] ?? null
+  const back = () => setView(null)
 
-  if (view === 'profile') return (
-    <main className="flex-1 p-5 md:p-8 max-w-lg mx-auto w-full">
-      <ProfileView onBack={() => setView(null)} />
-    </main>
-  )
-  if (view === 'account') return (
-    <main className="flex-1 p-5 md:p-8 max-w-lg mx-auto w-full">
-      <AccountView onBack={() => setView(null)} />
-    </main>
-  )
-  if (view === 'interests') return (
-    <main className="flex-1 p-5 md:p-8 max-w-lg mx-auto w-full">
-      <InterestsView onBack={() => setView(null)} />
-    </main>
-  )
-  if (view === 'watchlist') return (
-    <main className="flex-1 p-5 md:p-8 max-w-lg mx-auto w-full">
-      <WatchlistView onBack={() => setView(null)} />
-    </main>
-  )
-  if (view === 'friends') return (
-    <main className="flex-1 p-5 md:p-8 max-w-lg mx-auto w-full">
-      <FriendsView onBack={() => setView(null)} />
-    </main>
-  )
-  if (view === 'invite') return (
-    <main className="flex-1 p-5 md:p-8 max-w-lg mx-auto w-full">
-      <InviteView onBack={() => setView(null)} />
-    </main>
-  )
-  if (view === 'notifications') return (
-    <main className="flex-1 p-5 md:p-8 max-w-lg mx-auto w-full">
-      <NotificationsView onBack={() => setView(null)} />
-    </main>
-  )
+  const VIEWS = {
+    profile: <ProfileView onBack={back} />,
+    account: <AccountView onBack={back} />,
+    interests: <InterestsView onBack={back} />,
+    watchlist: <WatchlistView onBack={back} />,
+    friends: <FriendsView onBack={back} />,
+    invite: <InviteView onBack={back} />,
+    notifications: <NotificationsView onBack={back} />,
+    appearance: <AppearanceView onBack={back} />,
+    effects: <EffectsView onBack={back} />,
+    cards: <CardsView onBack={back} />,
+  }
+  if (view && VIEWS[view]) {
+    return <main className="flex-1 p-5 md:p-8 max-w-3xl mx-auto w-full">{VIEWS[view]}</main>
+  }
+
+  const effectLabel = effect && effect !== 'none' ? effect[0].toUpperCase() + effect.slice(1) : 'None'
 
   return (
-    <main className="flex-1 p-5 md:p-8 max-w-lg mx-auto w-full">
-      <div className="flex flex-col items-center mb-8 pt-2">
+    <main className="flex-1 p-5 md:p-8 max-w-3xl mx-auto w-full">
+      <EquippedBanner fps={6} style={{ marginBottom: 18 }} />
+      <div className="flex items-center gap-4 mb-8">
         <UserAvatar user={user} size={64} src={profile?.avatar_url} />
-        <p className="text-white font-bold text-lg mt-3">{displayName}</p>
-        {handle && <p className="text-[#6b7280] text-sm mt-0.5">{handle}</p>}
+        <div style={{ minWidth: 0 }}>
+          <p style={{ fontFamily: 'var(--font-display)', fontStretch: '125%', fontWeight: 800, fontSize: 22, textTransform: 'uppercase', margin: 0, color: 'var(--paper)' }}>{displayName}</p>
+          {handle && <p style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--on-ink-text-3)', margin: '2px 0 0' }}>{handle}</p>}
+        </div>
       </div>
 
       <div className="space-y-3">
-        <Card
-          onClick={() => setView('profile')}
-          icon={
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ec4899" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
-            </svg>
-          }
-          title="Edit Profile"
-          subtitle="Username, bio, and public info"
-        />
-        <Card
-          onClick={() => setView('account')}
-          icon={
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-              <circle cx="12" cy="7" r="4"/>
-            </svg>
-          }
-          title="Account"
-          subtitle={handle ?? 'Manage your account'}
-          preview={null}
-        />
-        <Card
-          onClick={() => setView('interests')}
-          icon={
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-            </svg>
-          }
-          title="My Interests"
-          subtitle="Quiz results and market preferences"
-          preview={investorLabel ?? undefined}
-        />
-        <Card
-          onClick={() => setView('watchlist')}
-          icon={
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
-              <polyline points="16 7 22 7 22 13"/>
-            </svg>
-          }
-          title="Watchlist"
-          subtitle="Manage your tracked tickers"
-          preview={watchlistCount > 0 ? `${watchlistCount} ticker${watchlistCount !== 1 ? 's' : ''} tracked` : undefined}
-        />
-        <Card
-          onClick={() => setView('friends')}
-          icon={
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
-            </svg>
-          }
-          title="Friends"
-          subtitle="Search by @username and add friends"
-        />
-        <Card
-          onClick={() => setView('invite')}
-          icon={
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d6b87a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M20 12v10H4V12M2 7h20v5H2zM12 22V7M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>
-            </svg>
-          }
-          title="Invite & Pro"
-          subtitle="Your referral code — free Pro for you both"
-        />
-        <Card
-          onClick={() => setView('notifications')}
-          icon={
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-              <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-            </svg>
-          }
-          title="Notifications"
-          subtitle="Text alerts for your price targets"
-        />
+        <Card onClick={() => setView('profile')} iconName="pencil" palette="rose" title="Edit Profile" subtitle="Username, bio, and public info" />
+        <Card onClick={() => setView('account')} iconName="user" palette="blue" title="Account" subtitle={handle ?? 'Manage your account'} />
+        <Card onClick={() => setView('appearance')} iconName={themeMode === 'light' ? 'sun' : themeMode === 'dark' ? 'moon' : 'gear'} palette="amber" title="Appearance" subtitle="Light, dark, or follow your device" preview={themeMode === 'light' ? 'Paper (light)' : themeMode === 'dark' ? 'Ink (dark)' : 'System'} />
+        <Card onClick={() => setView('cards')} iconName="frame" palette="violet" title="Calling Cards" subtitle="Unlock ASCII scenes and equip one" />
+        <Card onClick={() => setView('effects')} iconName="flame" palette="fire" title="Pro Effects" tag="pro" subtitle="ASCII glow, fire and more behind your name" preview={preferences.isPro ? `Equipped: ${effectLabel}` : undefined} />
+        <Card onClick={() => setView('interests')} iconName="star" palette="mint" title="My Interests" subtitle="Quiz results and market preferences" preview={investorLabel ?? undefined} />
+        <Card onClick={() => setView('watchlist')} iconName="trend" palette="amber" title="Watchlist" subtitle="Manage your tracked tickers" preview={watchlistCount > 0 ? `${watchlistCount} ticker${watchlistCount !== 1 ? 's' : ''} tracked` : undefined} />
+        <Card onClick={() => setView('friends')} iconName="users" palette="ice" title="Friends" subtitle="Search by @username and add friends" />
+        <Card onClick={() => setView('invite')} iconName="gift" palette="gold" title="Invite & Pro" subtitle="Your referral code: free Pro for you both" />
+        <Card onClick={() => setView('notifications')} iconName="bell" palette="violet" title="Notifications" subtitle="Text alerts for your price targets" />
       </div>
 
-      <p className="text-[#4b5563] text-xs text-center mt-10">
+      <p style={{ fontFamily: 'var(--font-sans)', fontSize: 11, color: 'var(--on-ink-text-4)', textAlign: 'center', marginTop: 40 }}>
         Not financial advice. For educational use only.
       </p>
     </main>

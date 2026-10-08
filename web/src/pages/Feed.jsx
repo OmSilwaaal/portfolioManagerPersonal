@@ -10,6 +10,7 @@ import { useGetFeedQuery, useGetFeedBriefQuery } from '../api/feedApi'
 import { useGetStockQuery } from '../api/stocksApi'
 import { usePersonalizedFeed } from '../hooks/usePersonalizedFeed'
 import ProGate from '../components/ProGate'
+import { AsciiDonut } from '../ascii/effects'
 
 const INK8   = 'var(--ink-800)'
 const BORDER = 'var(--on-ink-border)'
@@ -82,7 +83,8 @@ function BriefCard({ brief, bullets }) {
   }
 
   return (
-    <div style={{ background: INK8, border: `1px solid ${BORDER}`, borderRadius: 'var(--r-md)', overflow: 'hidden' }}>
+    <div style={{ background: INK8, border: `1px solid ${BORDER}`, borderRadius: 'var(--r-md)', overflow: 'hidden', display: 'flex', alignItems: 'stretch' }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '16px 22px 6px' }}>
         <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--on-ink-text-3)', flexShrink: 0, display: 'inline-block' }} />
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 500, letterSpacing: '0.24em', textTransform: 'uppercase', color: MUTED }}>Weekly Brief</span>
@@ -104,6 +106,10 @@ function BriefCard({ brief, bullets }) {
             })}
           </ul>
         )}
+      </div>
+      </div>
+      <div className="hidden md:flex" aria-hidden="true" style={{ alignItems: 'center', justifyContent: 'center', padding: '8px 18px 8px 4px', borderLeft: `1px dashed ${BORDER}` }}>
+        <AsciiDonut cols={42} rows={20} fontPx={8} palette="violet" />
       </div>
     </div>
   )
@@ -213,7 +219,7 @@ export default function Feed() {
         <p style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 500, letterSpacing: '0.24em', textTransform: 'uppercase', color: MUTED, marginBottom: 6 }}>
           Week of {weekLabel()}
         </p>
-        <h1 style={{ fontFamily: 'var(--font-sans)', fontSize: 22, fontWeight: 600, letterSpacing: '-0.022em', color: CREAM, margin: 0, lineHeight: 1.25 }}>
+        <h1 style={{ fontFamily: 'var(--font-display)', fontStretch: '125%', fontSize: 26, fontWeight: 800, letterSpacing: '-0.01em', textTransform: 'uppercase', color: CREAM, margin: 0, lineHeight: 1.15 }}>
           {firstName ? `Hello ${firstName},` : 'Hello,'} here&apos;s your brief
         </h1>
       </div>

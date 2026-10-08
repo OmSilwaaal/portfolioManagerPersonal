@@ -13,7 +13,9 @@ module.exports = {
         'accent': '#3b82f6',
       },
       fontFamily: {
-        sans: ['Inter', 'sans-serif'],
+        sans: ['var(--font-sans)'],
+        mono: ['var(--font-mono)'],
+        display: ['var(--font-display)'],
       },
     },
   },

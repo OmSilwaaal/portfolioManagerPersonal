@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Space+Grotesk:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Anybody:wdth,wght@50..150,100..900&family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=Fraunces:opsz,wght@9..144,400..900&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -63,9 +63,9 @@
   --on-ink-3:      rgba(240,235,224,0.12);
   --on-ink-border: rgba(240,235,224,0.09);
   --on-ink-text-1: #f0ebe0;
-  --on-ink-text-2: rgba(240,235,224,0.62);
-  --on-ink-text-3: rgba(240,235,224,0.36);
-  --on-ink-text-4: rgba(240,235,224,0.18);
+  --on-ink-text-2: rgba(240,235,224,0.74);
+  --on-ink-text-3: rgba(240,235,224,0.52);
+  --on-ink-text-4: rgba(240,235,224,0.34);
 
   /* On-paper state layers */
   --on-paper-1:      rgba(11,11,11,0.04);
@@ -78,15 +78,17 @@
   --on-paper-text-4: rgba(11,11,11,0.20);
 
   /* Typography */
-  --font-sans:         'Space Grotesk', Helvetica, Arial, sans-serif;
-  --font-display:      'Syne', 'Space Grotesk', sans-serif;
-  --font-mono:         'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-sans:         'Courier Prime', 'Courier New', ui-monospace, monospace;
+  --font-display:      'Anybody', 'Arial Narrow', sans-serif;
+  --font-mono:         'Courier Prime', 'Courier New', ui-monospace, monospace;
+  --font-data:         'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-art:          'Fraunces', 'Times New Roman', serif;
 
   /* Radii — brutalist: sharp by default */
   --r-0:   0;
   --r-sm:  2px;
   --r-md:  3px;
-  --r-pill: 999px;
+  --r-pill: 2px;
 
   /* Motion */
   --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
@@ -98,7 +100,62 @@
   --d-rule:   1500ms;
 }
 
+/* ─── Paper (light) theme ───────────────────────────────────────────────────
+   Token names are semantic ("ink" = surface, "paper" = text on that surface), so the light theme
+   just swaps the values and every var()-driven component follows. */
+html:not(.dark) {
+  color-scheme: light;
+  --ink-900:  #efeee9;
+  --ink-950:  #e6e5df;
+  --ink-800:  #e8e7e1;
+  --paper:    #111110;
+  --paper-warm: #1b1b19;
+  --paper-cool: #0b0b0a;
+
+  --moss-50:  #1d2a10;
+  --moss-100: #2c3a1a;
+  --moss-200: #3c5a22;
+  --moss-300: #476b2a;
+  --moss-400: #5a8238;
+  --moss-500: #7aa356;
+  --moss-600: #a7c58a;
+
+  --clay-300: #a4472b;
+  --clay-400: #8a3a22;
+  --clay-500: #6e2d19;
+  --ochre-300: #8a6414;
+  --ochre-400: #7a560f;
+  --ochre-500: #664a0c;
+
+  --stone-50:  #25231d;
+  --stone-100: #36332a;
+  --stone-200: #555143;
+  --stone-300: #7a7567;
+  --stone-400: #a39d8d;
+  --stone-500: #c9c3b3;
+  --stone-600: #dcd7c8;
+  --stone-700: #e6e1d4;
+
+  --urgency-act:   #b3392a;
+  --urgency-watch: #8a6414;
+  --urgency-low:   #3c5a22;
+  --positive: #2f7a3a;
+  --negative: #b3392a;
+  --party-dem: #2f5aa8;
+  --party-rep: #a8372f;
+
+  --on-ink-1:      rgba(17,17,16,0.04);
+  --on-ink-2:      rgba(17,17,16,0.075);
+  --on-ink-3:      rgba(17,17,16,0.12);
+  --on-ink-border: rgba(17,17,16,0.15);
+  --on-ink-text-1: #111110;
+  --on-ink-text-2: rgba(17,17,16,0.72);
+  --on-ink-text-3: rgba(17,17,16,0.52);
+  --on-ink-text-4: rgba(17,17,16,0.34);
+}
+
 /* ─── Keyframe animations (shared across landing + app) ───────────────────── */
+@keyframes tvx-shimmer { 0% { background-position: 0% 50%; } 100% { background-position: 220% 50%; } }
 @keyframes marquee    { from { transform: translateX(0); }         to { transform: translateX(-33.333%); } }
 @keyframes marqueeRev { from { transform: translateX(-33.333%); }  to { transform: translateX(0); } }
 @keyframes mockFloat  { 0%,100% { transform: translateY(0); }      50% { transform: translateY(-10px); } }
@@ -124,7 +181,7 @@
   50%      { transform: translate(-12%, -4%) scale(1.22); }
 }
 
-::selection { background: var(--moss-300); color: var(--ink-900); }
+::selection { background: var(--paper); color: var(--ink-900); }
 
 @layer base {
   html {
@@ -132,15 +189,21 @@
   }
 
   body {
-    @apply bg-[#0b0b0b] text-white;
+    background: var(--ink-900);
+    color: var(--paper);
+    font-family: var(--font-sans);
   }
 
-  .dark body {
-    @apply bg-[#0f0f0f] text-white;
-  }
+  h1, h2, h3 { font-family: var(--font-display); font-stretch: 120%; letter-spacing: -0.01em; }
 
-  html:not(.dark) body {
-    @apply bg-white text-[#0f0f0f];
+  /* square, brutalist corners everywhere except circles */
+  .rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl, .rounded-3xl { border-radius: 2px !important; }
+
+  /* paper grain on the light theme */
+  html:not(.dark) body::before {
+    content: ''; position: fixed; inset: 0; z-index: 9990; pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 200px 200px; opacity: 0.05; mix-blend-mode: multiply;
   }
 }
 
@@ -179,3 +242,8 @@
     display: none;
   }
 }
+
+/* interactive rows/cards: faint wash on hover, never on the active (inverted) row */
+.tvx-navrow:not([aria-current="page"]):hover { background: var(--on-ink-2) !important; }
+.tvx-card { transition: transform 120ms, box-shadow 120ms; }
+.tvx-card:hover { transform: translate(-2px, -2px); box-shadow: 4px 4px 0 var(--on-ink-text-4); }

@@ -51,7 +51,7 @@ export default function Panel({ id, title, icon: Icon, actions, children, bodyCl
       className={[
         positioning.className,
         'group flex min-w-0 flex-col',
-        bare ? 'rounded-[28px]' : 'overflow-hidden rounded-lg border bg-[#111] shadow-xl',
+        bare ? 'rounded-sm' : 'overflow-hidden rounded-sm border',
         isActive ? 'ring-2' : bare ? '' : 'border-[#222]',
         isMoving ? 'cursor-grabbing' : '',
         // Only animate when idle, otherwise the panel lags behind the cursor.
@@ -65,7 +65,7 @@ export default function Panel({ id, title, icon: Icon, actions, children, bodyCl
             onPointerDown={(e) => beginInteraction(id, 'move', null, e)}
             style={{ touchAction: 'none' }}
             title="Drag to move  ·  edges and corners resize"
-            className={`absolute top-3 right-3 z-30 rounded-full bg-black/40 p-1.5 text-[#a39d8d] opacity-0 backdrop-blur-md transition hover:text-white group-hover:opacity-100 ${
+            className={`t-btn absolute top-2 right-2 z-30 p-1.5 opacity-0 transition group-hover:opacity-100 ${
               isMoving ? 'cursor-grabbing opacity-100' : 'cursor-grab'
             }`}
           >

@@ -1,14 +1,15 @@
 import { useParams, Link } from 'react-router-dom'
 import { useGetProfileQuery } from '../api/profilesApi'
 import { useAuth } from '../contexts/AuthContext'
+import { EquippedBanner } from './SettingsExtras'
 
 function initials(name) {
   return (name ?? '?').split(' ').slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('') || '?'
 }
 
 const glassStyle = {
-  background: '#111',
-  border: '1px solid #1f1f1f',
+  background: 'var(--ink-800)',
+  border: '1px solid var(--on-ink-border)',
 }
 
 export default function Profile() {
@@ -61,7 +62,8 @@ export default function Profile() {
       </header>
 
       <main className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-md mx-auto flex flex-col gap-5">
+        <div className="max-w-xl mx-auto flex flex-col gap-5">
+          {isOwnProfile && <EquippedBanner fps={6} />}
           {/* Avatar + name */}
           <div className="flex flex-col items-center gap-3 pt-4 pb-2">
             <div
