@@ -1,5 +1,64 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
+import { useSelector } from 'react-redux'
 import { useGetAlertsQuery, useCreateAlertMutation, useDeleteAlertMutation } from '../api/alertsApi'
+import { useGetSmsStatusQuery } from '../api/smsApi'
+
+/**
+ * The empty state carries the two things the page actually knows: which tickers
+ * the user already follows (so an alert is one tap, not a blank form) and where
+ * an alert would be delivered. A bare "no alerts yet" told them neither.
+ */
+function EmptyAlerts({ onPick }) {
+  const watchlist = useSelector((s) => s.watchlist.stocks)
+  const { data: sms } = useGetSmsStatusQuery()
+
+  const delivery = !sms?.configured
+    ? 'In-app only — SMS is not configured on this server.'
+    : sms.verified
+      ? `In-app, and by text to the number ending ${sms.phoneLast4}.`
+      : 'In-app. Verify a phone in Settings to also get them by text.'
+
+  return (
+    <div className="border border-[var(--on-ink-border)] bg-[var(--on-ink-1)] p-5 space-y-5">
+      <p className="text-sm text-[var(--on-ink-text-2)]">
+        No alerts running. An alert watches one ticker and tells you the moment it crosses your price.
+      </p>
+
+      {watchlist.length > 0 ? (
+        <div className="space-y-2">
+          <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--on-ink-text-3)]">
+            From your watchlist
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {watchlist.slice(0, 10).map((t) => (
+              <button key={t} type="button" onClick={() => onPick(t)} className="t-btn px-3 py-1.5 font-mono text-xs">
+                {t}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-[var(--on-ink-text-3)]">Pick one to fill the form above.</p>
+        </div>
+      ) : (
+        <p className="text-sm text-[var(--on-ink-text-2)]">
+          Your watchlist is empty.{' '}
+          <Link to="/stocks" className="text-[var(--paper)] underline underline-offset-4">Add a few tickers</Link>{' '}
+          and they will show up here as one-tap alerts.
+        </p>
+      )}
+
+      <div className="border-t border-[var(--on-ink-border)] pt-4">
+        <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--on-ink-text-3)] mb-1.5">
+          Where alerts arrive
+        </p>
+        <p className="text-sm text-[var(--on-ink-text-2)]">
+          {delivery}{' '}
+          <Link to="/settings" className="text-[var(--paper)] underline underline-offset-4">Settings</Link>
+        </p>
+      </div>
+    </div>
+  )
+}
 
 function timeAgo(dateStr) {
   const date = new Date(dateStr)
@@ -129,7 +188,7 @@ export default function Alerts() {
               <button
                 type="submit"
                 disabled={creating}
-                className="px-5 py-2 bg-[#3b82f6] text-white text-sm font-medium rounded-md hover:bg-blue-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                className="t-btn t-btn-primary px-5 py-2 text-sm disabled:opacity-60"
               >
                 {creating ? 'Creating...' : 'Create Alert'}
               </button>
@@ -162,9 +221,7 @@ export default function Alerts() {
             )}
 
             {!alertsLoading && !alertsError && alerts.length === 0 && (
-              <div className="p-6 bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)] rounded-md text-center">
-                <p className="text-[#a1a1aa] text-sm">No active alerts. Create one above.</p>
-              </div>
+              <EmptyAlerts onPick={(ticker) => setForm((f) => ({ ...f, ticker }))} />
             )}
 
             {!alertsLoading && alerts.length > 0 && (

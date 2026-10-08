@@ -10,8 +10,57 @@ import { setSelectedTicker } from '../store/watchlistSlice'
 import StockLogo from '../components/StockLogo'
 import { FriendsPanel } from '../components/welcome/panels'
 import PlayerName from '../components/PlayerName'
+import { useGetLeaderboardQuery } from '../api/eloApi'
 
 const BORDER = 'var(--on-ink-border)'
+
+/**
+ * An empty friends list has one real obstacle: you do not know anyone's
+ * @username yet. So rather than only naming the + Add button, this shows who is
+ * actually climbing right now, straight from the live leaderboard, with a route
+ * into each profile.
+ */
+function EmptyFriends() {
+  const board = useGetLeaderboardQuery({ sort: 'elo', range: 'all', limit: 5 })
+  // Seeded board entries carry no userId, so the standing is still worth showing
+  // but must not become a link to a profile that does not exist.
+  const rows = board.data?.rows ?? []
+
+  return (
+    <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <p style={{ ...MONO, fontSize: 13, color: 'var(--on-ink-text-3)', margin: 0, lineHeight: 1.5 }}>
+        No friends yet. Use <b>+ Add</b> to find people by @username, then message them and swap tickers.
+      </p>
+
+      {rows.length > 0 && (
+        <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 14 }}>
+          <p style={{ ...MONO, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--on-ink-text-3)', margin: '0 0 10px' }}>
+            Climbing right now
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {rows.map((r, i) => {
+              const row = (
+                <>
+                  <span style={{ ...MONO, fontSize: 11, color: 'var(--on-ink-text-3)', width: 16 }}>{i + 1}</span>
+                  <PlayerName user={r} />
+                </>
+              )
+              // PlayerName paints a calling-card banner behind the name; without
+              // clipping it bleeds over the row beneath.
+              const style = {
+                display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none',
+                overflow: 'hidden', paddingBlock: 3, borderRadius: 2,
+              }
+              return r.userId
+                ? <Link key={r.userId} to={`/profile/${r.userId}`} style={style}>{row}</Link>
+                : <div key={`${r.username}-${i}`} style={style}>{row}</div>
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 const MONO = { fontFamily: 'var(--font-sans)' }
 const MINT_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/
 const TICKER_RE = /^[A-Za-z0-9:.\-]{1,15}$/
@@ -249,11 +298,7 @@ export default function Friends() {
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {convos.isLoading && <p style={{ ...MONO, fontSize: 12, color: 'var(--on-ink-text-3)', padding: 14 }}>Loading…</p>}
           {convos.isError && <p role="alert" style={{ ...MONO, fontSize: 12, color: 'var(--negative)', padding: 14 }}>Could not load conversations.</p>}
-          {!convos.isLoading && !convos.isError && list.length === 0 && (
-            <p style={{ ...MONO, fontSize: 13, color: 'var(--on-ink-text-3)', padding: 16, lineHeight: 1.5 }}>
-              No friends yet. Use <b>+ Add</b> to find people by @username, then message them and swap tickers.
-            </p>
-          )}
+          {!convos.isLoading && !convos.isError && list.length === 0 && <EmptyFriends />}
           {list.map((c) => {
             const on = c.user.userId === userId
             return (

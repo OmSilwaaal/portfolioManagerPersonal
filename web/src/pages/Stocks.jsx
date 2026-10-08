@@ -52,9 +52,17 @@ function StockCard({ ticker, isSelected, onClick }) {
   }
 
   return (
-    <button
+    // A <button> may not contain a <button>, and this card holds a Remove
+    // control. The card is a div with button semantics so both stay reachable.
+    <div
+      role="button"
+      tabIndex={0}
+      aria-pressed={isSelected}
       onClick={onClick}
-      className={`w-full text-left rounded-xl border transition-all duration-150 px-4 py-3 group ${
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.() }
+      }}
+      className={`w-full cursor-pointer text-left rounded-xl border transition-all duration-150 px-4 py-3 group ${
         isSelected
           ? 'bg-white/[0.07] border-white/25'
           : 'bg-[#111] border-[#1e1e1e] hover:bg-[#141414] hover:border-[#2a2a2a]'
@@ -115,7 +123,7 @@ function StockCard({ ticker, isSelected, onClick }) {
           ×
         </button>
       </div>
-    </button>
+    </div>
   )
 }
 
