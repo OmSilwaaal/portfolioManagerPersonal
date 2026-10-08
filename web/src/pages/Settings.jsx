@@ -11,6 +11,7 @@ import { useGetMyProfileQuery, useUpdateProfileMutation } from '../api/profilesA
 import { API_BASE } from '../api/baseApi'
 import { getIdentity } from '../utils/identity'
 import { useRecovery } from '../components/welcome/useRecovery'
+import { restartTour } from '../components/GuidedTour'
 import { FriendsPanel, ReferralPanel, RecoveryPanel, label as panelLabel } from '../components/welcome/panels'
 import {
   useGetSmsStatusQuery,
@@ -914,6 +915,7 @@ export default function Settings() {
         <Card onClick={() => setView('watchlist')} iconName="trend" palette="amber" title="Watchlist" subtitle="Manage your tracked tickers" preview={watchlistCount > 0 ? `${watchlistCount} ticker${watchlistCount !== 1 ? 's' : ''} tracked` : undefined} />
         <Card onClick={() => setView('friends')} iconName="users" palette="ice" title="Friends" subtitle="Search by @username and add friends" />
         <Card onClick={() => setView('invite')} iconName="gift" palette="gold" title="Invite & Pro" subtitle="Your referral code: free Pro for you both" />
+        <Card onClick={() => restartTour(user?.id)} iconName="bolt" palette="teal" title="Replay the Tour" subtitle="A hands-on walkthrough of where everything is" />
         <Card onClick={() => setView('notifications')} iconName="bell" palette="violet" title="Notifications" subtitle="Text alerts for your price targets" />
       </div>
 

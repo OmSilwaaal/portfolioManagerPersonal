@@ -286,6 +286,59 @@ function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_wins_user ON trade_wins(user_id);
   `);
 
+  // Elo: every realized sell (win or loss) is logged; clans are one-per-user (user_id is the primary key of clan_members)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS trade_results (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id    TEXT NOT NULL,
+      kind       TEXT NOT NULL DEFAULT 'stock',
+      symbol     TEXT,
+      pnl_usd    REAL NOT NULL,
+      pnl_pct    REAL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_results_user ON trade_results(user_id, id);
+    CREATE INDEX IF NOT EXISTS idx_results_time ON trade_results(created_at);
+
+    CREATE TABLE IF NOT EXISTS elo_peaks (
+      user_id    TEXT PRIMARY KEY,
+      peak       INTEGER NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS clans (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      name        TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      tag         TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      description TEXT NOT NULL DEFAULT '',
+      color       TEXT NOT NULL DEFAULT '#e2e8f0',
+      owner_id    TEXT NOT NULL,
+      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS clan_members (
+      user_id   TEXT PRIMARY KEY,
+      clan_id   INTEGER NOT NULL,
+      role      TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('owner','member')),
+      joined_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_clan_members_clan ON clan_members(clan_id);
+    CREATE TABLE IF NOT EXISTS clan_posts (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      clan_id    INTEGER NOT NULL,
+      user_id    TEXT NOT NULL,
+      body       TEXT NOT NULL DEFAULT '',
+      attachment TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_clan_posts_clan ON clan_posts(clan_id, id);
+  `);
+  // Existing winning trades count towards Elo from day one (only runs while the results log is empty)
+  try {
+    db.exec(`INSERT INTO trade_results (user_id, kind, symbol, pnl_usd, pnl_pct, created_at)
+             SELECT user_id, kind, symbol, pnl_usd, pnl_pct, created_at FROM trade_wins
+             WHERE NOT EXISTS (SELECT 1 FROM trade_results)`);
+  } catch (_) {}
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS memecoin_alert_prefs (
       user_id        TEXT PRIMARY KEY,
@@ -325,6 +378,7 @@ function initSchema() {
   try { db.exec('ALTER TABLE alerts ADD COLUMN user_id TEXT') } catch (_) {}
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_alerts_user ON alerts(user_id)') } catch (_) {}
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_csv_positions_user ON csv_positions(user_id)') } catch (_) {}
+  try { db.exec('ALTER TABLE user_cosmetics ADD COLUMN name_color TEXT') } catch (_) {}
   try { db.exec('ALTER TABLE paper_positions ADD COLUMN targetPrice REAL DEFAULT NULL') } catch (_) {}
   try { db.exec('ALTER TABLE paper_positions ADD COLUMN stopLoss REAL DEFAULT NULL') } catch (_) {}
   // Give existing $0 portfolios the $500 starting balance

@@ -11,6 +11,7 @@ import Sidebar from './components/Sidebar'
 import BottomNav from './components/BottomNav'
 import { CelebrationProvider } from './components/ProfitCelebration'
 import PageFallback from './components/PageFallback'
+import GuidedTour from './components/GuidedTour'
 
 // Import API modules to register endpoints
 import './api/stocksApi'
@@ -34,12 +35,12 @@ const GovTrades = lazy(() => import('./pages/GovTrades'))
 const Commodities = lazy(() => import('./pages/Commodities'))
 const Settings = lazy(() => import('./pages/Settings'))
 const PaperTrading = lazy(() => import('./pages/PaperTrading'))
-const Groups = lazy(() => import('./pages/Groups'))
-const GroupDetail = lazy(() => import('./pages/GroupDetail'))
-const CreateGroup = lazy(() => import('./pages/CreateGroup'))
+const Clans = lazy(() => import('./pages/Clans'))
+const ClanDetail = lazy(() => import('./pages/ClanDetail'))
+const Elos = lazy(() => import('./pages/Elos'))
 const Profile = lazy(() => import('./pages/Profile'))
 const Friends = lazy(() => import('./pages/Friends'))
-const Winners = lazy(() => import('./pages/Winners'))
+const Leaderboard = lazy(() => import('./pages/Leaderboard'))
 const Landing = lazy(() => import('./pages/Landing'))
 const Pricing = lazy(() => import('./pages/Pricing'))
 const Portfolio = lazy(() => import('./pages/Portfolio'))
@@ -86,6 +87,7 @@ function ProtectedLayout() {
         </Suspense>
       </div>
       <BottomNav />
+      <GuidedTour />
     </div>
   )
 }
@@ -184,14 +186,16 @@ function AppInner() {
         <Route path="/copy-trading" element={<CopyTrading />} />
         <Route path="/alerts" element={<Alerts />} />
         <Route path="/paper-trading" element={<PaperTrading />} />
-        <Route path="/groups" element={<Groups />} />
-        <Route path="/groups/new" element={<CreateGroup />} />
-        <Route path="/groups/:id" element={<GroupDetail />} />
+        <Route path="/clans" element={<Clans />} />
+        <Route path="/clans/:id" element={<ClanDetail />} />
+        <Route path="/elos" element={<Elos />} />
+        <Route path="/groups/*" element={<Navigate to="/clans" replace />} />
         <Route path="/profile/:userId" element={<Profile />} />
         <Route path="/u/:username" element={<Profile />} />
         <Route path="/friends" element={<Friends />} />
         <Route path="/friends/:userId" element={<Friends />} />
-        <Route path="/winners" element={<Winners />} />
+        <Route path="/leaderboard" element={<Leaderboard />} />
+        <Route path="/winners" element={<Navigate to="/leaderboard" replace />} />
         <Route path="/portfolio" element={<Portfolio />} />
         <Route path="/gov-trades" element={<GovTrades />} />
         <Route path="/commodities" element={<Commodities />} />

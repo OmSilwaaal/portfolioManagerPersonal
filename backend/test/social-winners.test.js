@@ -129,8 +129,10 @@ test('winners feed: real + seeded wins, ranked by profit, USD + SOL on every row
   assert.deepStrictEqual(usd, [...usd].sort((a, b) => b - a), 'sorted biggest first');
   assert.deepStrictEqual(out.wins.map((w) => w.rank), out.wins.map((_, i) => i + 1));
   assert.ok(out.wins.every((w) => wins.ANIMS.includes(w.anim)));
-  const banners = new Set(out.wins.filter((w) => w.id.startsWith('seed-')).map((w) => w.banner));
-  assert.strictEqual(banners.size, wins.BANNERS.length, 'one seeded win per calling card');
+  // seeded wins showcase one calling card each; the one whose handle belongs to a real (free) account shows that account's plain header
+  const banners = new Set(out.wins.filter((w) => w.id.startsWith('seed-') && w.userId == null).map((w) => w.banner));
+  assert.strictEqual(banners.size, 9, 'one seeded win per calling card');
+  assert.ok([...banners].every((b) => wins.BANNERS.includes(b)));
   assert.ok(out.wins.every((w) => w.pnlSol > 0));
   assert.strictEqual(out.wins.find((w) => w.symbol === 'ADA').pnlUsd, 4000);
 
@@ -141,7 +143,8 @@ test('winners feed: real + seeded wins, ranked by profit, USD + SOL on every row
   assert.strictEqual(larp.avatarUrl, 'https://img.example/larp.png');
 
   const real = out.wins.find((w) => w.username === 'bob');
-  assert.strictEqual(real.banner, 'storm');
+  assert.strictEqual(real.banner, null, 'calling cards are Pro-only: a free trader gets no card');
+  assert.strictEqual(real.effect, 'none');
   assert.strictEqual(real.pnlSol, 10 / 100, 'a win keeps the SOL price it happened at');
 });
 

@@ -6,11 +6,12 @@ import { setFeedFilter, setFeedSubFilter, setFeedExpanded, toggleFeedExpanded } 
 import { supabase } from '../utils/supabase/client'
 import { useAuth } from '../contexts/AuthContext'
 import { useGetMyProfileQuery } from '../api/profilesApi'
-import { useGetGroupsQuery } from '../api/groupsApi'
+import { useGetProfileQuery } from '../api/profilesApi'
 import { useGetUnreadMessagesQuery } from '../api/socialApi'
 import { getIdentity, initialsOf } from '../utils/identity'
 import { Glyph } from '../ascii/glyphs'
 import { AsciiAura } from '../ascii/effects'
+import { ClanTag, EloBadge } from './PlayerName'
 
 const BORDER = 'var(--on-ink-border)'
 
@@ -29,11 +30,15 @@ const TOOLS_ITEMS = [
 ]
 
 const COMMUNITY_ITEMS = [
-  { path: '/friends', label: 'Friends', glyph: 'dm' },
-  { path: '/winners', label: 'Winners', glyph: 'trophy' },
-  { path: '/groups', label: 'Groups', glyph: 'groups' },
-  { path: '/settings', label: 'Settings', glyph: 'settings' },
+  { path: '/friends', label: 'Friends', glyph: 'dm', tour: 'friends' },
+  { path: '/leaderboard', label: 'Leaderboard', glyph: 'trophy', tour: 'leaderboard' },
+  { path: '/clans', label: 'Clans', glyph: 'groups', tour: 'clans' },
+  { path: '/elos', label: 'Elos', glyph: 'elo', tour: 'elos' },
+  { path: '/settings', label: 'Settings', glyph: 'settings', tour: 'settings' },
 ]
+
+// Name and @handle sit on top of the aura: opaque enough backing and a hard shadow keep them readable over any animation
+const OVER = { position: 'relative', zIndex: 2, width: 'fit-content', maxWidth: '100%', fontFamily: 'var(--font-sans)', background: 'rgba(11,11,11,0.62)', padding: '0 4px', textShadow: '0 0 3px #000, 0 1px 2px #000' }
 
 const SECTION_LABEL = {
   fontFamily: 'var(--font-sans)', fontSize: 10, fontWeight: 700, letterSpacing: '0.22em', textTransform: 'uppercase',
@@ -71,13 +76,14 @@ function UserAvatar({ user, size = 32, src = null }) {
 export { UserAvatar }
 
 // One navigation row: active = inverted block, hover = faint wash
-function NavRow({ to, glyph, label, onClick, badge, children, end = true }) {
+function NavRow({ to, glyph, label, onClick, badge, children, end = true, tour }) {
   return (
     <NavLink
       to={to}
       end={end}
       onClick={onClick}
       className="tvx-navrow"
+      data-tour={tour}
       style={({ isActive }) => ({
         position: 'relative', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', textDecoration: 'none',
         fontFamily: 'var(--font-sans)', fontSize: 12.5, fontWeight: 700, letterSpacing: 0,
@@ -115,16 +121,9 @@ export default function Sidebar() {
   const { name: displayName, handle } = getIdentity(user, profile)
   const avatarUrl = profile?.avatar_url || meta.avatar_url || meta.picture || null
 
-  const { data: groups = [] } = useGetGroupsQuery(undefined, { skip: !user, pollingInterval: 60000 })
+  const { data: me } = useGetProfileQuery(user?.id, { skip: !user })
   const { data: unreadData } = useGetUnreadMessagesQuery(undefined, { skip: !user, pollingInterval: 30000, skipPollingIfUnfocused: true })
-  const unread = unreadData?.unread ?? 0
-
-  const SEEN_KEY = user ? `miq_seen_notifs_${user.id}` : null
-  const hasGroupAlert = groups.some((g) => {
-    const postCount = g.postCount ?? 0
-    const stored = parseInt(localStorage.getItem(`miq_pc_${g.id}`) || '0', 10)
-    return postCount > stored
-  })
+  const unread = (unreadData?.unread ?? 0) + (unreadData?.requests ?? 0) // unread DMs + pending friend requests
 
   const isFeed = location.pathname === '/feed'
   const showAura = isPro && effect && effect !== 'none'
@@ -172,6 +171,7 @@ export default function Sidebar() {
             to="/feed"
             glyph="feed"
             label="Feed"
+            tour="feed"
             onClick={() => dispatch(isFeed ? toggleFeedExpanded() : setFeedExpanded(true))}
           />
           <div style={{ maxHeight: feedExpanded ? '500px' : '0px', opacity: feedExpanded ? 1 : 0, overflow: 'hidden', transition: 'max-height 0.28s ease, opacity 0.2s ease' }}>
@@ -201,29 +201,24 @@ export default function Sidebar() {
         <p style={SECTION_LABEL}>Tools</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
           {TOOLS_ITEMS.map((item) => (
-            <NavRow key={item.path} to={item.path} glyph={item.glyph} label={item.label} onClick={() => dispatch(setFeedExpanded(false))} />
+            <NavRow key={item.path} to={item.path} glyph={item.glyph} label={item.label} tour={item.path === '/portfolio' ? 'portfolio' : 'terminal'} onClick={() => dispatch(setFeedExpanded(false))} />
           ))}
         </div>
 
         <div style={{ margin: '10px 0 2px', borderTop: `1px solid ${BORDER}` }} />
         <p style={SECTION_LABEL}>Community</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-          {COMMUNITY_ITEMS.map((item) => {
-            const isGroups = item.path === '/groups'
-            return (
-              <NavRow
-                key={item.path}
-                to={item.path}
-                glyph={item.glyph}
-                label={item.label}
-                badge={(isGroups && hasGroupAlert) || (item.path === '/friends' && unread > 0)}
-                onClick={() => {
-                  dispatch(setFeedExpanded(false))
-                  if (isGroups && SEEN_KEY) groups.forEach((g) => localStorage.setItem(`miq_pc_${g.id}`, String(g.postCount ?? 0)))
-                }}
-              />
-            )
-          })}
+          {COMMUNITY_ITEMS.map((item) => (
+            <NavRow
+              key={item.path}
+              to={item.path}
+              glyph={item.glyph}
+              label={item.label}
+              tour={item.tour}
+              badge={item.path === '/friends' && unread > 0}
+              onClick={() => dispatch(setFeedExpanded(false))}
+            />
+          ))}
         </div>
       </nav>
 
@@ -264,11 +259,14 @@ export default function Sidebar() {
               )}
               <div style={{ minWidth: 0 }}>
                 {displayName && (
-                  <p style={{ fontFamily: 'var(--font-sans)', fontSize: 13, fontWeight: 700, color: 'var(--paper)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.3 }}>{displayName}</p>
+                  <p style={{ ...OVER, fontSize: 13, fontWeight: 700, color: me?.name_color || 'var(--paper)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.3 }}>
+                    {me?.clan && <ClanTag tag={me.clan.tag} color={me.clan.color} size="sm" />}{displayName}
+                  </p>
                 )}
-                {handle && (
-                  <p style={{ fontFamily: 'var(--font-sans)', fontSize: 11, color: 'var(--on-ink-text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.3 }}>{handle}</p>
-                )}
+                <p style={{ ...OVER, display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--on-ink-text-2)', overflow: 'hidden', whiteSpace: 'nowrap', lineHeight: 1.3 }}>
+                  {handle && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{handle}</span>}
+                  {me?.elo && <EloBadge elo={me.elo.elo} tier={me.elo.tier} size="sm" />}
+                </p>
               </div>
             </div>
           </Link>
