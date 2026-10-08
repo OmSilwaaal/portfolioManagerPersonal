@@ -458,7 +458,7 @@ export default function PanelWorkspace({
                 aria-hidden
                 data-workspace-readout
                 ref={readoutRef}
-                className="pointer-events-none absolute left-0 top-0 z-[80] rounded px-2 py-0.5 font-mono text-[10px] font-bold text-white shadow-lg"
+                className="pointer-events-none absolute left-0 top-0 z-[80] rounded-sm px-2 py-0.5 font-mono text-[11px] font-bold text-white"
                 style={{
                   backgroundColor: accent,
                   transform: `translate3d(${Math.max(active.rectPx.x, 2)}px, ${Math.max(active.rectPx.y + active.rectPx.h + 6, 2)}px, 0)`,
@@ -512,16 +512,13 @@ function WorkspaceToolbar({ locked, free, floating, interacting, accent = '#3b82
       }`}
       style={floating ? { paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))' } : undefined}
     >
-      <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-[#2a2a2a] bg-[#111]/95 p-1 shadow-2xl backdrop-blur">
+      <div className="t-panel pointer-events-auto flex items-center gap-1 p-1" style={{ boxShadow: '0 8px 24px -10px rgba(0,0,0,0.5)' }}>
         <button
           type="button"
           onClick={onToggleLock}
           aria-pressed={locked}
           title={locked ? 'Unlock layout (L)' : 'Lock layout (L)'}
-          className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider transition ${
-            locked ? 'bg-amber-500/15 text-amber-400 shadow-[0_0_14px_rgba(245,158,11,0.18)]' : 'hover:brightness-125'
-          }`}
-          style={locked ? undefined : { backgroundColor: `${accent}26`, color: accent }}
+          className={`t-btn flex items-center gap-1.5 px-3 py-1.5 text-[11px] uppercase tracking-wider ${locked ? 't-on' : ''}`}
         >
           {locked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
           <span className="hidden sm:inline">{locked ? 'Locked' : 'Unlocked'}</span>
@@ -532,7 +529,7 @@ function WorkspaceToolbar({ locked, free, floating, interacting, accent = '#3b82
           onClick={onReset}
           disabled={locked}
           title={locked ? 'Unlock to reset the layout' : 'Reset panels to the default layout'}
-          className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-gray-400 transition hover:bg-[#1e1e1e] hover:text-white disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-gray-400"
+          className="t-btn flex items-center gap-1.5 px-3 py-1.5 text-[11px] uppercase tracking-wider disabled:opacity-40"
         >
           <RotateCcw className="h-3.5 w-3.5" />
           <span className="hidden sm:inline">Reset</span>
@@ -541,7 +538,7 @@ function WorkspaceToolbar({ locked, free, floating, interacting, accent = '#3b82
         {!free && (
           <span
             title="Drag and resize become available on a wider screen"
-            className="flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500"
+            className="flex items-center gap-1.5 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--on-ink-text-3)' }}
           >
             <Layers className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Stacked</span>

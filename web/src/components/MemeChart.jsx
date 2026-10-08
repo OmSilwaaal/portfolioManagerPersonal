@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
+import { useSelector } from 'react-redux'
 import {
   createChart, CandlestickSeries, HistogramSeries, LineSeries, ColorType, CrosshairMode, LineStyle, createSeriesMarkers,
 } from 'lightweight-charts'
 import { MousePointer2, TrendingUp, Minus, MessageSquarePlus, Eraser } from 'lucide-react'
 
-const UP = '#7ea968'
-const DOWN = '#d35c4a'
+// Chart colours live in the canvas, so they can't use CSS variables: one palette per theme.
+const PALETTES = {
+  dark: { bg: '#0b0b0b', text: '#b3ad9d', grid: 'rgba(255,255,255,0.05)', border: '#2a2a28', up: '#7ea968', down: '#d35c4a', volUp: 'rgba(126,169,104,0.45)', volDown: 'rgba(211,92,74,0.45)' },
+  light: { bg: '#efeee9', text: '#55554f', grid: 'rgba(17,17,16,0.08)', border: '#c9c8c1', up: '#2f7a3a', down: '#b3392a', volUp: 'rgba(47,122,58,0.4)', volDown: 'rgba(179,57,42,0.4)' },
+}
 const ACCENT = '#d6b87a'
 
 // A handful of candles stretched to fill the pane via fitContent() render as oversized blocks.
@@ -37,6 +41,10 @@ export default function MemeChart({ candles, fitKey }) {
   const apiRef = useRef({})
   const drawRef = useRef({ lines: [], priceLines: [], markers: [], pending: null })
   const [mode, setMode] = useState('cursor')
+  const isDark = useSelector((s) => s.theme.isDark)
+  const pal = PALETTES[isDark ? 'dark' : 'light']
+  const palRef = useRef(pal)
+  palRef.current = pal
   const modeRef = useRef(mode)
   useEffect(() => { modeRef.current = mode }, [mode])
 
@@ -44,18 +52,18 @@ export default function MemeChart({ candles, fitKey }) {
     const chart = createChart(hostRef.current, {
       autoSize: true,
       layout: {
-        background: { type: ColorType.Solid, color: '#0b0b0b' },
-        textColor: '#a39d8d',
+        background: { type: ColorType.Solid, color: palRef.current.bg },
+        textColor: palRef.current.text,
         fontFamily: "'IBM Plex Mono', monospace",
         fontSize: 11,
       },
-      grid: { vertLines: { color: 'rgba(255,255,255,0.03)' }, horzLines: { color: 'rgba(255,255,255,0.03)' } },
+      grid: { vertLines: { color: palRef.current.grid }, horzLines: { color: palRef.current.grid } },
       crosshair: { mode: CrosshairMode.Normal },
-      rightPriceScale: { borderColor: '#1f1f1f' },
-      timeScale: { borderColor: '#1f1f1f', timeVisible: true, secondsVisible: false },
+      rightPriceScale: { borderColor: palRef.current.border },
+      timeScale: { borderColor: palRef.current.border, timeVisible: true, secondsVisible: false },
     })
     const candle = chart.addSeries(CandlestickSeries, {
-      upColor: UP, downColor: DOWN, borderUpColor: UP, borderDownColor: DOWN, wickUpColor: UP, wickDownColor: DOWN,
+      upColor: palRef.current.up, downColor: palRef.current.down, borderUpColor: palRef.current.up, borderDownColor: palRef.current.down, wickUpColor: palRef.current.up, wickDownColor: palRef.current.down,
     })
     const volume = chart.addSeries(HistogramSeries, { priceFormat: { type: 'volume' }, priceScaleId: 'vol' })
     chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } })
@@ -113,9 +121,22 @@ export default function MemeChart({ candles, fitKey }) {
     candle.applyOptions({ priceFormat: { type: 'price', precision: p, minMove: Math.pow(10, -p) } })
     candle.setData(sorted.map(({ time, open, high, low, close }) => ({ time, open, high, low, close })))
     volume.setData(sorted.map((c) => ({
-      time: c.time, value: c.volume || 0, color: c.close >= c.open ? 'rgba(126,169,104,0.45)' : 'rgba(211,92,74,0.45)',
+      time: c.time, value: c.volume || 0, color: c.close >= c.open ? pal.volUp : pal.volDown,
     })))
-  }, [candles])
+  }, [candles, pal])
+
+  // Switching theme restyles the live chart instead of rebuilding it.
+  useEffect(() => {
+    const { chart, candle } = apiRef.current
+    if (!chart) return
+    chart.applyOptions({
+      layout: { background: { type: ColorType.Solid, color: pal.bg }, textColor: pal.text },
+      grid: { vertLines: { color: pal.grid }, horzLines: { color: pal.grid } },
+      rightPriceScale: { borderColor: pal.border },
+      timeScale: { borderColor: pal.border },
+    })
+    candle.applyOptions({ upColor: pal.up, downColor: pal.down, borderUpColor: pal.up, borderDownColor: pal.down, wickUpColor: pal.up, wickDownColor: pal.down })
+  }, [pal])
 
   useEffect(() => {
     const { chart } = apiRef.current
@@ -157,18 +178,18 @@ export default function MemeChart({ candles, fitKey }) {
   return (
     <div className="relative w-full h-full">
       <div ref={hostRef} className="w-full h-full" />
-      <div className="absolute top-2 left-2 flex items-center gap-1 rounded-full bg-black/40 backdrop-blur-md p-1">
+      <div className="t-panel absolute top-2 left-2 flex items-center gap-1 p-1">
         {TOOLS.map(({ id, icon: Icon, label }) => (
           <button
             key={id}
             title={label}
             onClick={() => { drawRef.current.pending = null; setMode(id) }}
-            className={`p-1.5 rounded-full transition ${mode === id ? 'bg-[#3e4d26]/70 text-white' : 'text-[#a39d8d] hover:text-white hover:bg-white/10'}`}
+            className={`t-btn p-1.5 ${mode === id ? 't-on' : ''}`} aria-pressed={mode === id}
           >
             <Icon className="w-3.5 h-3.5" />
           </button>
         ))}
-        <button title="Clear drawings" onClick={clearDrawings} className="p-1.5 rounded-full text-[#a39d8d] hover:text-[#d35c4a] hover:bg-white/10 transition">
+        <button title="Clear drawings" aria-label="Clear drawings" onClick={clearDrawings} className="t-btn p-1.5">
           <Eraser className="w-3.5 h-3.5" />
         </button>
       </div>

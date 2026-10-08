@@ -1,0 +1,105 @@
+/* Axiom terminal skin. Operate-mode surface: flat solid panels, hairlines, square controls, tabular numerals,
+   readable text tiers. Everything reads from the theme tokens, so it follows paper / ink. */
+
+.tvx-terminal {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+.tvx-terminal * { scrollbar-width: thin; scrollbar-color: var(--on-ink-3) transparent; }
+.tvx-terminal :focus-visible { outline: 2px solid var(--paper); outline-offset: 1px; }
+
+/* the old glass look: no blur, no glow, no gradients, square corners (avatars opt out with .tvx-keep-round) */
+.tvx-terminal [class*="backdrop-blur"] { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+.tvx-terminal [class*="shadow-["] { box-shadow: none !important; }
+.tvx-terminal .rounded-full:not(.tvx-keep-round),
+.tvx-terminal .rounded-xl, .tvx-terminal .rounded-2xl, .tvx-terminal .rounded-lg, .tvx-terminal .rounded-md,
+.tvx-terminal [class*="rounded-["] { border-radius: 2px !important; }
+.tvx-terminal .tvx-keep-round { border-radius: 50% !important; }
+
+/* text tiers: the old dim warm greys sat at ~2:1; map them to the theme's readable tiers */
+.tvx-terminal .text-\[\#555143\], .tvx-terminal .text-\[\#6b6657\] { color: var(--on-ink-text-3); }
+.tvx-terminal .text-\[\#8a8574\], .tvx-terminal .text-\[\#a39d8d\], .tvx-terminal .text-\[\#b3ad9d\] { color: var(--on-ink-text-2); }
+.tvx-terminal .text-white, .tvx-terminal .text-\[\#f0ebe0\] { color: var(--paper); }
+.tvx-terminal .text-\[\#7ea968\], .tvx-terminal .text-\[\#9fc488\] { color: var(--positive); }
+.tvx-terminal .text-\[\#d35c4a\], .tvx-terminal .text-\[\#e08a7a\] { color: var(--negative); }
+.tvx-terminal .text-\[\#d6b87a\] { color: var(--ochre-300); }
+.tvx-terminal .text-\[\#9eae84\] { color: var(--moss-200); }
+.tvx-terminal .tv-up { color: var(--positive); }
+.tvx-terminal .tv-down { color: var(--negative); }
+.tvx-terminal .tv-dim { color: var(--on-ink-text-3); }
+.tvx-terminal .bg-\[\#7ea968\]\/15 { background: color-mix(in srgb, var(--positive) 16%, transparent); }
+.tvx-terminal .bg-\[\#d35c4a\]\/15 { background: color-mix(in srgb, var(--negative) 16%, transparent); }
+.tvx-terminal .bg-\[\#d6b87a\]\/15 { background: color-mix(in srgb, var(--ochre-300) 18%, transparent); }
+.tvx-terminal .bg-\[\#9eae84\]\/10, .tvx-terminal .bg-\[\#9eae84\]\/15 { background: color-mix(in srgb, var(--moss-200) 14%, transparent); }
+
+/* the smallest sizes were 9-10px: lift the floor a notch */
+.tvx-terminal .text-\[9px\] { font-size: 10px; }
+.tvx-terminal .text-\[10px\] { font-size: 11px; }
+
+/* surfaces */
+.t-panel { background: var(--ink-800); border: 1px solid var(--on-ink-border); border-radius: 2px; }
+.t-panel[data-tone="buy"] { border-top: 2px solid var(--positive); }
+.t-panel[data-tone="sell"] { border-top: 2px solid var(--negative); }
+
+/* controls */
+.t-btn, .t-input, .tvx-terminal select {
+  background: var(--ink-900); color: var(--on-ink-text-1); border: 1px solid var(--on-ink-border); border-radius: 2px;
+}
+.t-btn { cursor: pointer; font-weight: 700; transition: background 120ms, color 120ms; }
+.t-btn:hover:not(:disabled) { background: var(--on-ink-2); }
+.t-btn.t-on, .t-btn-primary { background: var(--paper); color: var(--ink-900); border-color: var(--paper); }
+.t-btn.t-on:hover, .t-btn-primary:hover { background: var(--paper); filter: brightness(1.08); }
+.t-btn:disabled { cursor: not-allowed; }
+.t-input { padding-block: 6px; padding-inline: 10px; width: 100%; }
+.t-input.pl-9 { padding-left: 2.25rem; }
+.t-input::placeholder { color: var(--on-ink-text-3); }
+.t-input[aria-invalid="true"] { border-color: var(--negative); }
+.tvx-terminal select { padding: 3px 8px; }
+
+.t-tab {
+  padding: 6px 10px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--on-ink-text-2); background: transparent; border: 1px solid transparent; border-radius: 2px; cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+.t-tab:hover { background: var(--on-ink-2); color: var(--paper); }
+.t-tab[aria-selected="true"] { background: var(--paper); color: var(--ink-900); }
+
+.t-chip {
+  display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 2px 6px; border: 1px solid var(--on-ink-border); color: var(--on-ink-text-2); border-radius: 2px;
+}
+.t-chip[data-tone="warn"] { color: var(--ochre-300); border-color: currentColor; }
+.t-chip[data-tone="ok"] { color: var(--positive); border-color: currentColor; }
+.t-chip[data-tone="bad"] { color: var(--negative); border-color: currentColor; }
+
+.t-stat {
+  display: inline-flex; align-items: baseline; gap: 6px; padding: 5px 10px; font-size: 12px;
+  background: var(--ink-900); border: 1px solid var(--on-ink-border); border-radius: 2px;
+}
+
+/* order ticket */
+.t-side { background: transparent; color: var(--on-ink-text-2); border: 1px solid var(--on-ink-border); border-radius: 2px; cursor: pointer; transition: background 120ms, color 120ms; }
+.t-side:hover { background: var(--on-ink-2); }
+.t-side[aria-pressed="true"][data-side="buy"] { background: var(--positive); color: var(--ink-900); border-color: var(--positive); }
+.t-side[aria-pressed="true"][data-side="sell"] { background: var(--negative); color: var(--ink-900); border-color: var(--negative); }
+.t-submit { border-radius: 2px; cursor: pointer; border: 1px solid transparent; transition: filter 120ms; }
+.t-submit[data-side="buy"] { background: var(--positive); color: var(--ink-900); border-color: var(--positive); }
+.t-submit[data-side="sell"] { background: var(--negative); color: var(--ink-900); border-color: var(--negative); }
+.t-submit:hover:not(:disabled) { filter: brightness(1.1); }
+
+/* list rows: dense, one hairline between them, the selected row is shaded and bold */
+.t-row { padding: 8px 12px; border: 0; border-bottom: 1px solid var(--on-ink-border); background: transparent; cursor: pointer; transition: background 100ms; color: inherit; }
+.t-row:hover { background: var(--on-ink-2); }
+.t-row[aria-current="true"] { background: var(--on-ink-3); }
+
+/* tables */
+.t-thead { background: var(--ink-800); color: var(--on-ink-text-3); border-bottom: 1px solid var(--on-ink-border); }
+.t-table td { border-bottom: 1px solid var(--on-ink-border); }
+.t-table[data-right~="1"] td:nth-child(2), .t-table[data-right~="2"] td:nth-child(3), .t-table[data-right~="3"] td:nth-child(4),
+.t-table[data-right~="4"] td:nth-child(5), .t-table[data-right~="5"] td:nth-child(6), .t-table[data-right~="6"] td:nth-child(7) { text-align: right; }
+
+/* alert pill + popover (MemecoinAlerts) */
+.tvx-terminal .bg-\[\#9eae84\] { background: var(--paper); color: var(--ink-900); }
+.tvx-terminal .text-\[\#c8d3b6\], .tvx-terminal .text-\[\#c9c3b3\] { color: var(--on-ink-text-1); }
+.tvx-terminal .border-\[\#9eae84\]\/30 { border-color: var(--on-ink-border); }

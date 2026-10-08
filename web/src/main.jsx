@@ -4,6 +4,8 @@ import { Provider } from 'react-redux'
 import { store } from './store/index'
 import App from './App'
 import './index.css'
+import './light-theme.css' // generated paper-theme overrides for Tailwind colour classes
+import './terminal.css'
 
 class ErrorBoundary extends React.Component {
   constructor(props) {

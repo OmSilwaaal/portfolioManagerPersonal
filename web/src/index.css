@@ -3,7 +3,6 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-@import './light-theme.css';
 
 /* ─── Travauxus Design Tokens ──────────────────────────────────────────────── */
 :root {
@@ -64,9 +63,9 @@
   --on-ink-3:      rgba(240,235,224,0.12);
   --on-ink-border: rgba(240,235,224,0.09);
   --on-ink-text-1: #f0ebe0;
-  --on-ink-text-2: rgba(240,235,224,0.62);
-  --on-ink-text-3: rgba(240,235,224,0.36);
-  --on-ink-text-4: rgba(240,235,224,0.18);
+  --on-ink-text-2: rgba(240,235,224,0.74);
+  --on-ink-text-3: rgba(240,235,224,0.52);
+  --on-ink-text-4: rgba(240,235,224,0.34);
 
   /* On-paper state layers */
   --on-paper-1:      rgba(11,11,11,0.04);
