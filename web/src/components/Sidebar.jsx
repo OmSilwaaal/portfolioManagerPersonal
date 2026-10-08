@@ -1,5 +1,5 @@
 import { NavLink, Link, useNavigate, useLocation } from 'react-router-dom'
-import Logo from './Logo'
+import ClassicLogo from './ClassicLogo'
 import { useDispatch, useSelector } from 'react-redux'
 import { resetPreferences } from '../store/preferencesSlice'
 import { setFeedFilter, setFeedSubFilter, setFeedExpanded, toggleFeedExpanded } from '../store/feedSlice'
@@ -7,6 +7,7 @@ import { supabase } from '../utils/supabase/client'
 import { useAuth } from '../contexts/AuthContext'
 import { useGetMyProfileQuery } from '../api/profilesApi'
 import { useGetGroupsQuery } from '../api/groupsApi'
+import { useGetUnreadMessagesQuery } from '../api/socialApi'
 import { getIdentity, initialsOf } from '../utils/identity'
 import { Glyph } from '../ascii/glyphs'
 import { AsciiAura } from '../ascii/effects'
@@ -28,6 +29,8 @@ const TOOLS_ITEMS = [
 ]
 
 const COMMUNITY_ITEMS = [
+  { path: '/friends', label: 'Friends', glyph: 'dm' },
+  { path: '/winners', label: 'Winners', glyph: 'trophy' },
   { path: '/groups', label: 'Groups', glyph: 'groups' },
   { path: '/settings', label: 'Settings', glyph: 'settings' },
 ]
@@ -113,6 +116,8 @@ export default function Sidebar() {
   const avatarUrl = profile?.avatar_url || meta.avatar_url || meta.picture || null
 
   const { data: groups = [] } = useGetGroupsQuery(undefined, { skip: !user, pollingInterval: 60000 })
+  const { data: unreadData } = useGetUnreadMessagesQuery(undefined, { skip: !user, pollingInterval: 30000, skipPollingIfUnfocused: true })
+  const unread = unreadData?.unread ?? 0
 
   const SEEN_KEY = user ? `miq_seen_notifs_${user.id}` : null
   const hasGroupAlert = groups.some((g) => {
@@ -155,7 +160,7 @@ export default function Sidebar() {
       {/* Logo */}
       <div className="flex items-center px-4 py-4 border-b" style={{ borderColor: BORDER }}>
         <Link to="/" onClick={() => sessionStorage.removeItem('tvx_intro')} style={{ textDecoration: 'none' }}>
-          <Logo />
+          <ClassicLogo />
         </Link>
       </div>
 
@@ -211,7 +216,7 @@ export default function Sidebar() {
                 to={item.path}
                 glyph={item.glyph}
                 label={item.label}
-                badge={isGroups && hasGroupAlert}
+                badge={(isGroups && hasGroupAlert) || (item.path === '/friends' && unread > 0)}
                 onClick={() => {
                   dispatch(setFeedExpanded(false))
                   if (isGroups && SEEN_KEY) groups.forEach((g) => localStorage.setItem(`miq_pc_${g.id}`, String(g.postCount ?? 0)))
@@ -241,7 +246,7 @@ export default function Sidebar() {
         )}
 
         {user && (
-          <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px' }}>
+          <Link to={`/profile/${user.id}`} title="View your profile" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', textDecoration: 'none' }}>
             {showAura && <AsciiAura effect={effect} bleed={{ top: 18, side: 12, bottom: 10 }} style={{ zIndex: 0 }} />}
             <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
               {avatarUrl ? (
@@ -266,7 +271,7 @@ export default function Sidebar() {
                 )}
               </div>
             </div>
-          </div>
+          </Link>
         )}
 
         <button

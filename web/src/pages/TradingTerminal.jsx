@@ -31,6 +31,7 @@ import PanelWorkspace from '../components/terminal/PanelWorkspace'
 import WorkspacePanel from '../components/terminal/Panel'
 import MemecoinAlerts from '../components/alerts/MemecoinAlerts'
 import { Glyph } from '../ascii/glyphs'
+import { useCelebrate } from '../components/ProfitCelebration'
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
 const ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/
@@ -716,6 +717,7 @@ function OrderTicket({ token, position }) {
   const [quoteErr, setQuoteErr] = useState(null)
   const [quoting, setQuoting] = useState(false)
   const [status, setStatus] = useState(null) // { ok, msg }
+  const celebrate = useCelebrate()
   const [getQuote] = useQuoteMemecoinMutation()
   const [trade, { isLoading: trading }] = useTradeMemecoinMutation()
   const reqId = useRef(0)
@@ -756,6 +758,11 @@ function OrderTicket({ token, position }) {
     const r = res.data || {}
     setSellPct(null)
     const what = side === 'buy' ? `${fmtUsd(r.usd)} of ${safeText(r.symbol || token.symbol)}` : `${fmtTokens(r.tokens)} ${safeText(r.symbol || token.symbol)} for ${fmtUsd(r.usd)}`
+    if (side === 'sell' && r.realizedPnl > 0) {
+      const proceeds = Number(r.usd) || 0
+      const invested = proceeds - r.realizedPnl
+      celebrate({ ticker: safeText(r.symbol || token.symbol), shares: r.tokens, price: r.fillPrice, realizedPnl: r.realizedPnl, realizedPnlPct: invested > 0 ? (r.realizedPnl / invested) * 100 : 0, invested, proceeds })
+    }
     setStatus({ ok: true, msg: `${side === 'buy' ? 'Bought' : 'Sold'} ${what} (paper)${r.realizedPnl != null ? ` · realized ${r.realizedPnl >= 0 ? '+' : '-'}${fmtUsd(Math.abs(r.realizedPnl))}` : ''}` })
   }
 

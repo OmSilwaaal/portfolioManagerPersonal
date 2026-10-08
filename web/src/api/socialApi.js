@@ -21,6 +21,26 @@ export const socialApi = baseApi.injectEndpoints({
       query: (userId) => ({ url: `/friends/${userId}`, method: 'DELETE' }),
       invalidatesTags: ['Friends'],
     }),
+    getConversations: builder.query({
+      query: () => '/messages/conversations',
+      providesTags: ['Messages'],
+    }),
+    getUnreadMessages: builder.query({
+      query: () => '/messages/unread',
+      providesTags: ['Messages'],
+    }),
+    getThread: builder.query({
+      query: (userId) => `/messages/with/${userId}`,
+      providesTags: ['Messages'],
+    }),
+    sendMessage: builder.mutation({
+      query: ({ userId, body, ticker }) => ({ url: `/messages/to/${userId}`, method: 'POST', body: { body, ticker } }),
+      invalidatesTags: ['Messages'],
+    }),
+    markThreadRead: builder.mutation({
+      query: (userId) => ({ url: `/messages/read/${userId}`, method: 'POST' }),
+      invalidatesTags: ['Messages'],
+    }),
     getMyReferral: builder.query({
       query: () => '/referrals/me',
       providesTags: ['Referral'],
@@ -48,6 +68,11 @@ export const {
   useAcceptFriendMutation,
   useRemoveFriendMutation,
   useGetMyReferralQuery,
+  useGetConversationsQuery,
+  useGetUnreadMessagesQuery,
+  useGetThreadQuery,
+  useSendMessageMutation,
+  useMarkThreadReadMutation,
   useRedeemReferralMutation,
   useGetRecoveryStatusQuery,
   useCreateRecoveryMutation,

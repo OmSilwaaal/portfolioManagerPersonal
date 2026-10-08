@@ -18,6 +18,8 @@ const portfolioRouter = require('./routes/portfolio');
 const alertsRouter = require('./routes/alerts');
 const smsRouter = require('./routes/sms');
 const friendsRouter = require('./routes/friends');
+const messagesRouter = require('./routes/messages');
+const winnersRouter = require('./routes/winners');
 const referralsRouter = require('./routes/referrals');
 const { manage: recoveryRouter, signIn: recoverSignInRouter } = require('./routes/recovery');
 const govTradesRouter = require('./routes/govTrades');
@@ -170,6 +172,8 @@ app.use('/api/alerts', requireAuth, alertsRouter);
 app.use('/api/memecoin-alerts', requireAuth, require('./routes/memecoinAlerts'));
 app.use('/api/sms', requireAuth, smsRouter);
 app.use('/api/friends', requireAuth, friendsRouter);
+app.use('/api/messages', requireAuth, messagesRouter);
+app.use('/api/winners', requireAuth, winnersRouter);
 app.use('/api/referrals', requireAuth, referralsRouter);
 app.use('/api/recovery', recoveryRouter);
 app.use('/api/recover', recoverSignInRouter); // public: signing in with a recovery phrase

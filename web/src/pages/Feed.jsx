@@ -11,6 +11,7 @@ import { useGetStockQuery } from '../api/stocksApi'
 import { usePersonalizedFeed } from '../hooks/usePersonalizedFeed'
 import ProGate from '../components/ProGate'
 import { AsciiDonut } from '../ascii/effects'
+import SectionShape from '../ascii/shapes'
 
 const INK8   = 'var(--ink-800)'
 const BORDER = 'var(--on-ink-border)'
@@ -214,14 +215,19 @@ export default function Feed() {
   return (
     <main className="flex-1 px-4 py-6 sm:px-10 sm:py-8 w-full" style={{ maxWidth: 960, margin: '0 auto' }}>
 
-      {/* Personalized header */}
-      <div style={{ marginBottom: 28 }}>
+      {/* Personalized header: each section gets its own animated ASCII shape in the corner */}
+      <div style={{ marginBottom: 28, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
+        <div style={{ minWidth: 0 }}>
         <p style={{ fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 500, letterSpacing: '0.24em', textTransform: 'uppercase', color: MUTED, marginBottom: 6 }}>
           Week of {weekLabel()}
         </p>
         <h1 style={{ fontFamily: 'var(--font-display)', fontStretch: '125%', fontSize: 26, fontWeight: 800, letterSpacing: '-0.01em', textTransform: 'uppercase', color: CREAM, margin: 0, lineHeight: 1.15 }}>
           {firstName ? `Hello ${firstName},` : 'Hello,'} here&apos;s your brief
         </h1>
+        </div>
+        <div className="hidden sm:block" style={{ flexShrink: 0, marginTop: -6 }}>
+          <SectionShape kind={activeFilter} />
+        </div>
       </div>
 
       {/* Weekly AI Brief */}

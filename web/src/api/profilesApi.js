@@ -10,6 +10,12 @@ export const profilesApi = baseApi.injectEndpoints({
       query: (userId) => `/profiles/${userId}`,
       providesTags: (result, error, userId) => [{ type: 'Profile', id: userId }],
     }),
+    getProfileByUsername: builder.query({
+      query: (username) => `/profiles/by-username/${encodeURIComponent(username)}`,
+    }),
+    saveCosmetics: builder.mutation({
+      query: (body) => ({ url: '/profiles/me/cosmetics', method: 'PUT', body }),
+    }),
     updateProfile: builder.mutation({
       query: (body) => ({ url: '/profiles/me', method: 'PATCH', body }),
       invalidatesTags: ['Profile'],
@@ -18,4 +24,6 @@ export const profilesApi = baseApi.injectEndpoints({
   overrideExisting: false,
 })
 
-export const { useGetMyProfileQuery, useGetProfileQuery, useUpdateProfileMutation } = profilesApi
+export const {
+  useGetMyProfileQuery, useGetProfileQuery, useUpdateProfileMutation, useGetProfileByUsernameQuery, useSaveCosmeticsMutation,
+} = profilesApi

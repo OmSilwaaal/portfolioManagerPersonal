@@ -38,6 +38,8 @@ const Groups = lazy(() => import('./pages/Groups'))
 const GroupDetail = lazy(() => import('./pages/GroupDetail'))
 const CreateGroup = lazy(() => import('./pages/CreateGroup'))
 const Profile = lazy(() => import('./pages/Profile'))
+const Friends = lazy(() => import('./pages/Friends'))
+const Winners = lazy(() => import('./pages/Winners'))
 const Landing = lazy(() => import('./pages/Landing'))
 const Pricing = lazy(() => import('./pages/Pricing'))
 const Portfolio = lazy(() => import('./pages/Portfolio'))
@@ -186,6 +188,10 @@ function AppInner() {
         <Route path="/groups/new" element={<CreateGroup />} />
         <Route path="/groups/:id" element={<GroupDetail />} />
         <Route path="/profile/:userId" element={<Profile />} />
+        <Route path="/u/:username" element={<Profile />} />
+        <Route path="/friends" element={<Friends />} />
+        <Route path="/friends/:userId" element={<Friends />} />
+        <Route path="/winners" element={<Winners />} />
         <Route path="/portfolio" element={<Portfolio />} />
         <Route path="/gov-trades" element={<GovTrades />} />
         <Route path="/commodities" element={<Commodities />} />

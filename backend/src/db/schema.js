@@ -246,6 +246,46 @@ function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_friend_addressee ON friendships(addressee_id);
   `);
 
+  // Direct messages between friends, ticker shares, public cosmetics and the winners feed
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS messages (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      sender_id    TEXT NOT NULL,
+      recipient_id TEXT NOT NULL,
+      body         TEXT NOT NULL DEFAULT '',
+      attachment   TEXT,
+      created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+      read_at      TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_msg_pair ON messages(sender_id, recipient_id, id);
+    CREATE INDEX IF NOT EXISTS idx_msg_recipient ON messages(recipient_id, read_at);
+
+    CREATE TABLE IF NOT EXISTS user_cosmetics (
+      user_id    TEXT PRIMARY KEY,
+      banner     TEXT,
+      effect     TEXT,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS trade_wins (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id    TEXT NOT NULL,
+      kind       TEXT NOT NULL DEFAULT 'stock',
+      symbol     TEXT NOT NULL,
+      address    TEXT,
+      entry      REAL,
+      exit       REAL,
+      qty        REAL,
+      pnl_usd    REAL NOT NULL,
+      pnl_pct    REAL,
+      sol_price  REAL,
+      anim       TEXT NOT NULL DEFAULT 'reaper',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_wins_time ON trade_wins(created_at);
+    CREATE INDEX IF NOT EXISTS idx_wins_user ON trade_wins(user_id);
+  `);
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS memecoin_alert_prefs (
       user_id        TEXT PRIMARY KEY,

@@ -40,3 +40,18 @@ export function evaluate(a, stats) {
   const value = stats[a.stat] ?? 0
   return { value: Math.min(value, a.goal), goal: a.goal, unlocked: value >= a.goal }
 }
+
+/** Achievement inputs for any user, from the public profile payload (/profiles/:id). */
+export function statsFromProfile(profile) {
+  const s = profile?.stats ?? {}
+  const joined = profile?.joined_at ? Date.parse(profile.joined_at) : NaN
+  return {
+    always: 1,
+    friends: s.friends ?? 0,
+    groups: s.groups ?? 0,
+    watchlist: s.watchlist ?? 0,
+    referrals: s.referrals ?? 0,
+    ageDays: Number.isFinite(joined) ? Math.floor((Date.now() - joined) / 86400000) : 0,
+    pro: profile?.is_pro ? 1 : 0,
+  }
+}

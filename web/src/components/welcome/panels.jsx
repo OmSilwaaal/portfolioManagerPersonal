@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -67,11 +68,13 @@ function PersonRow({ person, children }) {
   const name = person.displayName ?? (person.username ? `@${person.username}` : 'Trader')
   return (
     <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', background: T.fill, border: `1px solid ${T.line}`, borderRadius: 14 }}>
-      <Avatar name={name} src={person.avatarUrl} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: T.paper, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</p>
-        {person.username && <p style={{ margin: 0, fontFamily: T.mono, fontSize: 11, color: T.muted }}>@{person.username}</p>}
-      </div>
+      <Link to={`/profile/${person.userId}`} style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, textDecoration: 'none' }} title="View profile">
+        <Avatar name={name} src={person.avatarUrl} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: T.paper, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</p>
+          {person.username && <p style={{ margin: 0, fontFamily: T.mono, fontSize: 11, color: T.muted }}>@{person.username}</p>}
+        </div>
+      </Link>
       {children}
     </motion.div>
   )
