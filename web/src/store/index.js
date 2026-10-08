@@ -5,6 +5,7 @@ import themeReducer from './themeSlice'
 import watchlistReducer from './watchlistSlice'
 import preferencesReducer from './preferencesSlice'
 import feedReducer from './feedSlice'
+import cosmeticsReducer from './cosmeticsSlice'
 
 // Register API endpoint modules
 import '../api/govTradesApi'
@@ -21,6 +22,7 @@ export const store = configureStore({
     watchlist: watchlistReducer,
     preferences: preferencesReducer,
     feed: feedReducer,
+    cosmetics: cosmeticsReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware()

@@ -5,6 +5,8 @@ import PriceAlertBanner from './components/PriceAlertBanner'
 import WatchlistPersistence from './components/WatchlistPersistence'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { setPreferences, setIsPro } from './store/preferencesSlice'
+import { syncSystemTheme } from './store/themeSlice'
+import { hydrateCosmetics } from './store/cosmeticsSlice'
 import Sidebar from './components/Sidebar'
 import BottomNav from './components/BottomNav'
 import { CelebrationProvider } from './components/ProfitCelebration'
@@ -54,7 +56,7 @@ const TradingTerminal = lazy(async () => {
 
 function Spinner() {
   return (
-    <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+    <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--ink-900)' }}>
       <div className="w-8 h-8 border-2 border-[#3b82f6] border-t-transparent rounded-full animate-spin" />
     </div>
   )
@@ -62,7 +64,6 @@ function Spinner() {
 
 function ProtectedLayout() {
   const { user, loading } = useAuth()
-  const isDark = useSelector((state) => state.theme.isDark)
   const onboardingComplete = useSelector((state) => state.preferences.onboardingComplete)
   const watchlistTickers = useSelector((state) => state.watchlist.stocks).join(',')
 
@@ -73,7 +74,7 @@ function ProtectedLayout() {
   if (!onboardingComplete) return <Navigate to="/onboarding" replace />
 
   return (
-    <div className={`flex min-h-screen ${isDark ? 'bg-[#0f0f0f] text-white' : 'bg-white text-[#0f0f0f]'}`}>
+    <div className="flex min-h-screen" style={{ background: 'var(--ink-900)', color: 'var(--paper)' }}>
       <WatchlistPersistence />
       <PriceAlertBanner tickers={watchlistTickers} />
       <Sidebar />
@@ -89,7 +90,6 @@ function ProtectedLayout() {
 
 function ProtectedLayoutMinimal() {
   const { user, loading } = useAuth()
-  const isDark = useSelector((state) => state.theme.isDark)
   const onboardingComplete = useSelector((state) => state.preferences.onboardingComplete)
 
   if (loading) return <Spinner />
@@ -99,7 +99,7 @@ function ProtectedLayoutMinimal() {
   if (!onboardingComplete) return <Navigate to="/onboarding" replace />
 
   return (
-    <div className={`flex min-h-screen ${isDark ? 'bg-[#0f0f0f] text-white' : 'bg-white text-[#0f0f0f]'}`}>
+    <div className="flex min-h-screen" style={{ background: 'var(--ink-900)', color: 'var(--paper)' }}>
       <div className="flex-1 flex flex-col min-h-screen">
         <Suspense fallback={<PageFallback />}>
           <Outlet />
@@ -116,7 +116,17 @@ function AppInner() {
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', isDark)
+    const meta = document.querySelector('meta[name="theme-color"]')
+    if (meta) meta.setAttribute('content', isDark ? '#0b0b0b' : '#efeee9')
   }, [isDark])
+
+  // follow the OS when the theme mode is "system"
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const onChange = () => dispatch(syncSystemTheme())
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [dispatch])
 
   // Remember an invite code from a shared link (?ref=CODE) so it survives the sign-up round trip
   useEffect(() => {
@@ -130,6 +140,7 @@ function AppInner() {
   useEffect(() => {
     if (!user) return
     const meta = user.user_metadata ?? {}
+    if (meta.cosmetics) dispatch(hydrateCosmetics(meta.cosmetics))
     if (meta.onboardingComplete) {
       dispatch(setPreferences({
         displayName: meta.display_name ?? null,

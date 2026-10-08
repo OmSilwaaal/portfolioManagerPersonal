@@ -1,10 +1,10 @@
 export default function PageHeader({ title, subtitle, action }) {
   return (
-    <div className="px-6 py-6 border-b border-[#1f1f1f] flex items-start justify-between">
+    <div className="px-6 py-6 flex items-start justify-between" style={{ borderBottom: '1px solid var(--on-ink-border)' }}>
       <div>
-        <h1 className="text-xl font-semibold text-white">{title}</h1>
+        <h1 style={{ fontFamily: 'var(--font-display)', fontStretch: '125%', fontWeight: 800, fontSize: 22, letterSpacing: '-0.01em', textTransform: 'uppercase', color: 'var(--paper)', margin: 0 }}>{title}</h1>
         {subtitle && (
-          <p className="text-sm text-[#6b7280] mt-0.5">{subtitle}</p>
+          <p style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--on-ink-text-3)', margin: '4px 0 0' }}>{subtitle}</p>
         )}
       </div>
       {action && (

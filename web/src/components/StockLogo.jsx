@@ -1,46 +1,26 @@
-import { useState } from 'react'
+import AsciiArt from '../ascii/AsciiArt'
+import { gradientFor } from '../ascii/palettes'
 
-// Primary: FMP public logo CDN (no API key needed for images)
-// Fallback: ticker initials with colored background
-const FMP_BASE = 'https://financialmodelingprep.com/image-stock'
-
-// Hashed color from ticker string so each fallback is consistently colored
-function tickerColor(ticker) {
-  const PALETTE = [
-    '#3b82f6','#8b5cf6','#ec4899','#f59e0b','#10b981',
-    '#06b6d4','#f97316','#6366f1','#14b8a6','#a855f7',
-  ]
-  let h = 0
-  for (let i = 0; i < ticker.length; i++) h = (h * 31 + ticker.charCodeAt(i)) >>> 0
-  return PALETTE[h % PALETTE.length]
+// A ticker badge set in ASCII: a framed monogram coloured from the ticker, so every symbol looks the same
+// from row to row but is still recognisable at a glance.
+function badgeLines(ticker) {
+  const t = ticker.toUpperCase().replace(/[-/].*$/, '').slice(0, 4)
+  const pad = 4 - t.length
+  const left = Math.floor(pad / 2)
+  const inner = ' '.repeat(left) + t + ' '.repeat(pad - left)
+  return ['.----.', `|${inner}|`, "'----'"]
 }
 
 export default function StockLogo({ ticker, size = 36, className = '' }) {
-  const [errored, setErrored] = useState(false)
-  const src = `${FMP_BASE}/${ticker.toUpperCase()}.png`
-  const bg = tickerColor(ticker)
-  const initials = ticker.slice(0, 2).toUpperCase()
-
-  if (errored) {
-    return (
-      <div
-        className={`flex items-center justify-center rounded-xl font-bold text-white flex-shrink-0 ${className}`}
-        style={{ width: size, height: size, background: bg, fontSize: size * 0.36 }}
-      >
-        {initials}
-      </div>
-    )
-  }
-
+  // 6 columns wide; scale the font so the badge fills the requested box
+  const font = Math.max(5, Math.min(size / (6 * 0.6), size / (3 * 1.08)))
   return (
-    <img
-      src={src}
-      alt={ticker}
-      width={size}
-      height={size}
-      className={`rounded-xl object-contain bg-white flex-shrink-0 ${className}`}
-      style={{ width: size, height: size, padding: size * 0.08 }}
-      onError={() => setErrored(true)}
-    />
+    <div
+      className={`flex items-center justify-center flex-shrink-0 ${className}`}
+      style={{ width: size, height: size }}
+      title={ticker}
+    >
+      <AsciiArt lines={badgeLines(ticker)} palette={gradientFor(ticker)} size={font} label={ticker} />
+    </div>
   )
 }

@@ -1,85 +1,42 @@
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { UserAvatar } from './Sidebar'
+import { Glyph } from '../ascii/glyphs'
 
 const tabs = [
-  {
-    path: '/feed',
-    label: 'Feed',
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-        <polyline points="9 22 9 12 15 12 15 22"/>
-      </svg>
-    ),
-  },
-  {
-    path: '/portfolio',
-    label: 'Portfolio',
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="2" y="7" width="20" height="14" rx="2"/>
-        <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
-        <line x1="12" y1="12" x2="12" y2="16"/>
-        <line x1="10" y1="14" x2="14" y2="14"/>
-      </svg>
-    ),
-  },
-  {
-    path: '/groups',
-    label: 'Groups',
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-        <circle cx="9" cy="7" r="4"/>
-        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-      </svg>
-    ),
-  },
-  {
-    path: '/settings',
-    label: 'Settings',
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="3"/>
-        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-      </svg>
-    ),
-  },
+  { path: '/feed', label: 'Feed', glyph: 'feed' },
+  { path: '/portfolio', label: 'Portfolio', glyph: 'portfolio' },
+  { path: '/terminal', label: 'Terminal', glyph: 'terminal' },
+  { path: '/groups', label: 'Groups', glyph: 'groups' },
+  { path: '/settings', label: 'Settings', glyph: 'settings' },
 ]
 
 export default function BottomNav() {
   const { user } = useAuth()
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50" style={{ background: 'rgba(10,10,10,0.85)', backdropFilter: 'blur(20px)', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50" style={{ background: 'var(--ink-800)', borderTop: '1px solid var(--on-ink-border)' }}>
       <div className="flex items-center justify-around h-16">
         {tabs.map((tab) => (
           <NavLink
             key={tab.path}
             to={tab.path}
             end
-            className={({ isActive }) =>
-              `flex flex-col items-center gap-1 px-3 py-2 transition-colors ${
-                isActive
-                  ? 'text-white'
-                  : 'text-white/30'
-              }`
-            }
+            className="flex flex-col items-center gap-1 px-2 py-1.5"
+            style={({ isActive }) => ({ color: isActive ? 'var(--paper)' : 'var(--on-ink-text-3)', textDecoration: 'none', minWidth: 56 })}
           >
             {({ isActive }) =>
               tab.path === '/settings' && user ? (
                 <>
-                  <div className={`rounded-full ${isActive ? 'ring-2 ring-white' : ''}`}>
+                  <div style={{ borderRadius: '50%', boxShadow: isActive ? '0 0 0 2px var(--paper)' : 'none' }}>
                     <UserAvatar user={user} size={26} />
                   </div>
-                  <span className="text-[10px] font-medium">{tab.label}</span>
+                  <span style={{ fontFamily: 'var(--font-sans)', fontSize: 10, fontWeight: 700 }}>{tab.label}</span>
                 </>
               ) : (
                 <>
-                  {tab.icon}
-                  <span className="text-[10px] font-medium">{tab.label}</span>
+                  <Glyph name={tab.glyph} size={7} shimmer={isActive} style={{ opacity: isActive ? 1 : 0.7 }} />
+                  <span style={{ fontFamily: 'var(--font-sans)', fontSize: 10, fontWeight: 700 }}>{tab.label}</span>
                 </>
               )
             }

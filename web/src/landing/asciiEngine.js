@@ -3,6 +3,18 @@ import { STAGES, WRAP_TEXT } from './content'
 /* ── constants ───────────────────────────────────────────────────────────── */
 // Greys on warm paper, index 0 = ink … 7 = faint
 const TONES = ['#101010', '#232321', '#3a3a37', '#54544e', '#75756d', '#9a9a91', '#b8b8af', '#d2d1c9']
+// One gradient per page: art is tinted left -> right, then eases to the next page's palette as you scroll
+const GRADIENT_STEPS = 14
+const GRAD_TONE = 100 // marker: "colour me with the live gradient"
+const PALETTES = [
+  [[29, 78, 216], [56, 189, 248]],   // cover: blue -> light blue
+  [[15, 118, 110], [45, 212, 191]],  // premise: teal
+  [[109, 40, 217], [232, 121, 249]], // news & impact: violet -> orchid
+  [[180, 83, 9], [245, 158, 11]],    // picks: amber
+  [[190, 18, 60], [251, 113, 133]],  // macro & crypto: rose
+  [[29, 78, 216], [56, 189, 248]],   // begin: back to blue
+]
+const mix = (a, b, t) => a + (b - a) * t
 const RAMP = ' .:-=+*#%@'
 const SCRAMBLE = '01/\\|-+=*#<>[]{}%&@~^'
 const SCRAMBLE_CODES = Array.from(SCRAMBLE, (c) => c.charCodeAt(0))
@@ -268,7 +280,7 @@ function finishArt(L, g) {
   for (const i of cells) {
     const idx = clamp(Math.floor(L.cov[i] * 9.99), 0, 9)
     L.code[i] = RAMP.charCodeAt(idx)
-    L.tone[i] = toneForIndex(idx)
+    L.tone[i] = GRAD_TONE
     L.bold[i] = 1
   }
 }
@@ -380,10 +392,6 @@ function rasterWord(lines, wCols, hRows, r, ys) {
   return cov
 }
 
-function toneForIndex(idx) {
-  return idx >= 8 ? 0 : idx >= 6 ? 1 : idx >= 4 ? 2 : idx >= 2 ? 3 : 4
-}
-
 function buildArt(def, g) {
   const L = newLayout(g.cols * g.rows)
   const { cols, rows, mx, mt, mb, r, narrow, cellW, cellH } = g
@@ -484,15 +492,41 @@ export function createEngine({ canvas, getProgress, onFrame, onIntroDone, skipIn
     g = measureGrid(W, H)
     layouts = buildLayouts(g)
     const n = g.cols * g.rows
-    buckets = Array.from({ length: 16 }, () => ({ idx: new Int32Array(n), code: new Uint16Array(n), n: 0 }))
+    buckets = Array.from({ length: 2 * (8 + GRADIENT_STEPS) }, () => ({ idx: new Int32Array(n), code: new Uint16Array(n), n: 0 }))
   }
 
   function push(i, code, tone, bold) {
     if (code === 32) return
-    const b = buckets[bold * 8 + tone]
+    if (tone === GRAD_TONE) tone = 8 + gradStep(i)
+    const b = buckets[bold * (8 + GRADIENT_STEPS) + tone]
     b.idx[b.n] = i
     b.code[b.n] = code
     b.n++
+  }
+
+  // current gradient endpoints, eased toward the page palette for the scroll position
+  const pal = { from: PALETTES[0][0].slice(), to: PALETTES[0][1].slice() }
+  let gradColors = []
+  function updatePalette(s, dt) {
+    const a = Math.min(PALETTES.length - 1, Math.floor(s))
+    const b = Math.min(PALETTES.length - 1, a + 1)
+    const f = clamp(s - a)
+    const k = f * f * (3 - 2 * f)
+    const ease = reduced ? 1 : 1 - Math.exp(-dt / 220)
+    for (let j = 0; j < 3; j++) {
+      pal.from[j] += (mix(PALETTES[a][0][j], PALETTES[b][0][j], k) - pal.from[j]) * ease
+      pal.to[j] += (mix(PALETTES[a][1][j], PALETTES[b][1][j], k) - pal.to[j]) * ease
+    }
+    gradColors = Array.from({ length: GRADIENT_STEPS }, (_, n) => {
+      const t = n / (GRADIENT_STEPS - 1)
+      return `rgb(${Math.round(mix(pal.from[0], pal.to[0], t))},${Math.round(mix(pal.from[1], pal.to[1], t))},${Math.round(mix(pal.from[2], pal.to[2], t))})`
+    })
+  }
+  function gradStep(i) {
+    const c = i % g.cols
+    const r = (i / g.cols) | 0
+    const t = clamp(0.9 * (c / g.cols) + 0.1 * (r / g.rows))
+    return Math.round(t * (GRADIENT_STEPS - 1))
   }
 
   function sampleCov(cov, x, y) {
@@ -519,7 +553,7 @@ export function createEngine({ canvas, getProgress, onFrame, onIntroDone, skipIn
       else if (v > 0.45) v *= 0.84 + (noise3(c * 0.15, r * 0.22, tn * 1.7 + 4.2) - 0.5) * 0.3
       const idx = clamp(Math.floor(v * 9.99), 0, 9)
       out.code = RAMP.charCodeAt(idx)
-      out.tone = toneForIndex(idx)
+      out.tone = GRAD_TONE
       out.bold = 1
       return
     }
@@ -543,12 +577,14 @@ export function createEngine({ canvas, getProgress, onFrame, onIntroDone, skipIn
 
   function flush() {
     const { cols, cellW, cellH, offX } = g
-    for (let b = 0; b < 16; b++) {
+    const per = 8 + GRADIENT_STEPS
+    for (let b = 0; b < 2 * per; b++) {
       const bk = buckets[b]
       if (!bk.n) continue
-      const bold = b >= 8 ? 700 : 400
+      const bold = b >= per ? 700 : 400
+      const t = b % per
       ctx.font = `${bold} ${g.fontPx}px ${GRID_FAMILY}`
-      ctx.fillStyle = TONES[b & 7]
+      ctx.fillStyle = t < 8 ? TONES[t] : gradColors[t - 8]
       for (let k = 0; k < bk.n; k++) {
         const i = bk.idx[k]
         const c = i % cols
@@ -586,7 +622,7 @@ export function createEngine({ canvas, getProgress, onFrame, onIntroDone, skipIn
         const s = p < 0.5 ? 1 - 2 * p : 2 * p - 1
         if (src.dyn && src.dyn[i]) {
           artScale = s; settled(src, i, time); artScale = 1
-          if (out.code !== 32) push(i, out.code, Math.min(7, out.tone + (s < 0.5 ? 1 : 0)), out.bold)
+          if (out.code !== 32) push(i, out.code, out.tone === GRAD_TONE ? GRAD_TONE : Math.min(7, out.tone + (s < 0.5 ? 1 : 0)), out.bold)
         } else if (src.code[i] !== 32 && hash2(i, 31) < s) {
           push(i, src.code[i], src.tone[i], src.bold[i])
         }
@@ -676,6 +712,7 @@ export function createEngine({ canvas, getProgress, onFrame, onIntroDone, skipIn
     const it = now - startedAt
     const intro = { active: false, draw: 1, move: 1, done: true }
     let s = p * (N - 1)
+    updatePalette(s, dt)
 
     if (!introDone) {
       intro.active = true

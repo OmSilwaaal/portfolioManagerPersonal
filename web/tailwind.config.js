@@ -26,7 +26,9 @@ module.exports = {
         'border':         '#1f1f1f',
       },
       fontFamily: {
-        sans: ['Inter', 'sans-serif'],
+        sans: ['var(--font-sans)'],
+        mono: ['var(--font-mono)'],
+        display: ['var(--font-display)'],
       },
     },
   },
