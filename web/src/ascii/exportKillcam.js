@@ -8,9 +8,20 @@ import { KILLCAMS, KILLCAM_LABELS, KILLCAM_EDGE, killcamFor, PERIOD } from './ki
  * DOM, so the clip is branded, sized for a story, and independent of whatever
  * the page happens to be showing.
  *
- * MP4 only, by design. MediaRecorder will happily hand back WebM, which most
- * phones refuse to accept into a story, so an unsupported browser is told
- * plainly instead of being given a file that will not post.
+ * Two encoders, in order:
+ *
+ *  1. WebCodecs `VideoEncoder` + an MP4 muxer. This is the path that works on
+ *     iOS. Safari has shipped the WebCodecs video interfaces since 16.4, and it
+ *     avoids both of the pieces that are broken there: canvas.captureStream,
+ *     which WebKit has long-standing bugs around, and MediaRecorder.stop, which
+ *     has been reported to hang or never fire on iOS. It also encodes as fast
+ *     as the CPU allows instead of in real time, because timestamps are set
+ *     explicitly rather than taken from the wall clock.
+ *  2. MediaRecorder, for desktop browsers without WebCodecs.
+ *
+ * MP4 either way: MediaRecorder will happily hand back WebM, which phones
+ * generally refuse into a story, so a browser that can produce neither is told
+ * plainly rather than given a file that will not post.
  */
 
 const SCENE_CODES = Array.from(SCENE_RAMP, (c) => c.charCodeAt(0))
@@ -28,11 +39,49 @@ export function mp4MimeType() {
   return MP4_TYPES.find((t) => MediaRecorder.isTypeSupported(t)) ?? null
 }
 
-export const canExportMp4 = () =>
-  typeof document !== 'undefined' &&
+const hasWebCodecs = () =>
+  typeof window !== 'undefined' &&
+  typeof window.VideoEncoder === 'function' &&
+  typeof window.VideoFrame === 'function'
+
+const hasMediaRecorderPath = () =>
   typeof HTMLCanvasElement !== 'undefined' &&
   typeof HTMLCanvasElement.prototype.captureStream === 'function' &&
   mp4MimeType() !== null
+
+export const canExportMp4 = () =>
+  typeof document !== 'undefined' && (hasWebCodecs() || hasMediaRecorderPath())
+
+/**
+ * H.264 support varies sharply by profile AND level, and a level too low for the
+ * frame size is reported as unsupported rather than silently downscaled — so ask
+ * about the actual dimensions instead of trusting a codec string.
+ * 720x1280 is 3600 macroblocks, which is exactly Level 3.1's ceiling, hence 4.0
+ * first.
+ */
+const AVC_CANDIDATES = [
+  'avc1.420028', // Baseline 4.0 — widest playback
+  'avc1.4d0028', // Main 4.0
+  'avc1.640028', // High 4.0
+  'avc1.420032', // Baseline 5.0
+  'avc1.4d0032', // Main 5.0
+  'avc1.42001f', // Baseline 3.1
+  'avc1.4d001f', // Main 3.1
+]
+
+async function pickAvcConfig(width, height, framerate, bitrate) {
+  for (const codec of AVC_CANDIDATES) {
+    // `avc` format gives the muxer length-prefixed samples rather than Annex-B.
+    const config = { codec, width, height, framerate, bitrate, avc: { format: 'avc' } }
+    try {
+      const res = await window.VideoEncoder.isConfigSupported(config)
+      if (res?.supported) return res.config ?? config
+    } catch {
+      /* some builds throw instead of reporting unsupported */
+    }
+  }
+  return null
+}
 
 const money = (n) => `${n < 0 ? '-' : '+'}$${Math.abs(Math.round(n)).toLocaleString('en-US')}`
 
@@ -131,11 +180,88 @@ function makeFrameRenderer({ ctx, W, H, key, scene, title, subtitle, handle }) {
   }
 }
 
+/** Encode with WebCodecs. Works on iOS, and runs faster than real time. */
+async function encodeWithWebCodecs({ drawFrame, canvas, width, height, fps, totalFrames, bitrate, onProgress }) {
+  const config = await pickAvcConfig(width, height, fps, bitrate)
+  if (!config) throw new Error('UNSUPPORTED')
+
+  // Only fetched when someone actually exports, so it costs nothing to load the app.
+  const { Muxer, ArrayBufferTarget } = await import('mp4-muxer')
+  const muxer = new Muxer({
+    target: new ArrayBufferTarget(),
+    video: { codec: 'avc', width, height, frameRate: fps },
+    fastStart: 'in-memory',   // metadata up front: phones expect it before they will play
+  })
+
+  let encodeError = null
+  const encoder = new window.VideoEncoder({
+    output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+    error: (e) => { encodeError = e },
+  })
+  encoder.configure(config)
+
+  const usPerFrame = 1e6 / fps
+  for (let i = 0; i < totalFrames; i++) {
+    if (encodeError) break
+    drawFrame(i / fps)
+    const frame = new window.VideoFrame(canvas, { timestamp: Math.round(i * usPerFrame), duration: Math.round(usPerFrame) })
+    // A keyframe every two seconds keeps seeking and thumbnailing sane.
+    encoder.encode(frame, { keyFrame: i % (fps * 2) === 0 })
+    frame.close()
+    onProgress?.((i + 1) / totalFrames)
+    // Let the encoder drain and keep the main thread responsive.
+    if (encoder.encodeQueueSize > 8) await new Promise((r) => setTimeout(r, 0))
+  }
+
+  if (encodeError) { try { encoder.close() } catch { /* already closed */ } throw encodeError }
+  await encoder.flush()
+  encoder.close()
+  muxer.finalize()
+  return new Blob([muxer.target.buffer], { type: 'video/mp4' })
+}
+
+/** Fallback for desktop browsers without WebCodecs. Runs in real time. */
+function encodeWithMediaRecorder({ drawFrame, canvas, fps, totalFrames, bitrate, onProgress }) {
+  const mimeType = mp4MimeType()
+  return new Promise((resolve, reject) => {
+    let stream
+    try {
+      drawFrame(0)                       // paint before capturing, or frame 1 is blank
+      stream = canvas.captureStream(fps)
+    } catch (err) { reject(err); return }
+
+    const rec = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: bitrate })
+    const chunks = []
+    const cleanup = () => { clearTimeout(timer); stream.getTracks().forEach((t) => t.stop()) }
+    let timer = 0
+    rec.ondataavailable = (e) => { if (e.data?.size) chunks.push(e.data) }
+    rec.onerror = (e) => { cleanup(); reject(e.error ?? new Error('Recording failed')) }
+    rec.onstop = () => {
+      cleanup()
+      const blob = new Blob(chunks, { type: mimeType.split(';')[0] })
+      blob.size ? resolve(blob) : reject(new Error('Recording produced no data'))
+    }
+
+    let frame = 0
+    const step = () => {
+      frame += 1
+      drawFrame(frame / fps)
+      onProgress?.(Math.min(1, frame / totalFrames))
+      if (frame >= totalFrames) { rec.stop(); return }
+      timer = setTimeout(step, 1000 / fps)
+    }
+    rec.start()
+    // Real time is required here: MediaRecorder stamps frames by wall clock, so
+    // pushing them faster would just produce a shorter, sped-up clip.
+    timer = setTimeout(step, 1000 / fps)
+  })
+}
+
 /**
  * @returns {Promise<Blob>} an MP4 of one full loop of the scene.
- * @throws if the browser cannot produce MP4.
+ * @throws if the browser can produce neither WebCodecs nor MediaRecorder MP4.
  */
-export function recordKillcamMp4({
+export async function recordKillcamMp4({
   anim, seed, ticker, pnl, handle,
   width = 720, height = 1280,
   // The scenes loop on PERIOD, so exactly one period gives a seamless clip and
@@ -146,9 +272,8 @@ export function recordKillcamMp4({
   fps = 12,
   onProgress,
 } = {}) {
-  const mimeType = mp4MimeType()
   if (!canExportMp4()) {
-    return Promise.reject(new Error('This browser cannot record MP4. Try Safari, or Chrome on a recent desktop.'))
+    throw new Error('This browser cannot make an MP4. Try Safari on iOS 16.4+, or an up-to-date Chrome.')
   }
 
   const key = killcamFor(anim ?? seed)
@@ -164,45 +289,23 @@ export function recordKillcamMp4({
     handle,
   })
 
-  return new Promise((resolve, reject) => {
-    let stream
+  const opts = { drawFrame, canvas, width, height, fps, totalFrames: Math.round(seconds * fps), // Sparse glyphs on a flat ground compress very well; 2.6 Mbps was spending
+    // bytes on nothing. 1.3 halves the file with no visible loss.
+    bitrate: 1_300_000, onProgress }
+
+  if (hasWebCodecs()) {
     try {
-      drawFrame(0)                       // paint before capturing, or frame 1 is blank
-      stream = canvas.captureStream(fps)
+      return await encodeWithWebCodecs(opts)
     } catch (err) {
-      reject(err); return
+      // No usable H.264 config, or the encoder failed: fall through if we can.
+      if (!hasMediaRecorderPath()) {
+        throw err?.message === 'UNSUPPORTED'
+          ? new Error('This browser has no H.264 encoder for this size.')
+          : err
+      }
     }
-
-    const rec = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 2_600_000 })
-    const chunks = []
-    rec.ondataavailable = (e) => { if (e.data?.size) chunks.push(e.data) }
-    rec.onerror = (e) => { cleanup(); reject(e.error ?? new Error('Recording failed')) }
-    rec.onstop = () => {
-      cleanup()
-      const blob = new Blob(chunks, { type: mimeType.split(';')[0] })
-      blob.size ? resolve(blob) : reject(new Error('Recording produced no data'))
-    }
-
-    const total = Math.round(seconds * fps)
-    let frame = 0
-    let timer = 0
-    const step = () => {
-      frame += 1
-      drawFrame(frame / fps)
-      onProgress?.(Math.min(1, frame / total))
-      if (frame >= total) { rec.stop(); return }
-      timer = setTimeout(step, 1000 / fps)
-    }
-    function cleanup() {
-      clearTimeout(timer)
-      stream.getTracks().forEach((t) => t.stop())
-    }
-
-    rec.start()
-    // Capture has to run in real time: MediaRecorder stamps frames by wall clock,
-    // so pushing them faster would just produce a shorter, sped-up clip.
-    timer = setTimeout(step, 1000 / fps)
-  })
+  }
+  return encodeWithMediaRecorder(opts)
 }
 
 export const killcamFileName = (ticker) =>
