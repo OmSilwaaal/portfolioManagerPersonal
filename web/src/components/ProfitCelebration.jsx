@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useGetMyProfileQuery } from '../api/profilesApi'
 import { getIdentity, initialsOf } from '../utils/identity'
 import Killcam from '../ascii/Killcam'
+import ExportKillcamButton from './ExportKillcamButton'
 
 /* A full-screen "you just made money" moment, modelled on trading-app PnL cards.
    Fire it from anywhere with useCelebrate()({ ticker, realizedPnl, realizedPnlPct, invested, proceeds }). */
@@ -377,6 +378,19 @@ function WinModal({ win, onClose }) {
             Done
           </button>
         </div>
+        {/* The celebration only ever fires for the signed-in user's own close, so
+            `mine` is unconditionally true here. */}
+        <div className="flex justify-center mt-3">
+          <ExportKillcamButton
+            mine
+            seed={`${win.ticker}:${win.realizedPnl}`}
+            ticker={win.ticker}
+            pnl={win.realizedPnl}
+            handle={identity.handle || identity.name}
+            className="px-3 py-1.5 rounded-lg text-white/70 hover:text-white bg-white/10 hover:bg-white/15 transition-colors"
+          />
+        </div>
+
         <div role="radiogroup" aria-label="Image size" className="flex justify-center gap-1 mt-3">
           {Object.entries(FORMATS).map(([id, f]) => (
             <button

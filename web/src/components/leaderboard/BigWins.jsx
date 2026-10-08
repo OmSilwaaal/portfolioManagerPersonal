@@ -6,6 +6,7 @@ import Killcam from '../../ascii/Killcam'
 import AsciiArt from '../../ascii/AsciiArt'
 import { AsciiAura } from '../../ascii/effects'
 import PlayerName from '../PlayerName'
+import ExportKillcamButton from '../ExportKillcamButton'
 import { tierById } from '../../utils/elo'
 
 const BORDER = 'var(--on-ink-border)'
@@ -67,7 +68,21 @@ function WinCard({ w, mine }) {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: w.banner ? 'repeat(auto-fit, minmax(300px, 1fr))' : '1fr', gap: 0 }}>
-        {w.banner && <Killcam anim={w.anim} seed={w.id} style={{ border: 0, borderTop: `1px solid ${BORDER}`, borderRight: `1px solid ${BORDER}` }} />}
+        {w.banner && (
+          <div style={{ position: 'relative' }}>
+            <Killcam anim={w.anim} seed={w.id} style={{ border: 0, borderTop: `1px solid ${BORDER}`, borderRight: `1px solid ${BORDER}` }} />
+            <div style={{ position: 'absolute', right: 8, bottom: 8 }}>
+              <ExportKillcamButton
+                mine={mine}
+                anim={w.anim}
+                seed={w.id}
+                ticker={w.symbol}
+                pnl={w.pnlUsd}
+                handle={w.username ? `@${w.username}` : w.displayName}
+              />
+            </div>
+          </div>
+        )}
         <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 14, borderTop: `1px solid ${BORDER}`, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <AsciiArt lines={PLUS} palette="mint" size={11} shimmer={!!w.banner} style={{ flexShrink: 0 }} />
