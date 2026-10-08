@@ -69,19 +69,7 @@ function WinCard({ w, mine }) {
 
       <div style={{ display: 'grid', gridTemplateColumns: w.banner ? 'repeat(auto-fit, minmax(300px, 1fr))' : '1fr', gap: 0 }}>
         {w.banner && (
-          <div style={{ position: 'relative' }}>
-            <Killcam anim={w.anim} seed={w.id} style={{ border: 0, borderTop: `1px solid ${BORDER}`, borderRight: `1px solid ${BORDER}` }} />
-            <div style={{ position: 'absolute', right: 8, bottom: 8 }}>
-              <ExportKillcamButton
-                mine={mine}
-                anim={w.anim}
-                seed={w.id}
-                ticker={w.symbol}
-                pnl={w.pnlUsd}
-                handle={w.username ? `@${w.username}` : w.displayName}
-              />
-            </div>
-          </div>
+          <Killcam anim={w.anim} seed={w.id} style={{ border: 0, borderTop: `1px solid ${BORDER}`, borderRight: `1px solid ${BORDER}` }} />
         )}
         <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 14, borderTop: `1px solid ${BORDER}`, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
@@ -98,6 +86,18 @@ function WinCard({ w, mine }) {
             <dt style={{ color: 'var(--on-ink-text-3)' }}>Return</dt><dd style={{ margin: 0, fontWeight: 700, color: 'var(--positive)' }}>{w.pnlPct != null ? `+${w.pnlPct.toFixed(1)}%` : '--'}</dd>
             <dt style={{ color: 'var(--on-ink-text-3)' }}>Entry → exit</dt><dd style={{ margin: 0, color: 'var(--paper)' }}>{price(w.entry)} → {price(w.exit)}</dd>
           </dl>
+
+          {/* Exporting does not need the on-screen killcam — the recorder draws the
+              scene itself from the trade's seed — so this is offered on any win of
+              yours, with or without the Pro calling card above it. */}
+          <ExportKillcamButton
+            mine={mine}
+            anim={w.anim}
+            seed={w.id}
+            ticker={w.symbol}
+            pnl={w.pnlUsd}
+            handle={w.username ? `@${w.username}` : w.displayName}
+          />
         </div>
       </div>
     </article>
