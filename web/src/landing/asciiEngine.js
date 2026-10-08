@@ -104,100 +104,122 @@ function wrapWords(text, width) {
 /* ── illustrations: tiny canvas drawings rasterised into the ASCII grid ───── */
 const TAU = Math.PI * 2
 const ILLUS = {
+  // solid sphere with a carved latitude/longitude grid
   globe(ctx, { cx, cy, R }) {
-    const g = ctx.createRadialGradient(cx - R * 0.35, cy - R * 0.35, R * 0.1, cx, cy, R * 1.05)
-    g.addColorStop(0, 'rgba(0,0,0,0.12)')
-    g.addColorStop(1, 'rgba(0,0,0,0.95)')
-    ctx.fillStyle = g
+    ctx.fillStyle = 'rgba(0,0,0,0.96)'
     ctx.beginPath(); ctx.arc(cx, cy, R, 0, TAU); ctx.fill()
     ctx.globalCompositeOperation = 'destination-out'
-    ctx.lineWidth = R * 0.05
-    ctx.strokeStyle = 'rgba(0,0,0,0.95)'
-    for (const k of [0.38, 0.72]) { ctx.beginPath(); ctx.ellipse(cx, cy, R * k, R, 0, 0, TAU); ctx.stroke() }
+    ctx.strokeStyle = '#000'; ctx.lineWidth = R * 0.075
+    for (const k of [0.42, 0.78]) { ctx.beginPath(); ctx.ellipse(cx, cy, R * k, R, 0, 0, TAU); ctx.stroke() }
     ctx.beginPath(); ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R); ctx.stroke()
-    for (const lat of [-0.55, 0, 0.55]) {
+    for (const lat of [-0.52, 0, 0.52]) {
       const w = Math.sqrt(1 - lat * lat) * R
       ctx.beginPath(); ctx.moveTo(cx - w, cy + R * lat); ctx.lineTo(cx + w, cy + R * lat); ctx.stroke()
     }
     ctx.globalCompositeOperation = 'source-over'
-    ctx.lineWidth = R * 0.06
-    ctx.strokeStyle = '#000'
-    ctx.beginPath(); ctx.arc(cx, cy, R, 0, TAU); ctx.stroke()
   },
-  bars(ctx, { U, V, cy }) {
-    const n = 5, h = V * 0.1, gap = V * 0.07
-    const y0 = cy - (n * h + (n - 1) * gap) / 2, x0 = U * 0.08, W = U * 0.84
-    const lens = [1, 0.78, 0.55, 0.4, 0.25], alphas = [0.95, 0.8, 0.6, 0.45, 0.3]
-    for (let i = 0; i < n; i++) {
+
+  // a feed: priority squares (act / watch / low) beside headline bars and sub-lines
+  bars(ctx, { U, V }) {
+    const rows = 4
+    const rowH = V / (rows + 0.35)
+    const sq = rowH * 0.62
+    const lens = [1, 0.8, 0.9, 0.62]
+    const alphas = [1, 0.7, 0.45, 0.25]
+    for (let i = 0; i < rows; i++) {
+      const y = rowH * 0.2 + i * rowH
       ctx.fillStyle = `rgba(0,0,0,${alphas[i]})`
-      ctx.fillRect(x0, y0 + i * (h + gap), W * lens[i], h)
+      ctx.fillRect(U * 0.04, y, sq, sq)
+      const x = U * 0.04 + sq + U * 0.05
+      const W = (U * 0.94 - x) * lens[i]
+      ctx.fillStyle = '#000'
+      ctx.fillRect(x, y, W, sq * 0.4)
+      ctx.fillRect(x, y + sq * 0.62, W * 0.62, sq * 0.2)
     }
   },
+
+  // candlestick chart trending up
   chart(ctx, { U, V }) {
-    const pts = [0.15, 0.3, 0.22, 0.45, 0.38, 0.62, 0.55, 0.88]
-    const X = (i) => U * 0.08 + (i / (pts.length - 1)) * U * 0.84
-    const Y = (v) => V * 0.86 - v * V * 0.7
-    const g = ctx.createLinearGradient(0, V * 0.15, 0, V * 0.86)
-    g.addColorStop(0, 'rgba(0,0,0,0.6)'); g.addColorStop(1, 'rgba(0,0,0,0.06)')
-    ctx.fillStyle = g
-    ctx.beginPath(); ctx.moveTo(X(0), V * 0.86)
-    pts.forEach((v, i) => ctx.lineTo(X(i), Y(v)))
-    ctx.lineTo(X(pts.length - 1), V * 0.86); ctx.closePath(); ctx.fill()
-    ctx.lineWidth = V * 0.05; ctx.strokeStyle = '#000'
-    ctx.beginPath(); pts.forEach((v, i) => (i ? ctx.lineTo(X(i), Y(v)) : ctx.moveTo(X(i), Y(v)))); ctx.stroke()
-    ctx.lineWidth = V * 0.03
-    ctx.beginPath(); ctx.moveTo(U * 0.06, V * 0.89); ctx.lineTo(U * 0.94, V * 0.89); ctx.stroke()
+    // [open, close, high, low] in 0..1
+    const c = [[0.25, 0.4, 0.46, 0.2], [0.4, 0.3, 0.45, 0.24], [0.3, 0.5, 0.56, 0.27], [0.5, 0.44, 0.58, 0.38], [0.44, 0.66, 0.72, 0.4], [0.66, 0.6, 0.74, 0.54], [0.6, 0.9, 0.95, 0.57]]
+    const base = V * 0.9, span = V * 0.82
+    const Y = (v) => base - v * span
+    const bw = U * 0.085, step = (U * 0.88 - bw) / (c.length - 1)
+    ctx.fillStyle = '#000'; ctx.strokeStyle = '#000'; ctx.lineWidth = U * 0.032; ctx.lineCap = 'butt'
+    c.forEach(([o, cl, h, l], i) => {
+      const x = U * 0.06 + i * step + bw / 2
+      ctx.beginPath(); ctx.moveTo(x, Y(h)); ctx.lineTo(x, Y(l)); ctx.stroke()
+      const top = Y(Math.max(o, cl)), hgt = Math.abs(Y(o) - Y(cl))
+      if (cl >= o) {
+        ctx.fillRect(x - bw / 2, top, bw, hgt)
+      } else {
+        ctx.clearRect(x - bw / 2, top, bw, hgt)
+        ctx.lineWidth = V * 0.035
+        ctx.strokeRect(x - bw / 2 + V * 0.0175, top + V * 0.0175, bw - V * 0.035, Math.max(0.1, hgt - V * 0.035))
+        ctx.lineWidth = U * 0.032
+      }
+    })
+    ctx.fillRect(U * 0.03, base + V * 0.03, U * 0.94, V * 0.035)
   },
+
+  // one big bold arrow
   arrow(ctx, { U, V }) {
-    const w = U * 0.12, gap = U * 0.045, base = V * 0.88
-    for (let i = 0; i < 5; i++) {
-      const h = V * (0.18 + i * 0.11)
-      ctx.fillStyle = `rgba(0,0,0,${0.14 + i * 0.09})`
-      ctx.fillRect(U * 0.1 + i * (w + gap), base - h, w, h)
-    }
-    const shaft = () => { ctx.beginPath(); ctx.moveTo(U * 0.12, V * 0.6); ctx.lineTo(U * 0.74, V * 0.22); ctx.stroke() }
-    const head = () => { ctx.beginPath(); ctx.moveTo(U * 0.92, V * 0.1); ctx.lineTo(U * 0.6, V * 0.15); ctx.lineTo(U * 0.82, V * 0.4); ctx.closePath() }
-    ctx.globalCompositeOperation = 'destination-out'
-    ctx.strokeStyle = '#000'; ctx.fillStyle = '#000'; ctx.lineWidth = V * 0.17
-    shaft(); head(); ctx.fill(); ctx.stroke()
-    ctx.globalCompositeOperation = 'source-over'
-    ctx.lineWidth = V * 0.085
-    shaft(); head(); ctx.fill()
+    const sx = U * 0.14, sy = V * 0.86, tx = U * 0.9, ty = V * 0.1
+    const dx = tx - sx, dy = ty - sy, len = Math.hypot(dx, dy)
+    const ux = dx / len, uy = dy / len, nx = -uy, ny = ux
+    const headLen = Math.min(U, V) * 0.46, headW = Math.min(U, V) * 0.66
+    const bx = tx - ux * headLen, by = ty - uy * headLen
+    ctx.fillStyle = '#000'; ctx.strokeStyle = '#000'; ctx.lineWidth = Math.min(U, V) * 0.105; ctx.lineCap = 'butt'
+    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(bx + ux * headLen * 0.15, by + uy * headLen * 0.15); ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(tx, ty)
+    ctx.lineTo(bx + nx * headW / 2, by + ny * headW / 2)
+    ctx.lineTo(bx - nx * headW / 2, by - ny * headW / 2)
+    ctx.closePath(); ctx.fill()
+    ctx.fillRect(U * 0.04, V * 0.94, U * 0.5, V * 0.035)
   },
+
+  // the capitol: steps, columns, entablature, drum, dome, lantern
   dome(ctx, { U, V, cx }) {
-    ctx.fillStyle = 'rgba(0,0,0,0.9)'
-    ctx.fillRect(U * 0.1, V * 0.86, U * 0.8, V * 0.05)
-    ctx.fillRect(U * 0.14, V * 0.81, U * 0.72, V * 0.05)
-    ctx.fillRect(U * 0.16, V * 0.4, U * 0.68, V * 0.06)
-    ctx.fillStyle = 'rgba(0,0,0,0.6)'
-    for (let i = 0; i < 6; i++) ctx.fillRect(U * 0.2 + i * U * 0.115, V * 0.46, U * 0.07, V * 0.35)
-    ctx.fillStyle = 'rgba(0,0,0,0.88)'
-    ctx.beginPath(); ctx.arc(cx, V * 0.4, U * 0.25, Math.PI, TAU); ctx.closePath(); ctx.fill()
-    ctx.fillRect(cx - U * 0.012, V * 0.08, U * 0.024, V * 0.12)
-    ctx.beginPath(); ctx.arc(cx, V * 0.2, U * 0.025, 0, TAU); ctx.fill()
+    ctx.fillStyle = '#000'
+    ctx.fillRect(U * 0.06, V * 0.9, U * 0.88, V * 0.05)
+    ctx.fillRect(U * 0.1, V * 0.85, U * 0.8, V * 0.05)
+    const cols = 7, cw = U * 0.07, x0 = U * 0.15, span = U * 0.7 - cw
+    for (let i = 0; i < cols; i++) ctx.fillRect(x0 + (i * span) / (cols - 1), V * 0.5, cw, V * 0.35)
+    ctx.fillRect(U * 0.12, V * 0.43, U * 0.76, V * 0.07)
+    ctx.fillRect(cx - U * 0.18, V * 0.32, U * 0.36, V * 0.11)
+    ctx.globalCompositeOperation = 'destination-out'
+    for (let i = 0; i < 4; i++) ctx.fillRect(cx - U * 0.135 + i * U * 0.09, V * 0.345, U * 0.04, V * 0.06)
+    ctx.globalCompositeOperation = 'source-over'
+    ctx.beginPath(); ctx.arc(cx, V * 0.32, U * 0.21, Math.PI, TAU); ctx.closePath(); ctx.fill()
+    ctx.fillRect(cx - U * 0.035, V * 0.05, U * 0.07, V * 0.06)
+    ctx.fillRect(cx - U * 0.01, V * 0.0, U * 0.02, V * 0.06)
   },
+
+  // a pyramid of gold bars with separating gaps and a carved highlight
   ingots(ctx, { U, V }) {
-    const w = U * 0.4, h = V * 0.21
+    const w = U * 0.42, h = V * 0.26
     const bar = (x, y) => {
-      ctx.fillStyle = 'rgba(0,0,0,0.92)'
+      ctx.fillStyle = '#000'
       ctx.beginPath()
-      ctx.moveTo(x + h * 0.45, y); ctx.lineTo(x + w - h * 0.45, y); ctx.lineTo(x + w, y + h); ctx.lineTo(x, y + h)
+      ctx.moveTo(x + h * 0.42, y); ctx.lineTo(x + w - h * 0.42, y); ctx.lineTo(x + w, y + h); ctx.lineTo(x, y + h)
       ctx.closePath(); ctx.fill()
       ctx.globalCompositeOperation = 'destination-out'
-      ctx.fillStyle = 'rgba(0,0,0,0.5)'
-      ctx.fillRect(x + h * 0.5, y + h * 0.3, w - h, h * 0.12)
+      ctx.fillRect(x + h * 0.2, y + h * 0.3, w - h * 0.4, h * 0.09)
       ctx.globalCompositeOperation = 'source-over'
     }
-    bar(U * 0.08, V * 0.7); bar(U * 0.52, V * 0.7); bar(U * 0.3, V * 0.46)
+    bar(U * 0.04, V * 0.7); bar(U * 0.54, V * 0.7); bar(U * 0.29, V * 0.4)
   },
+
+  // a hexagonal coin with a bold B
   hex(ctx, { cx, cy, R }) {
-    ctx.strokeStyle = '#000'; ctx.lineJoin = 'miter'
-    const poly = (r) => { ctx.beginPath(); for (let k = 0; k < 6; k++) { const a = Math.PI / 6 + (k * TAU) / 6; ctx[k ? 'lineTo' : 'moveTo'](cx + r * Math.cos(a), cy + r * Math.sin(a)) } ctx.closePath() }
-    ctx.lineWidth = R * 0.1; poly(R * 0.95); ctx.stroke()
-    ctx.fillStyle = 'rgba(0,0,0,0.12)'; poly(R * 0.8); ctx.fill()
-    ctx.lineWidth = R * 0.11
-    ctx.beginPath(); ctx.arc(cx, cy, R * 0.46, 0, TAU); ctx.stroke()
-    ctx.beginPath(); ctx.moveTo(cx, cy - R * 0.62); ctx.lineTo(cx, cy + R * 0.62); ctx.stroke()
+    ctx.strokeStyle = '#000'; ctx.fillStyle = '#000'; ctx.lineJoin = 'miter'
+    ctx.beginPath()
+    for (let k = 0; k < 6; k++) { const a = Math.PI / 6 + (k * TAU) / 6; ctx[k ? 'lineTo' : 'moveTo'](cx + R * 0.94 * Math.cos(a), cy + R * 0.94 * Math.sin(a)) }
+    ctx.closePath(); ctx.lineWidth = R * 0.12; ctx.stroke()
+    ctx.font = `900 ${R * 1.6}px ${ART_FAMILY}`
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    ctx.fillText('B', cx, cy + R * 0.08)
   },
 }
 
@@ -273,10 +295,11 @@ function buildText(def, g) {
   const usable = rows - mt - mb - 2
   const gapR = 3
   const gapC = 6
-  let artW = narrow ? Math.min(cols - 2 * mx, 30) : clamp(Math.floor(cols * 0.2), 22, 36)
+  let artW = narrow ? Math.min(cols - 2 * mx, 34) : clamp(Math.floor(cols * 0.27), 26, 46)
+  const availH = Math.floor((usable - (n - 1) * gapR) / n)
   let plan
   for (;;) {
-    const artH = Math.max(6, Math.round(artW / r))
+    const artH = narrow ? Math.max(6, Math.round(artW / r)) : clamp(Math.round(artW / r), 8, availH)
     const tw = narrow ? cols - 2 * mx : Math.min(54, cols - 2 * mx - artW - gapC)
     const lines = def.blocks.map((b) => blockLines(b, tw))
     const heights = lines.map((l) => (narrow ? artH + 1 + l.length : Math.max(artH, l.length)))
@@ -488,10 +511,12 @@ export function createEngine({ canvas, getProgress, onFrame, onIntroDone, skipIn
       const c = i % cols
       const r = (i / cols) | 0
       const tn = time * 0.00026
-      const dx = (noise3(c * 0.06, r * 0.1, tn) - 0.5) * 2.0
-      const dy = (noise3(c * 0.06 + 31.7, r * 0.1 + 17.3, tn + 9.1) - 0.5) * 1.2
+      const gain = L.illus ? 0.3 : 1
+      const dx = (noise3(c * 0.06, r * 0.1, tn) - 0.5) * 2.0 * gain
+      const dy = (noise3(c * 0.06 + 31.7, r * 0.1 + 17.3, tn + 9.1) - 0.5) * 1.2 * gain
       let v = sampleCov(L.cov, c + dx, r + dy) * artScale
-      if (v > 0.45) v *= 0.84 + (noise3(c * 0.15, r * 0.22, tn * 1.7 + 4.2) - 0.5) * 0.3
+      if (L.illus) v = clamp((v - 0.1) / 0.7) // push edges to solid ink / clean paper
+      else if (v > 0.45) v *= 0.84 + (noise3(c * 0.15, r * 0.22, tn * 1.7 + 4.2) - 0.5) * 0.3
       const idx = clamp(Math.floor(v * 9.99), 0, 9)
       out.code = RAMP.charCodeAt(idx)
       out.tone = toneForIndex(idx)
