@@ -138,19 +138,30 @@ function useCountUp(target, ms = 1100) {
 }
 
 /* ─── Shareable image (drawn straight to canvas so it works without DOM capture) ─── */
-function renderCardImage(win, identity, tier) {
-  const W = 900, H = 1100
-  const c = document.createElement('canvas')
-  c.width = W; c.height = H
-  const g = c.getContext('2d')
+// Natural size of the card artwork. Both output formats draw this same content
+// through a transform, so there is exactly one layout to maintain.
+const CARD_W = 900, CARD_H = 1100
 
+const FORMATS = {
+  // The original square-ish card.
+  card:  { w: 900,  h: 1100, label: 'Card' },
+  // Instagram / WhatsApp story. 1080x1920 is the native size; content is kept
+  // inside the vertical middle so neither platform's top and bottom UI covers it.
+  story: { w: 1080, h: 1920, label: 'Story' },
+}
+
+function paintBackdrop(g, W, H, tier, glowY) {
   const bg = g.createLinearGradient(0, 0, W, H)
   bg.addColorStop(0, '#16181b'); bg.addColorStop(1, '#070808')
   g.fillStyle = bg; g.fillRect(0, 0, W, H)
-  const glow = g.createRadialGradient(W / 2, 330, 20, W / 2, 330, 520)
+  const glow = g.createRadialGradient(W / 2, glowY, 20, W / 2, glowY, Math.max(W, H) * 0.5)
   glow.addColorStop(0, tier.glow); glow.addColorStop(1, 'rgba(0,0,0,0)')
   g.fillStyle = glow; g.fillRect(0, 0, W, H)
+}
 
+// Everything except the backdrop, in CARD_W x CARD_H coordinates.
+function drawCardContent(g, win, identity, tier) {
+  const W = CARD_W
   g.textBaseline = 'alphabetic'
   const font = (w, s) => `${w} ${s}px -apple-system, "Inter", "Helvetica Neue", Arial, sans-serif`
 
@@ -158,7 +169,7 @@ function renderCardImage(win, identity, tier) {
   g.strokeStyle = '#f0ebe0'; g.lineWidth = 4; g.lineJoin = 'round'
   g.beginPath(); g.moveTo(90, 80); g.lineTo(122, 112); g.lineTo(90, 144); g.lineTo(58, 112); g.closePath(); g.stroke()
   g.beginPath(); g.moveTo(90, 98); g.lineTo(104, 112); g.lineTo(90, 126); g.lineTo(76, 112); g.closePath(); g.stroke()
-  g.fillStyle = '#f0ebe0'; g.font = font(600, 36); g.fillText('Travauxus', 146, 124)
+  g.fillStyle = '#f0ebe0'; g.font = font(600, 36); g.textAlign = 'left'; g.fillText('Travauxus', 146, 124)
 
   g.fillStyle = tier.color; g.font = font(800, 30); g.fillText(tier.label, 60, 250)
   g.fillStyle = '#fff'; g.font = font(700, 96); g.fillText(`$${win.ticker}`, 60, 350)
@@ -188,6 +199,30 @@ function renderCardImage(win, identity, tier) {
   g.fillStyle = '#fff'; g.font = font(700, 44); g.fillText(identity.name, 182, 956)
   if (identity.handle) { g.fillStyle = '#9ca3af'; g.font = font(500, 30); g.fillText(identity.handle, 182, 998) }
   g.fillStyle = '#6b7280'; g.font = font(500, 26); g.fillText('Paper trading · travauxus.com', 60, 1060)
+}
+
+function renderCardImage(win, identity, tier, format = 'card') {
+  const { w: W, h: H } = FORMATS[format] ?? FORMATS.card
+  const c = document.createElement('canvas')
+  c.width = W; c.height = H
+  const g = c.getContext('2d')
+
+  if (format === 'story') {
+    // Keep the artwork clear of the ~250px the platforms overlay at top and
+    // bottom, and centre it in what is left.
+    const SAFE_TOP = 300, SAFE_BOTTOM = 300
+    const usableH = H - SAFE_TOP - SAFE_BOTTOM
+    const scale = Math.min((W * 0.92) / CARD_W, usableH / CARD_H)
+    const dw = CARD_W * scale, dh = CARD_H * scale
+    const x = (W - dw) / 2, y = SAFE_TOP + (usableH - dh) / 2
+    paintBackdrop(g, W, H, tier, y + 330 * scale)
+    g.save(); g.translate(x, y); g.scale(scale, scale)
+    drawCardContent(g, win, identity, tier)
+    g.restore()
+  } else {
+    paintBackdrop(g, W, H, tier, 330)
+    drawCardContent(g, win, identity, tier)
+  }
   return c
 }
 
@@ -199,6 +234,9 @@ function WinModal({ win, onClose }) {
   const tier = tierFor(win.realizedPnlPct)
   const pnl = useCountUp(win.realizedPnl)
   const [shareNote, setShareNote] = useState('')
+  // Story is the default: this modal exists to be posted, and 9:16 is what the
+  // places people post to actually want.
+  const [format, setFormat] = useState('story')
   const closeRef = useRef(null)
   const colors = useMemo(() => [tier.color, '#ffffff', '#f5c451', '#60a5fa'], [tier.color])
 
@@ -213,15 +251,17 @@ function WinModal({ win, onClose }) {
 
   const shareText = `Just banked +${money(win.realizedPnl)} (${pctText(win.realizedPnlPct)}) on $${win.ticker} on Travauxus`
 
+  const fileName = `travauxus-${win.ticker}-win${format === 'story' ? '-story' : ''}.png`
+
   const getBlob = () =>
-    new Promise((resolve) => renderCardImage(win, identity, tier).toBlob(resolve, 'image/png'))
+    new Promise((resolve) => renderCardImage(win, identity, tier, format).toBlob(resolve, 'image/png'))
 
   const download = async () => {
     const blob = await getBlob()
     if (!blob) return
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = url; a.download = `travauxus-${win.ticker}-win.png`
+    a.href = url; a.download = fileName
     a.click()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
@@ -230,7 +270,7 @@ function WinModal({ win, onClose }) {
     setShareNote('')
     try {
       const blob = await getBlob()
-      const file = blob && new File([blob], `travauxus-${win.ticker}-win.png`, { type: 'image/png' })
+      const file = blob && new File([blob], fileName, { type: 'image/png' })
       if (file && navigator.canShare?.({ files: [file] })) {
         await navigator.share({ files: [file], text: shareText })
       } else if (navigator.share) {
@@ -336,6 +376,21 @@ function WinModal({ win, onClose }) {
           <button onClick={onClose} className="px-5 py-3 rounded-xl text-sm font-medium text-white/60 hover:text-white transition-colors">
             Done
           </button>
+        </div>
+        <div role="radiogroup" aria-label="Image size" className="flex justify-center gap-1 mt-3">
+          {Object.entries(FORMATS).map(([id, f]) => (
+            <button
+              key={id}
+              role="radio"
+              aria-checked={format === id}
+              onClick={() => setFormat(id)}
+              className={`px-3 py-1 rounded-lg text-[11px] font-semibold tracking-wide transition-colors ${
+                format === id ? 'bg-white/15 text-white' : 'text-white/45 hover:text-white/80'
+              }`}
+            >
+              {f.label} <span className="font-normal opacity-60">{f.w}×{f.h}</span>
+            </button>
+          ))}
         </div>
         <p className="text-center text-xs text-white/40 mt-2 h-4" aria-live="polite">{shareNote}</p>
       </div>
