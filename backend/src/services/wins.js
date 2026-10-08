@@ -4,7 +4,7 @@ const { getDb } = require('../db/schema');
 const { BANNERS, EFFECTS, publicCards } = require('./identity');
 const { SEED_TRADERS, tierFor } = require('./elo');
 
-const ANIMS = ['reaper', 'gunship', 'nuke', 'sniper', 'ritual', 'demon'];
+const ANIMS = ['reaper', 'gunship', 'nuke', 'sniper', 'ritual', 'demon', 'lion', 'tiger'];
 const MIN_WIN_USD = 1;
 const FALLBACK_SOL_USD = 150;
 const RANGE_SECONDS = { day: 86400, week: 7 * 86400, month: 30 * 86400 };
@@ -55,6 +55,7 @@ function seedWins() {
     S('pepe', 'dune_dealer', 'PEPE', 'meme', 2100, 210.8, 0.0000061, 0.0000190, 'dunes', 'fire', 'demon', 52),
     S('amd', 'storm_chaser', 'AMD', 'stock', 1480, 9.7, 152.0, 166.7, 'storm', 'glow', 'nuke', 64),
     S('eth', 'aurora_ace', 'ETH', 'meme', 2750, 22.3, 3120, 3815, 'aurora', 'aurora', 'ritual', 70),
+    S('cate', 'foidkiller', 'CATE', 'meme', 2930.12, 218.4, 0.0000412, 0.000131, 'lion', 'fire', 'lion', 1),
   ];
 }
 

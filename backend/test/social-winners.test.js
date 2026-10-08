@@ -130,8 +130,12 @@ test('winners feed: real + seeded wins, ranked by profit, USD + SOL on every row
   assert.deepStrictEqual(out.wins.map((w) => w.rank), out.wins.map((_, i) => i + 1));
   assert.ok(out.wins.every((w) => wins.ANIMS.includes(w.anim)));
   // seeded wins showcase one calling card each; the one whose handle belongs to a real (free) account shows that account's plain header
-  const banners = new Set(out.wins.filter((w) => w.id.startsWith('seed-') && w.userId == null).map((w) => w.banner));
-  assert.strictEqual(banners.size, 9, 'one seeded win per calling card');
+  // The invariant is that no two seeds share a calling card, not a fixed count —
+  // a hardcoded number just breaks every time a seed is added.
+  const seeded = out.wins.filter((w) => w.id.startsWith('seed-') && w.userId == null);
+  const banners = new Set(seeded.map((w) => w.banner));
+  assert.strictEqual(banners.size, seeded.length, 'one seeded win per calling card');
+  assert.ok(seeded.length >= 9, 'the board stays populated');
   assert.ok([...banners].every((b) => wins.BANNERS.includes(b)));
   assert.ok(out.wins.every((w) => w.pnlSol > 0));
   assert.strictEqual(out.wins.find((w) => w.symbol === 'ADA').pnlUsd, 4000);
