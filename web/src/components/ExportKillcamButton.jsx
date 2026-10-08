@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { canExportMp4, recordKillcamMp4, killcamFileName } from '../ascii/exportKillcam'
+import { KILLCAM_LABELS, killcamFor } from '../ascii/killcams'
 
 /**
  * Exports a killcam as an MP4.
@@ -13,6 +14,9 @@ export default function ExportKillcamButton({ mine, anim, seed, ticker, pnl, han
   const [state, setState] = useState('idle')   // idle | working | error
   const [pct, setPct] = useState(0)
   const [note, setNote] = useState('')
+  // Which scene goes in the clip. Defaults to the one this trade already shows,
+  // so the picker starts on what the card looks like and is purely opt-in.
+  const [scene, setScene] = useState(() => killcamFor(anim ?? seed))
   const alive = useRef(true)
   useEffect(() => () => { alive.current = false }, [])
 
@@ -25,7 +29,7 @@ export default function ExportKillcamButton({ mine, anim, seed, ticker, pnl, han
     setState('working'); setPct(0); setNote('')
     try {
       const blob = await recordKillcamMp4({
-        anim, seed, ticker, pnl, handle,
+        anim: scene, seed, ticker, pnl, handle,
         onProgress: (p) => { if (alive.current) setPct(p) },
       })
       if (!alive.current) return
@@ -45,7 +49,24 @@ export default function ExportKillcamButton({ mine, anim, seed, ticker, pnl, han
   }
 
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, ...style }}>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', ...style }}>
+      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        <span className="sr-only" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>
+          Scene for the exported clip
+        </span>
+        <select
+          value={scene}
+          onChange={(e) => setScene(e.target.value)}
+          disabled={state === 'working'}
+          title="Choose which scene appears in the clip"
+          className="t-btn px-2 py-1.5"
+          style={{ fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', maxWidth: 160 }}
+        >
+          {Object.entries(KILLCAM_LABELS).map(([id, label]) => (
+            <option key={id} value={id}>{label}</option>
+          ))}
+        </select>
+      </label>
       <button
         type="button"
         onClick={run}

@@ -176,7 +176,7 @@ function makeFrameRenderer({ ctx, W, H, key, scene, title, subtitle, handle }) {
     }
     ctx.fillStyle = 'rgba(255,255,255,0.42)'
     ctx.font = font(500, W * 0.03)
-    ctx.fillText('Paper trading · travauxus.com', pad, H * 0.955)
+    ctx.fillText('travauxus.com', pad, H * 0.955)
   }
 }
 

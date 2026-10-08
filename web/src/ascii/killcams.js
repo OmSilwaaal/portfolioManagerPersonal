@@ -600,6 +600,275 @@ export function demon(ctx, { U, V, t }) {
   for (let i = 0; i < 40; i++) { const k = (t * 0.35 + hash(i)) % 1; ctx.fillStyle = rgba(255, 120 + hash(i + 3) * 80, 40, 0.8 * (1 - k)); ctx.fillRect(hash(i + 8) * U + Math.sin(t + i) * 2, gy - k * V * 0.9, 0.8, 0.8) }
 }
 
+/* ── big cats ──────────────────────────────────────────────────────────────
+   The rasteriser resolves roughly 82x30 cells, so these are built from the
+   features that survive at that size: the mane ring for a lion, the stripe
+   pattern for a tiger, and a wide lit jaw for both. Fine whiskers and fur
+   detail would disappear, so they are suggested rather than drawn. */
+
+// Shared big-cat muzzle: whisker pads, nose, open jaw with canines and tongue.
+function catMuzzle(ctx, open, { fur, furDark, pad, nose, gum, tongue }) {
+  const jaw = open * 0.62
+
+  // lower jaw drops as a unit, so the chin and bottom teeth travel together
+  ctx.fillStyle = furDark
+  ctx.beginPath(); ctx.ellipse(0, 0.52 + jaw, 0.62, 0.34, 0, 0, TAU); ctx.fill()
+
+  // mouth cavity
+  ctx.fillStyle = gum
+  ctx.beginPath(); ctx.ellipse(0, 0.44 + jaw * 0.55, 0.62, 0.13 + jaw * 1.05, 0, 0, TAU); ctx.fill()
+  ctx.fillStyle = tongue
+  ctx.beginPath(); ctx.ellipse(0, 0.56 + jaw * 0.75, 0.3, 0.07 + jaw * 0.42, 0, 0, TAU); ctx.fill()
+
+  // canines: two long upper, two shorter lower, plus a row of small incisors
+  ctx.fillStyle = '#fffdf2'
+  const fang = (fx, y0, len, w) => {
+    ctx.beginPath(); ctx.moveTo(fx - w, y0); ctx.lineTo(fx + w, y0); ctx.lineTo(fx, y0 + len); ctx.closePath(); ctx.fill()
+  }
+  fang(-0.3, 0.3, 0.3, 0.075); fang(0.3, 0.3, 0.3, 0.075)
+  fang(-0.28, 0.72 + jaw, -0.24, 0.07); fang(0.28, 0.72 + jaw, -0.24, 0.07)
+  for (let i = -2; i <= 2; i++) {
+    fang(i * 0.095, 0.3, 0.12, 0.035)
+    fang(i * 0.095, 0.72 + jaw, -0.1, 0.032)
+  }
+
+  // whisker pads sit over the top jaw, so they are drawn after the teeth
+  ctx.fillStyle = pad
+  ctx.beginPath(); ctx.ellipse(-0.26, 0.19, 0.33, 0.22, 0, 0, TAU); ctx.fill()
+  ctx.beginPath(); ctx.ellipse(0.26, 0.19, 0.33, 0.22, 0, 0, TAU); ctx.fill()
+  ctx.fillStyle = nose
+  ctx.beginPath(); ctx.moveTo(-0.17, -0.04); ctx.lineTo(0.17, -0.04); ctx.lineTo(0, 0.17); ctx.closePath(); ctx.fill()
+  ctx.strokeStyle = furDark; ctx.lineWidth = 0.035
+  ctx.beginPath(); ctx.moveTo(0, 0.17); ctx.lineTo(0, 0.3); ctx.stroke()
+  void fur
+}
+
+// Almond eye with a slit pupil and a specular dot; `lit` drives the glow.
+function catEye(ctx, ex, iris, lit) {
+  ctx.save(); ctx.translate(ex, -0.3)
+  ctx.fillStyle = '#000000'
+  ctx.beginPath(); ctx.ellipse(0, 0, 0.34, 0.24, 0, 0, TAU); ctx.fill()
+  ctx.fillStyle = iris
+  ctx.beginPath(); ctx.ellipse(0, 0, 0.26, 0.18, 0, 0, TAU); ctx.fill()
+  ctx.fillStyle = '#000'
+  ctx.beginPath(); ctx.ellipse(0, 0, 0.07, 0.125, 0, 0, TAU); ctx.fill()
+  ctx.fillStyle = '#fff'
+  ctx.beginPath(); ctx.arc(-0.06, -0.045, 0.035, 0, TAU); ctx.fill()
+  if (lit > 0) glow(ctx, 0, 0, 0.55, [255, 210, 90], 0.5 * lit)
+  ctx.restore()
+}
+
+// Roaring lion, in profile. A front-facing face depends on internal detail that
+// 82x30 tone-mapped glyphs cannot hold; a profile is carried by its outline --
+// mane, brow, open jaw, chest -- which is exactly what this medium renders well.
+function lionProfile(ctx, x, y, S, open, t) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(S, S)
+  const jaw = open * 0.55
+
+  // mane: a spiky ring behind the head, alternating value so it reads as fur
+  for (const [rad, n, phase] of [[1.46, 24, 0], [1.18, 20, 0.13]]) {
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * TAU + phase + Math.sin(t * 0.7 + i) * 0.02
+      const len = rad * (0.84 + hash(i + n) * 0.36)
+      ctx.fillStyle = i % 2 ? '#d08a22' : '#3d1f05'
+      ctx.beginPath()
+      ctx.moveTo(-0.12 + Math.cos(a - 0.14) * rad * 0.48, Math.sin(a - 0.14) * rad * 0.48)
+      ctx.lineTo(-0.12 + Math.cos(a) * len, Math.sin(a) * len)
+      ctx.lineTo(-0.12 + Math.cos(a + 0.14) * rad * 0.48, Math.sin(a + 0.14) * rad * 0.48)
+      ctx.closePath(); ctx.fill()
+    }
+  }
+
+  // skull + muzzle as one bright silhouette, facing right
+  const hide = ctx.createLinearGradient(-0.6, -0.6, 0.9, 0.7)
+  hide.addColorStop(0, '#ffe7b4'); hide.addColorStop(1, '#d08f36')
+  ctx.fillStyle = hide
+  ctx.beginPath()
+  ctx.moveTo(-0.72, -0.5)
+  ctx.bezierCurveTo(-0.2, -0.95, 0.5, -0.8, 0.74, -0.42)   // brow and bridge
+  ctx.lineTo(1.04, -0.2)                                    // nose tip
+  ctx.lineTo(0.96, 0.02)                                    // upper lip
+  ctx.lineTo(0.3, 0.1)
+  ctx.bezierCurveTo(-0.1, 0.2, -0.5, 0.3, -0.72, 0.26)
+  ctx.closePath(); ctx.fill()
+
+  // ear, set back into the mane
+  ctx.fillStyle = '#8a5212'
+  ctx.beginPath(); ctx.ellipse(-0.52, -0.62, 0.17, 0.2, -0.3, 0, TAU); ctx.fill()
+
+  // lower jaw swings down from the hinge, carrying chin and bottom teeth
+  ctx.save(); ctx.translate(-0.26, 0.08); ctx.rotate(jaw)
+  ctx.fillStyle = '#c98833'
+  ctx.beginPath()
+  ctx.moveTo(0, -0.06); ctx.lineTo(1.08, 0.02); ctx.lineTo(1.0, 0.24); ctx.lineTo(0.1, 0.34)
+  ctx.closePath(); ctx.fill()
+  ctx.fillStyle = '#fffdf2'   // bottom canine
+  ctx.beginPath(); ctx.moveTo(0.78, 0.02); ctx.lineTo(0.9, 0.02); ctx.lineTo(0.84, -0.26); ctx.closePath(); ctx.fill()
+  ctx.restore()
+
+  // the dark of the open mouth, between the jaws
+  if (jaw > 0.02) {
+    ctx.fillStyle = '#2a0509'
+    ctx.beginPath()
+    ctx.moveTo(-0.24, 0.04); ctx.lineTo(0.94, 0.02)
+    ctx.lineTo(0.9 - Math.sin(jaw) * 0.1, 0.06 + Math.sin(jaw) * 1.0)
+    ctx.lineTo(-0.2, 0.1 + Math.sin(jaw) * 0.42)
+    ctx.closePath(); ctx.fill()
+    ctx.fillStyle = '#c9414f'   // tongue
+    ctx.beginPath(); ctx.ellipse(0.26, 0.16 + Math.sin(jaw) * 0.46, 0.34, 0.07 + Math.sin(jaw) * 0.16, -0.1, 0, TAU); ctx.fill()
+  }
+  // top canine
+  ctx.fillStyle = '#fffdf2'
+  ctx.beginPath(); ctx.moveTo(0.76, 0.0); ctx.lineTo(0.9, 0.0); ctx.lineTo(0.84, 0.3); ctx.closePath(); ctx.fill()
+
+  // eye and brow: small, but the darkest thing on a bright muzzle
+  ctx.fillStyle = '#2a1403'
+  ctx.beginPath(); ctx.ellipse(0.3, -0.46, 0.2, 0.07, -0.22, 0, TAU); ctx.fill()
+  ctx.fillStyle = '#000'
+  ctx.beginPath(); ctx.ellipse(0.34, -0.33, 0.1, 0.07, 0, 0, TAU); ctx.fill()
+  ctx.fillStyle = '#ffc94a'
+  ctx.beginPath(); ctx.ellipse(0.35, -0.33, 0.06, 0.044, 0, 0, TAU); ctx.fill()
+  ctx.fillStyle = '#1a0a02'   // nostril
+  ctx.beginPath(); ctx.ellipse(0.88, -0.17, 0.055, 0.035, -0.3, 0, TAU); ctx.fill()
+  ctx.restore()
+}
+
+// Roaring tiger, in profile. Same silhouette logic; stripes do the identifying.
+function tigerProfile(ctx, x, y, S, open, t) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(S, S)
+  const jaw = open * 0.55
+
+  // cheek ruff only, no mane
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * TAU
+    if (Math.cos(a) > 0.1) continue
+    ctx.fillStyle = i % 2 ? '#ef8a2c' : '#f6f0e4'
+    ctx.beginPath()
+    ctx.moveTo(-0.2 + Math.cos(a - 0.12) * 0.5, Math.sin(a - 0.12) * 0.5)
+    ctx.lineTo(-0.2 + Math.cos(a) * 1.05, Math.sin(a) * 0.95)
+    ctx.lineTo(-0.2 + Math.cos(a + 0.12) * 0.5, Math.sin(a + 0.12) * 0.5)
+    ctx.closePath(); ctx.fill()
+  }
+
+  const hide = ctx.createLinearGradient(-0.6, -0.6, 0.9, 0.7)
+  hide.addColorStop(0, '#ffb05a'); hide.addColorStop(1, '#d9701a')
+  ctx.fillStyle = hide
+  ctx.beginPath()
+  ctx.moveTo(-0.66, -0.5)
+  ctx.bezierCurveTo(-0.2, -0.92, 0.5, -0.78, 0.72, -0.42)
+  ctx.lineTo(1.02, -0.2); ctx.lineTo(0.94, 0.02); ctx.lineTo(0.3, 0.1)
+  ctx.bezierCurveTo(-0.1, 0.2, -0.46, 0.3, -0.66, 0.26)
+  ctx.closePath(); ctx.fill()
+
+  ctx.fillStyle = '#f6f0e4'   // pale muzzle and chin, as tigers have
+  ctx.beginPath(); ctx.ellipse(0.66, -0.08, 0.3, 0.14, -0.12, 0, TAU); ctx.fill()
+
+  ctx.fillStyle = '#17110c'   // the stripes, swept back over the skull
+  for (let i = 0; i < 5; i++) {
+    ctx.save(); ctx.translate(-0.2 + i * 0.22, -0.52 + i * 0.03); ctx.rotate(1.15 + i * 0.07)
+    ctx.beginPath(); ctx.ellipse(0, 0, 0.3 - i * 0.03, 0.05, 0, 0, TAU); ctx.fill()
+    ctx.restore()
+  }
+  ctx.fillStyle = '#f7a23a'
+  ctx.beginPath(); ctx.ellipse(-0.46, -0.6, 0.18, 0.2, -0.3, 0, TAU); ctx.fill()   // ear
+  ctx.fillStyle = '#17110c'
+  ctx.beginPath(); ctx.ellipse(-0.48, -0.64, 0.12, 0.13, -0.3, 0, TAU); ctx.fill()
+
+  ctx.save(); ctx.translate(-0.24, 0.08); ctx.rotate(jaw)
+  ctx.fillStyle = '#e07c1e'
+  ctx.beginPath(); ctx.moveTo(0, -0.06); ctx.lineTo(1.04, 0.02); ctx.lineTo(0.96, 0.24); ctx.lineTo(0.1, 0.34); ctx.closePath(); ctx.fill()
+  ctx.fillStyle = '#fffdf2'
+  ctx.beginPath(); ctx.moveTo(0.74, 0.02); ctx.lineTo(0.86, 0.02); ctx.lineTo(0.8, -0.26); ctx.closePath(); ctx.fill()
+  ctx.restore()
+
+  if (jaw > 0.02) {
+    ctx.fillStyle = '#2a0509'
+    ctx.beginPath()
+    ctx.moveTo(-0.22, 0.04); ctx.lineTo(0.92, 0.02)
+    ctx.lineTo(0.88 - Math.sin(jaw) * 0.1, 0.06 + Math.sin(jaw) * 1.0)
+    ctx.lineTo(-0.18, 0.1 + Math.sin(jaw) * 0.42)
+    ctx.closePath(); ctx.fill()
+    ctx.fillStyle = '#d9525f'
+    ctx.beginPath(); ctx.ellipse(0.24, 0.16 + Math.sin(jaw) * 0.46, 0.32, 0.07 + Math.sin(jaw) * 0.16, -0.1, 0, TAU); ctx.fill()
+  }
+  ctx.fillStyle = '#fffdf2'
+  ctx.beginPath(); ctx.moveTo(0.74, 0.0); ctx.lineTo(0.88, 0.0); ctx.lineTo(0.82, 0.3); ctx.closePath(); ctx.fill()
+
+  ctx.fillStyle = '#000'
+  ctx.beginPath(); ctx.ellipse(0.32, -0.33, 0.1, 0.07, 0, 0, TAU); ctx.fill()
+  ctx.fillStyle = '#d7e24a'
+  ctx.beginPath(); ctx.ellipse(0.33, -0.33, 0.06, 0.044, 0, 0, TAU); ctx.fill()
+  ctx.fillStyle = '#1a0a02'
+  ctx.beginPath(); ctx.ellipse(0.86, -0.17, 0.055, 0.035, -0.3, 0, TAU); ctx.fill()
+  ctx.restore()
+}
+
+// A roar: the head surges forward, the jaw opens, the air ahead of it ripples.
+function roarRings(ctx, cx, cy, U, V, k) {
+  if (k <= 0) return
+  for (let i = 0; i < 3; i++) {
+    const p = clamp(k * 1.25 - i * 0.22)
+    if (p <= 0 || p >= 1) continue
+    ctx.strokeStyle = rgba(255, 236, 200, 0.4 * (1 - p))
+    ctx.lineWidth = 1.6 * (1 - p) + 0.3
+    ctx.beginPath(); ctx.ellipse(cx, cy, V * 0.2 + p * U * 0.52, V * 0.13 + p * V * 0.4, 0, 0, TAU); ctx.stroke()
+  }
+}
+
+export function lion(ctx, { U, V, t }) {
+  const u = (t % PERIOD) / PERIOD
+  sky(ctx, U, V, [[0, '#0d0601'], [0.45, '#2b1205'], [1, '#49230a']])
+  const cx = U * 0.5, gy = V * 0.9
+  // low sun behind the mane
+  glow(ctx, cx, V * 0.46, V * 0.7, [255, 150, 40], 0.14)
+  disc(ctx, cx, V * 0.48, V * 0.26, rgba(190, 110, 35, 0.32))
+  // savanna grass
+  ctx.fillStyle = '#2a1405'
+  for (let i = 0; i < 120; i++) {
+    const gx = hash(i) * U, h = V * (0.05 + hash(i + 3) * 0.1)
+    line(ctx, gx, gy + 2, gx + Math.sin(t * 1.1 + i) * 2, gy - h, 0.7, '#2a1405')
+  }
+  ground(ctx, U, V, gy, '#2a1405', '#0b0501')
+
+  const come = easeOut(seg(u, 0.05, 0.4))
+  const open = ease(seg(u, 0.34, 0.52)) * (1 - seg(u, 0.78, 0.94))
+  roarRings(ctx, cx, V * 0.56, U, V, seg(u, 0.5, 0.95))
+  lionProfile(ctx, cx * 0.92, V * (0.5 - come * 0.02), V * (0.17 + come * 0.1), open, t)
+  // dust kicked up by the roar
+  for (let i = 0; i < 34; i++) {
+    const k = (t * 0.5 + hash(i)) % 1
+    ctx.fillStyle = rgba(230, 180, 110, 0.5 * (1 - k) * open)
+    ctx.fillRect(cx + (hash(i + 2) - 0.5) * U * 0.9, gy - k * V * 0.5, 0.9, 0.9)
+  }
+}
+
+export function tiger(ctx, { U, V, t }) {
+  const u = (t % PERIOD) / PERIOD
+  sky(ctx, U, V, [[0, '#01080a'], [0.5, '#06211c'], [1, '#0a3326']])
+  const cx = U * 0.5, gy = V * 0.9
+  glow(ctx, cx, V * 0.5, V * 0.7, [60, 220, 150], 0.14)
+  // bamboo, back-lit
+  ctx.fillStyle = '#06150f'
+  for (let i = 0; i < 14; i++) {
+    const bx = ((i + 0.5) / 14) * U + Math.sin(t * 0.4 + i) * 1.5
+    ctx.fillRect(bx - 1.1, 0, 2.2, gy)
+  }
+  ground(ctx, U, V, gy, '#06150f', '#010504')
+
+  const come = easeOut(seg(u, 0.05, 0.4))
+  const open = ease(seg(u, 0.34, 0.52)) * (1 - seg(u, 0.78, 0.94))
+  roarRings(ctx, cx, V * 0.56, U, V, seg(u, 0.5, 0.95))
+  tigerProfile(ctx, cx * 0.92, V * (0.5 - come * 0.02), V * (0.17 + come * 0.1), open, t)
+  // rain, heavier while the roar holds
+  for (let i = 0; i < 70; i++) {
+    const k = (t * 1.6 + hash(i)) % 1
+    const rx = hash(i + 5) * U
+    ctx.strokeStyle = rgba(170, 230, 210, 0.3 + 0.3 * open)
+    ctx.lineWidth = 0.5
+    ctx.beginPath(); ctx.moveTo(rx, k * V); ctx.lineTo(rx - 1.2, k * V + 4); ctx.stroke()
+  }
+}
+
 export const KILLCAMS = {
   reaper: grim(reaper, [0.4]),
   gunship: grim(gunship, [0.62]),
@@ -607,8 +876,10 @@ export const KILLCAMS = {
   sniper: grim(sniper, [0.52]),
   ritual: grim(ritual, [0.58]),
   demon: grim(demon, [0.5]),
+  lion: grim(lion, [0.5]),
+  tiger: grim(tiger, [0.5]),
 }
-export const KILLCAM_LABELS = { reaper: 'REAPER', gunship: 'GUNSHIP', nuke: 'TACTICAL NUKE', sniper: 'HEADSHOT', ritual: 'BLOOD RITUAL', demon: 'HELLFIRE' }
+export const KILLCAM_LABELS = { reaper: 'REAPER', gunship: 'GUNSHIP', nuke: 'TACTICAL NUKE', sniper: 'HEADSHOT', ritual: 'BLOOD RITUAL', demon: 'HELLFIRE', lion: 'LION’S ROAR', tiger: 'TIGER’S ROAR' }
 // Thin sigils would be fattened shut by the outline boost the solid scenes rely on
 export const KILLCAM_EDGE = { ritual: 1.2, demon: 1.2 }
 export const killcamFor = (key) => {
