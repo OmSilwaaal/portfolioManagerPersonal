@@ -119,37 +119,42 @@ test('a win that cannot be logged never throws (the trade it describes must stil
   assert.strictEqual(wins.recordWin({ userId: BOB, symbol: 'PEPE', pnlUsd: 100 }, broken), null);
 });
 
-test('winners feed: ranked by profit, USD + SOL on every row, demo entries tagged, real @larp linked', async () => {
+test('winners feed: only real wins, ranked by profit, USD + SOL on every row', async () => {
   const db = getDb();
   db.prepare("INSERT INTO user_cosmetics (user_id, banner, effect) VALUES (?, 'storm', 'fire')").run(BOB);
-  const out = await wins.listWins({ range: 'all', solPrice: 200, supabase: require('../src/services/supabaseAdmin').supabase, db });
+  wins.recordWin({ userId: LARP, kind: 'meme', symbol: 'sol', pnlUsd: 5000, pnlPct: 60, solPrice: 200 }, db);
+  const sb = require('../src/services/supabaseAdmin').supabase;
+  const out = await wins.listWins({ range: 'all', solPrice: 200, supabase: sb, db });
   const usd = out.wins.map((w) => w.pnlUsd);
   assert.deepStrictEqual(usd, [...usd].sort((a, b) => b - a), 'sorted biggest first');
   assert.deepStrictEqual(out.wins.map((w) => w.rank), out.wins.map((_, i) => i + 1));
+  assert.strictEqual(out.wins.length, 2, 'no seeded entries');
+  assert.ok(out.wins.every((w) => w.demo === undefined && wins.ANIMS.includes(w.anim)));
 
   const larp = out.wins.find((w) => w.username === 'larp');
   assert.strictEqual(larp.pnlUsd, 5000);
-  assert.strictEqual(larp.symbol, 'SOL');
   assert.strictEqual(larp.pnlSol, 25, '$5,000 at $200/SOL');
-  assert.strictEqual(larp.demo, true);
-  assert.strictEqual(larp.userId, LARP, 'the demo handle links the real account when it exists');
   assert.strictEqual(larp.avatarUrl, 'https://img.example/larp.png');
 
-  const ada = out.wins.find((w) => w.symbol === 'ADA');
-  assert.strictEqual(ada.pnlUsd, 4000);
-  assert.strictEqual(ada.pnlSol, 20);
-
   const real = out.wins.find((w) => w.username === 'bob');
-  assert.strictEqual(real.demo, false);
   assert.strictEqual(real.banner, 'storm');
-  assert.strictEqual(real.pnlSol, 10 / 100, 'a real win keeps the SOL price it happened at');
+  assert.strictEqual(real.pnlSol, 10 / 100, 'a win keeps the SOL price it happened at');
 });
 
-test('demo entries can be switched off and ranges filter by age', async () => {
+test('killcams are randomised per win and never repeat back to back', () => {
+  const db = getDb();
+  const seen = [];
+  for (let i = 0; i < 40; i++) {
+    const id = wins.recordWin({ userId: BOB, symbol: 'PEPE', pnlUsd: 5 + i }, db);
+    seen.push(db.prepare('SELECT anim FROM trade_wins WHERE id = ?').get(id).anim);
+  }
+  assert.ok(seen.every((a, i) => i === 0 || a !== seen[i - 1]), 'no immediate repeats');
+  assert.ok(new Set(seen).size >= 4, 'draws from the whole set');
+});
+
+test('ranges filter by age', async () => {
   const db = getDb();
   const sb = require('../src/services/supabaseAdmin').supabase;
-  const off = await wins.listWins({ range: 'all', solPrice: 150, supabase: sb, db, demo: false });
-  assert.ok(off.wins.every((w) => !w.demo));
   const day = await wins.listWins({ range: 'day', solPrice: 150, supabase: sb, db });
   assert.ok(day.wins.every((w) => Date.now() - Date.parse(w.at) <= 86_400_000 + 5000));
 });

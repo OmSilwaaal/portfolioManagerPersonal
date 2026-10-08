@@ -67,7 +67,6 @@ function WinCard({ w, mine }) {
             )}
             <div style={{ ...MONO, fontSize: 11, color: 'rgba(255,255,255,0.78)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <span>{ago(w.at)}</span>
-              {w.demo && <span className="t-chip" data-tone="warn" title="Sample entry shown while the board fills up">Demo</span>}
               {mine && <span className="t-chip" style={{ color: '#fff', borderColor: '#fff' }}>You</span>}
             </div>
           </div>
@@ -140,7 +139,7 @@ export default function Winners() {
       </div>
       {q.data?.solPrice && (
         <p style={{ ...MONO, fontSize: 11, color: 'var(--on-ink-text-4)', marginTop: 18 }}>
-          SOL amounts use the SOL price at the time of the trade (demo rows use today&apos;s: ${q.data.solPrice.toFixed(2)}). Paper trading only. No real money moves.
+          SOL amounts use the SOL price at the time of the trade. Paper trading only. No real money moves.
         </p>
       )}
     </main>

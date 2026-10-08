@@ -1,8 +1,8 @@
 // Winners feed: every profitable paper sell is logged, then listed publicly with the trader's @handle,
-// their equipped calling card and a killcam animation. A few clearly-labelled demo entries seed an empty board.
+// their equipped calling card and a killcam animation. Only real, recorded wins are listed.
 const { getDb } = require('../db/schema');
 
-const ANIMS = ['reaper', 'gunship', 'nuke', 'sniper'];
+const ANIMS = ['reaper', 'gunship', 'nuke', 'sniper', 'ritual', 'demon'];
 const MIN_WIN_USD = 1;
 const FALLBACK_SOL_USD = 150;
 const RANGE_SECONDS = { day: 86400, week: 7 * 86400, month: 30 * 86400 };
@@ -12,7 +12,13 @@ const BANNERS = ['sunrise', 'skyline', 'ocean', 'orbit', 'forest', 'dunes', 'sto
 const EFFECTS = ['none', 'glow', 'fire', 'matrix', 'sparkle', 'aurora', 'waves'];
 
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : null; };
-const pickAnim = () => ANIMS[Math.floor(Math.random() * ANIMS.length)];
+// Random per win, never the same scene twice in a row
+let lastAnim = null;
+function pickAnim() {
+  const pool = ANIMS.filter((a) => a !== lastAnim);
+  lastAnim = pool[Math.floor(Math.random() * pool.length)];
+  return lastAnim;
+}
 const animFor = (id) => ANIMS[Math.abs(Number(id) || 0) % ANIMS.length];
 
 /** Log a profitable sell. Never throws: a failed log must not fail the trade it describes. */
@@ -36,17 +42,6 @@ function recordWin(w, dbArg) {
   }
 }
 
-/* ── demo seeds (shown with a DEMO tag; flip off with WINNERS_DEMO=off) ───────────────────────── */
-const hoursAgo = (h) => new Date(Date.now() - h * 3600_000).toISOString();
-function demoWins() {
-  return [
-    { id: 'demo-larp', username: 'larp', displayName: 'larp', symbol: 'SOL', kind: 'meme', pnlUsd: 5000, pnlPct: 62.4, entry: 118.4, exit: 192.3, banner: 'gilded', effect: 'fire', anim: 'reaper', at: hoursAgo(3) },
-    { id: 'demo-ada', username: 'ada_whale', displayName: 'ada whale', symbol: 'ADA', kind: 'stock', pnlUsd: 4000, pnlPct: 48.1, entry: 0.41, exit: 0.61, banner: 'skyline', effect: 'matrix', anim: 'gunship', at: hoursAgo(9) },
-    { id: 'demo-bonk', username: 'degen_dan', displayName: 'degen dan', symbol: 'BONK', kind: 'meme', pnlUsd: 2850, pnlPct: 131.7, entry: 0.0000118, exit: 0.0000273, banner: 'orbit', effect: 'sparkle', anim: 'nuke', at: hoursAgo(20) },
-    { id: 'demo-nvda', username: 'wallstreet_wanda', displayName: 'wanda', symbol: 'NVDA', kind: 'stock', pnlUsd: 1920, pnlPct: 17.9, entry: 884.2, exit: 1042.6, banner: 'capitol', effect: 'glow', anim: 'sniper', at: hoursAgo(31) },
-  ];
-}
-
 function cleanName(n) {
   return typeof n === 'string' && n.trim() && !n.includes('@') ? n.trim().slice(0, 80) : null;
 }
@@ -57,13 +52,6 @@ async function profilesByIds(supabase, ids) {
   if (!ids.length) return map;
   const { data } = await supabase.from('profiles').select('user_id, username, display_name, avatar_url').in('user_id', ids);
   for (const p of data ?? []) map.set(p.user_id, p);
-  return map;
-}
-async function profilesByUsernames(supabase, names) {
-  const map = new Map();
-  if (!names.length) return map;
-  const { data } = await supabase.from('profiles').select('user_id, username, display_name, avatar_url').in('username', names);
-  for (const p of data ?? []) map.set(p.username, p);
   return map;
 }
 
@@ -77,10 +65,10 @@ function cosmeticsFor(db, ids) {
 }
 
 /**
- * Winners, biggest first. Real wins come from trade_wins; demo entries fill the board unless disabled.
+ * Winners, biggest first, from trade_wins.
  * Every entry carries USD and SOL profit so the UI never converts on its own.
  */
-async function listWins({ range = 'all', limit = 30, solPrice, supabase, db = getDb(), demo = process.env.WINNERS_DEMO !== 'off' } = {}) {
+async function listWins({ range = 'all', limit = 30, solPrice, supabase, db = getDb() } = {}) {
   const sol = num(solPrice) > 0 ? num(solPrice) : FALLBACK_SOL_USD;
   const cap = Math.min(Math.max(parseInt(limit, 10) || 30, 1), 100);
   const secs = RANGE_SECONDS[range];
@@ -108,29 +96,10 @@ async function listWins({ range = 'all', limit = 30, solPrice, supabase, db = ge
       pnlUsd: r.pnl_usd, pnlSol: r.pnl_usd / solAt, pnlPct: r.pnl_pct,
       anim: ANIMS.includes(r.anim) ? r.anim : animFor(r.id),
       at: new Date(`${r.created_at.replace(' ', 'T')}Z`).toISOString(),
-      demo: false,
     };
   });
 
-  let out = real;
-  if (demo) {
-    const seeds = demoWins().filter((d) => !secs || Date.now() - Date.parse(d.at) <= secs * 1000);
-    // If the demo account's @handle belongs to a real user, link the real profile and avatar
-    const real_ = await profilesByUsernames(supabase, seeds.map((d) => d.username));
-    const realCos = cosmeticsFor(db, [...real_.values()].map((p) => p.user_id));
-    out = [...real, ...seeds.map((d) => {
-      const p = real_.get(d.username);
-      const c = p && realCos.get(p.user_id);
-      return {
-        id: d.id, userId: p?.user_id ?? null, username: d.username,
-        displayName: cleanName(p?.display_name) ?? d.displayName, avatarUrl: safeAvatar(p?.avatar_url),
-        banner: BANNERS.includes(c?.banner) ? c.banner : d.banner,
-        effect: EFFECTS.includes(c?.effect) ? c.effect : d.effect,
-        symbol: d.symbol, kind: d.kind, entry: d.entry, exit: d.exit,
-        pnlUsd: d.pnlUsd, pnlSol: d.pnlUsd / sol, pnlPct: d.pnlPct, anim: d.anim, at: d.at, demo: true,
-      };
-    })];
-  }
+  const out = real;
   out.sort((a, b) => b.pnlUsd - a.pnlUsd);
   return { wins: out.slice(0, cap).map((w, i) => ({ ...w, rank: i + 1 })), solPrice: sol };
 }
@@ -140,4 +109,4 @@ function winStats(userId, db = getDb()) {
   return { wins: r.n, totalUsd: r.total, bestUsd: r.best };
 }
 
-module.exports = { recordWin, listWins, winStats, demoWins, ANIMS, BANNERS, EFFECTS, FALLBACK_SOL_USD, MIN_WIN_USD };
+module.exports = { recordWin, listWins, winStats, ANIMS, BANNERS, EFFECTS, FALLBACK_SOL_USD, MIN_WIN_USD };
