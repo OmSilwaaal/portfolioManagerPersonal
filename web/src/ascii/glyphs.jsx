@@ -17,13 +17,16 @@ export const GLYPHS = {
   copy:      ['.-.  ', '|.+-.', "'-'.'"],
   paper:     ['.---.', '|$ $|', "'---'"],
   research:  ['  _  ', ' | | ', '/_o_\\'],
+  dm:        ['.---.', '|...|', "'-.-'"],
+  trophy:    ['\\_.._/', ' (  ) ', '  ||  '],
+  profile:   [' (o) ', '/|_|\\', ' / \\ '],
 }
 
 export const LOGO_LINES = ['   /\\   ', '  /  \\  ', ' < /\\ > ', '  \\  /  ', '   \\/   ']
 
 export const NAV_PALETTE = {
   feed: 'blue', portfolio: 'teal', terminal: 'lime', groups: 'violet', settings: 'amber', signout: 'rose', crown: 'gold',
-  stocks: 'blue', crypto: 'amber', gov: 'ice', commodity: 'gold', alerts: 'rose', copy: 'violet', paper: 'mint', research: 'teal',
+  dm: 'ice', trophy: 'gold', profile: 'pink', stocks: 'blue', crypto: 'amber', gov: 'ice', commodity: 'gold', alerts: 'rose', copy: 'violet', paper: 'mint', research: 'teal',
 }
 
 export function Glyph({ name, size = 7, palette, shimmer = false, style }) {

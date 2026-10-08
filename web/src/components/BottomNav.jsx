@@ -5,9 +5,9 @@ import { Glyph } from '../ascii/glyphs'
 
 const tabs = [
   { path: '/feed', label: 'Feed', glyph: 'feed' },
-  { path: '/portfolio', label: 'Portfolio', glyph: 'portfolio' },
   { path: '/terminal', label: 'Terminal', glyph: 'terminal' },
-  { path: '/groups', label: 'Groups', glyph: 'groups' },
+  { path: '/friends', label: 'Friends', glyph: 'dm' },
+  { path: '/winners', label: 'Winners', glyph: 'trophy' },
   { path: '/settings', label: 'Settings', glyph: 'settings' },
 ]
 
@@ -23,7 +23,7 @@ export default function BottomNav() {
             to={tab.path}
             end
             className="flex flex-col items-center gap-1 px-2 py-1.5"
-            style={({ isActive }) => ({ color: isActive ? 'var(--paper)' : 'var(--on-ink-text-3)', textDecoration: 'none', minWidth: 56 })}
+            style={({ isActive }) => ({ color: isActive ? 'var(--paper)' : 'var(--on-ink-text-3)', textDecoration: 'none', minWidth: 52 })}
           >
             {({ isActive }) =>
               tab.path === '/settings' && user ? (

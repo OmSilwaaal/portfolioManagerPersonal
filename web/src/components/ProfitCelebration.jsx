@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useAuth } from '../contexts/AuthContext'
 import { useGetMyProfileQuery } from '../api/profilesApi'
 import { getIdentity, initialsOf } from '../utils/identity'
+import Killcam from '../ascii/Killcam'
 
 /* A full-screen "you just made money" moment, modelled on trading-app PnL cards.
    Fire it from anywhere with useCelebrate()({ ticker, realizedPnl, realizedPnlPct, invested, proceeds }). */
@@ -282,6 +283,10 @@ function WinModal({ win, onClose }) {
             <button ref={closeRef} onClick={onClose} aria-label="Close" className="text-white/40 hover:text-white transition-colors w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
             </button>
+          </div>
+
+          <div className="relative mb-4" style={{ marginInline: -4 }}>
+            <Killcam seed={`${win.ticker}:${win.realizedPnl}`} cols={84} rows={20} style={{ borderRadius: 12 }} />
           </div>
 
           <p className="relative text-[11px] font-extrabold tracking-[0.25em] mb-1" style={{ color: tier.color }}>{tier.label}</p>

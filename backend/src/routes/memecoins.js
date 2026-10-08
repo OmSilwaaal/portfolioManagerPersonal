@@ -1,4 +1,5 @@
 const express = require('express');
+const { recordWin } = require('../services/wins');
 const router = express.Router();
 const data = require('../services/memecoinData');
 
@@ -235,6 +236,12 @@ router.post('/trade', h(async (req, res) => {
     }
     const r = await withUserLock(userId, () => applyTrade(sb, userId, address, side, quote));
     const pnl = side === 'sell' ? (quote.fillPrice - r.avgCost) * r.tokens : null;
+    if (pnl != null && pnl > 0) {
+      recordWin({
+        userId, kind: 'meme', symbol: quote.symbol, address, entry: r.avgCost, exit: quote.fillPrice, qty: r.tokens,
+        pnlUsd: pnl, pnlPct: r.avgCost > 0 ? ((quote.fillPrice - r.avgCost) / r.avgCost) * 100 : null, solPrice: quote.solPrice,
+      });
+    }
     return {
       success: true,
       paper: true,

@@ -1,4 +1,5 @@
 const express = require('express')
+const { recordWin } = require('../services/wins')
 const router = express.Router()
 const { supabase } = require('../services/supabaseAdmin')
 const { getStockQuote } = require('../services/finnhub')
@@ -352,6 +353,15 @@ router.post('/sell', requireAuth, async (req, res, next) => {
     if (txErr) throw txErr
 
     boardCache = null
+    const gain = (price - Number(position.avg_cost)) * shares
+    if (gain > 0) {
+      let solPrice = null
+      try { solPrice = await require('../services/memecoinData').getSolPrice() } catch { /* default applies */ }
+      recordWin({
+        userId, kind: 'stock', symbol: ticker, entry: Number(position.avg_cost), exit: price, qty: shares,
+        pnlUsd: gain, pnlPct: Number(position.avg_cost) > 0 ? ((price - Number(position.avg_cost)) / Number(position.avg_cost)) * 100 : null, solPrice,
+      })
+    }
     res.json({
       success: true, ticker, shares, price, total,
       avgCost: Number(position.avg_cost),
