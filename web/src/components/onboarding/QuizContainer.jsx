@@ -95,6 +95,8 @@ const INK   = 'var(--ink-900)'
 const CREAM = 'var(--paper)'
 const MUTED = 'rgba(240,235,224,0.36)'
 const BORDER_COLOR = 'rgba(240,235,224,0.10)'
+// Same film grain the landing page uses, so the auth screen reads as the same product.
+const GRAIN_URL = "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")"
 
 const inputStyle = (focused) => ({
   width: '100%', boxSizing: 'border-box',
@@ -249,150 +251,199 @@ function SignUpScreen({ onNameStored }) {
 
   if (sent) {
     return (
-      <div style={{ minHeight: '100vh', background: INK, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 24px', textAlign: 'center' }}>
-        {/* Diamond icon */}
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" style={{ marginBottom: 28, opacity: 0.7 }}>
-          <path d="M12 2L22 12L12 22L2 12Z" stroke={CREAM} strokeWidth="0.8" strokeLinejoin="round" />
-          <path d="M12 6.5L17.5 12L12 17.5L6.5 12Z" stroke={CREAM} strokeWidth="0.8" strokeLinejoin="round" />
-        </svg>
-        <h2 style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 28, letterSpacing: '-0.04em', color: CREAM, margin: '0 0 12px' }}>
-          Check your email
-        </h2>
-        <p style={{ fontFamily: 'var(--font-sans)', fontSize: 14, lineHeight: 1.8, color: MUTED, maxWidth: 300, margin: '0 0 8px' }}>
-          We sent a magic link to{' '}
-          <span style={{ color: CREAM }}>{email}</span>.{' '}
-          Click it to continue — no password needed.
-        </p>
-        <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.16em', color: 'rgba(240,235,224,0.22)', marginTop: 20 }}>
-          DIDN'T GET IT? CHECK YOUR SPAM FOLDER.
-        </p>
+      <div className="tvx-auth">
+        <AuthBrandPanel />
+        <div className="tvx-auth__form">
+          <AuthBackLink />
+          <div className="tvx-auth__col" style={{ textAlign: 'center' }}>
+            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" style={{ margin: '0 auto 26px', display: 'block', opacity: 0.75 }} aria-hidden="true">
+              <path d="M12 2L22 12L12 22L2 12Z" stroke={CREAM} strokeWidth="0.8" strokeLinejoin="round" />
+              <path d="M12 6.5L17.5 12L12 17.5L6.5 12Z" stroke={CREAM} strokeWidth="0.8" strokeLinejoin="round" />
+            </svg>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(26px,4vw,32px)', letterSpacing: '-0.04em', color: CREAM, margin: '0 0 12px' }}>
+              Check your email
+            </h2>
+            <p style={{ fontFamily: 'var(--font-sans)', fontSize: 14, lineHeight: 1.75, color: MUTED, margin: '0 auto', maxWidth: 320 }}>
+              We sent a magic link to <span style={{ color: CREAM }}>{email}</span>. Click it to continue — no password needed.
+            </p>
+            <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.16em', color: 'rgba(240,235,224,0.22)', marginTop: 24 }}>
+              DIDN'T GET IT? CHECK YOUR SPAM FOLDER.
+            </p>
+          </div>
+        </div>
       </div>
     )
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: INK, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 24px 40px', position: 'relative' }}>
-      {/* Back link */}
-      <a
-        href="/"
-        style={{ position: 'absolute', top: 24, left: 32, fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.10em', color: MUTED, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6, transition: 'color 150ms' }}
-        onMouseEnter={e => e.currentTarget.style.color = CREAM}
-        onMouseLeave={e => e.currentTarget.style.color = MUTED}
-      >
-        ← Back
-      </a>
+    <div className="tvx-auth">
+      <AuthBrandPanel />
 
-      {/* Logo */}
-      <div style={{ marginBottom: 48 }}>
-        <ClassicLogo size={34} />
-      </div>
+      <div className="tvx-auth__form">
+        <AuthBackLink />
 
-      <div style={{ width: '100%', maxWidth: 360 }}>
-        {/* Heading */}
-        <h1 style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(28px,5vw,36px)', letterSpacing: '-0.04em', lineHeight: 0.95, color: CREAM, textAlign: 'center', margin: '0 0 10px' }}>
-          Create your account
-        </h1>
-        <p style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: MUTED, textAlign: 'center', margin: '0 0 36px' }}>
-          No password required. Free forever.
-        </p>
+        <div className="tvx-auth__col">
+          {/* The wordmark only appears here on narrow screens; on desktop the
+              brand panel already carries it, and two logos read as a mistake. */}
+          <div className="tvx-auth__mark">
+            <ClassicLogo size={30} />
+          </div>
 
-        {/* Google OAuth */}
-        <button
-          onClick={handleGoogle}
-          disabled={anyLoading}
-          style={{
-            width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
-            background: anyLoading ? 'rgba(240,235,224,0.06)' : 'rgba(240,235,224,0.08)',
-            border: `1px solid ${BORDER_COLOR}`,
-            padding: '13px 16px',
-            fontFamily: 'var(--font-sans)', fontSize: 14, fontWeight: 500,
-            color: anyLoading ? MUTED : CREAM,
-            cursor: anyLoading ? 'not-allowed' : 'pointer',
-            transition: 'background 150ms, border-color 150ms',
-            letterSpacing: '-0.01em',
-          }}
-          onMouseEnter={e => { if (!anyLoading) e.currentTarget.style.background = 'rgba(240,235,224,0.12)'; e.currentTarget.style.borderColor = 'rgba(240,235,224,0.22)' }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(240,235,224,0.08)'; e.currentTarget.style.borderColor = BORDER_COLOR }}
-        >
-          <svg width="17" height="17" viewBox="0 0 24 24">
-            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
-            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-          </svg>
-          {googleLoading ? 'Redirecting…' : 'Continue with Google'}
-        </button>
-
-        {/* Divider */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, margin: '24px 0' }}>
-          <div style={{ flex: 1, height: 1, background: BORDER_COLOR }} />
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'rgba(240,235,224,0.22)' }}>or email</span>
-          <div style={{ flex: 1, height: 1, background: BORDER_COLOR }} />
-        </div>
-
-        {/* Magic link form */}
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <AuthInput
-            label="Your name"
-            type="text"
-            placeholder="Jane Smith"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            disabled={anyLoading}
-            autoComplete="name"
-          />
-          <AuthInput
-            label="Email address"
-            type="email"
-            placeholder="jane@example.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            disabled={anyLoading}
-            autoComplete="email"
-          />
-
-          {error && (
-            <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#f87171', letterSpacing: '0.06em', margin: 0 }}>
-              {error}
-            </p>
-          )}
+          <h1 style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(30px,4.4vw,40px)', letterSpacing: '-0.04em', lineHeight: 0.98, color: CREAM, margin: '0 0 10px' }}>
+            Create your account
+          </h1>
+          <p style={{ fontFamily: 'var(--font-sans)', fontSize: 13.5, color: MUTED, margin: '0 0 32px' }}>
+            No password required. Free forever.
+          </p>
 
           <button
-            type="submit"
-            disabled={!canSubmit || anyLoading}
+            onClick={handleGoogle}
+            disabled={anyLoading}
             style={{
-              width: '100%', padding: '13px 16px',
-              background: canSubmit && !anyLoading ? CREAM : 'rgba(240,235,224,0.06)',
-              color: canSubmit && !anyLoading ? INK : 'rgba(240,235,224,0.22)',
-              border: 'none', cursor: canSubmit && !anyLoading ? 'pointer' : 'not-allowed',
-              fontFamily: 'var(--font-sans)', fontSize: 14, fontWeight: 600,
-              letterSpacing: '-0.01em', transition: 'background 150ms, opacity 150ms',
+              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
+              background: anyLoading ? 'rgba(240,235,224,0.06)' : 'rgba(240,235,224,0.08)',
+              border: `1px solid ${BORDER_COLOR}`,
+              padding: '13px 16px',
+              fontFamily: 'var(--font-sans)', fontSize: 14, fontWeight: 500,
+              color: anyLoading ? MUTED : CREAM,
+              cursor: anyLoading ? 'not-allowed' : 'pointer',
+              transition: 'background 150ms, border-color 150ms',
+              letterSpacing: '-0.01em',
             }}
-            onMouseEnter={e => { if (canSubmit && !anyLoading) e.currentTarget.style.opacity = '0.88' }}
-            onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
+            onMouseEnter={e => { if (!anyLoading) { e.currentTarget.style.background = 'rgba(240,235,224,0.12)'; e.currentTarget.style.borderColor = 'rgba(240,235,224,0.22)' } }}
+            onMouseLeave={e => { e.currentTarget.style.background = anyLoading ? 'rgba(240,235,224,0.06)' : 'rgba(240,235,224,0.08)'; e.currentTarget.style.borderColor = BORDER_COLOR }}
           >
-            {submitting ? 'Sending…' : 'Send magic link →'}
+            <svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+            </svg>
+            {googleLoading ? 'Redirecting…' : 'Continue with Google'}
           </button>
-        </form>
 
-        <button
-          type="button"
-          onClick={() => setUsePhrase(true)}
-          style={{ display: 'block', margin: '22px auto 0', background: 'none', border: 0, cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.12em', color: MUTED, textDecoration: 'underline', textUnderlineOffset: 4 }}
-        >
-          SIGN IN WITH A RECOVERY PHRASE
-        </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, margin: '22px 0' }}>
+            <div style={{ flex: 1, height: 1, background: BORDER_COLOR }} />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'rgba(240,235,224,0.28)' }}>or email</span>
+            <div style={{ flex: 1, height: 1, background: BORDER_COLOR }} />
+          </div>
 
-        {/* Legal footer */}
-        <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'rgba(240,235,224,0.22)', textAlign: 'center', marginTop: 28, lineHeight: 1.9 }}>
-          BY CONTINUING YOU AGREE TO OUR{' '}
-          <a href="/terms" style={{ color: MUTED, textDecoration: 'underline', textUnderlineOffset: 3 }}>TERMS</a>
-          {' '}AND{' '}
-          <a href="/privacy" style={{ color: MUTED, textDecoration: 'underline', textUnderlineOffset: 3 }}>PRIVACY POLICY</a>
-          .{' '}NOT FINANCIAL ADVICE.
-        </p>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <AuthInput label="Your name" type="text" placeholder="Jane Smith" value={name}
+              onChange={(e) => setName(e.target.value)} disabled={anyLoading} autoComplete="name" />
+            <AuthInput label="Email address" type="email" placeholder="jane@example.com" value={email}
+              onChange={(e) => setEmail(e.target.value)} disabled={anyLoading} autoComplete="email" />
+
+            {error && (
+              <p role="alert" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#f87171', letterSpacing: '0.06em', margin: 0 }}>
+                {error}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={!canSubmit || anyLoading}
+              style={{
+                width: '100%', padding: '14px 16px',
+                background: canSubmit && !anyLoading ? CREAM : 'rgba(240,235,224,0.10)',
+                // The old disabled colour was 0.22 alpha on a 0.06 ground, which
+                // was effectively invisible — the primary action looked missing.
+                color: canSubmit && !anyLoading ? INK : 'rgba(240,235,224,0.45)',
+                border: `1px solid ${canSubmit && !anyLoading ? CREAM : BORDER_COLOR}`,
+                cursor: canSubmit && !anyLoading ? 'pointer' : 'not-allowed',
+                fontFamily: 'var(--font-sans)', fontSize: 14, fontWeight: 600,
+                letterSpacing: '-0.01em', transition: 'background 150ms, opacity 150ms',
+              }}
+              onMouseEnter={e => { if (canSubmit && !anyLoading) e.currentTarget.style.opacity = '0.88' }}
+              onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
+            >
+              {submitting ? 'Sending…' : 'Send magic link →'}
+            </button>
+          </form>
+
+          <button
+            type="button"
+            onClick={() => setUsePhrase(true)}
+            style={{ display: 'block', margin: '22px auto 0', background: 'none', border: 0, cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.12em', color: MUTED, textDecoration: 'underline', textUnderlineOffset: 4 }}
+          >
+            SIGN IN WITH A RECOVERY PHRASE
+          </button>
+
+          <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'rgba(240,235,224,0.26)', textAlign: 'center', marginTop: 26, lineHeight: 1.9 }}>
+            BY CONTINUING YOU AGREE TO OUR{' '}
+            <a href="/terms" style={{ color: MUTED, textDecoration: 'underline', textUnderlineOffset: 3 }}>TERMS</a>
+            {' '}AND{' '}
+            <a href="/privacy" style={{ color: MUTED, textDecoration: 'underline', textUnderlineOffset: 3 }}>PRIVACY POLICY</a>
+            .{' '}NOT FINANCIAL ADVICE.
+          </p>
+        </div>
       </div>
     </div>
+  )
+}
+
+function AuthBackLink() {
+  return (
+    <a
+      href="/"
+      style={{ position: 'absolute', top: 24, left: 'clamp(20px,6vw,56px)', fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.10em', color: MUTED, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6, transition: 'color 150ms' }}
+      onMouseEnter={e => { e.currentTarget.style.color = CREAM }}
+      onMouseLeave={e => { e.currentTarget.style.color = MUTED }}
+    >
+      ← Back
+    </a>
+  )
+}
+
+// Candlesticks drawn in box characters: the same ink-and-monospace vocabulary as
+// the terminal, so the first screen already looks like the product.
+const AUTH_ASCII = [
+  '                        ╷                 ╷      ',
+  '              ╷    ╷   ┌┴┐      ╷    ╷   ┌┴┐  ╷  ',
+  '         ╷   ┌┴┐  ┌┴┐  │ │ ╷   ┌┴┐  ┌┴┐  │ │ ┌┴┐ ',
+  '    ╷   ┌┴┐  │ │  │ │  │ │┌┴┐  │ │  │ │  └┬┘ │ │ ',
+  '   ┌┴┐  │ │  └┬┘  │ │  └┬┘│ │  └┬┘  │ │   ╵  └┬┘ ',
+  '   │ │  └┬┘   ╵   └┬┘   ╵ └┬┘   ╵   └┬┘       ╵  ',
+  '   └┬┘   ╵         ╵       ╵         ╵           ',
+  '    ╵                                            ',
+].join('\n')
+
+const AUTH_FEATURES = [
+  ['[##]', 'A brief built for you', 'stocks, crypto, government trades'],
+  ['[>_]', 'Axiom terminal', 'live memecoin radar and paper execution'],
+  ['[/\\]', 'An Elo ladder', 'every closed trade moves your rating'],
+]
+
+function AuthBrandPanel() {
+  return (
+    <aside className="tvx-auth__brand" aria-hidden="true">
+      <div
+        style={{ position: 'absolute', inset: 0, backgroundImage: GRAIN_URL, backgroundSize: '200px 200px', opacity: 0.05, pointerEvents: 'none' }}
+      />
+      <div style={{ position: 'relative' }}>
+        <ClassicLogo size={30} />
+      </div>
+
+      <div style={{ position: 'relative', maxWidth: 420 }}>
+        <h2 style={{ fontFamily: 'var(--font-display)', fontVariationSettings: "'wdth' 125, 'wght' 700", fontStretch: '125%', fontWeight: 700, fontSize: 'clamp(26px,2.6vw,36px)', lineHeight: 1.02, letterSpacing: '-0.04em', color: CREAM, margin: '0 0 16px' }}>
+          Learn the market<br />without losing<br />your shirt.
+        </h2>
+        <p style={{ fontFamily: 'var(--font-sans)', fontSize: 14, lineHeight: 1.7, color: MUTED, margin: '0 0 34px', maxWidth: 330 }}>
+          Paper trading only. No real money moves — just the habits, the data and a ladder to climb.
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {AUTH_FEATURES.map(([glyph, title, detail]) => (
+            <div key={title} className="tvx-auth__feature">
+              <span style={{ color: 'rgba(240,235,224,0.34)' }}>{glyph}</span>
+              <span><b>{title}</b> — {detail}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="tvx-auth__ascii" style={{ position: 'relative' }}>{AUTH_ASCII}</div>
+    </aside>
   )
 }
 

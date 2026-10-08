@@ -62,7 +62,10 @@
   color: var(--on-ink-text-2); background: transparent; border: 1px solid transparent; border-radius: 2px; cursor: pointer;
   transition: background 120ms, color 120ms;
 }
-.t-tab:hover { background: var(--on-ink-2); color: var(--paper); }
+/* An unselected tab had a transparent border, so a tablist that wrapped onto a
+   second line read as a run-on sentence rather than a row of controls. */
+.t-tab { border-color: var(--on-ink-border); }
+.t-tab:hover { background: var(--on-ink-2); color: var(--paper); border-color: var(--on-ink-3); }
 .t-tab[aria-selected="true"] { background: var(--paper); color: var(--ink-900); }
 
 .t-chip {
@@ -103,3 +106,22 @@
 .tvx-terminal .bg-\[\#9eae84\] { background: var(--paper); color: var(--ink-900); }
 .tvx-terminal .text-\[\#c8d3b6\], .tvx-terminal .text-\[\#c9c3b3\] { color: var(--on-ink-text-1); }
 .tvx-terminal .border-\[\#9eae84\]\/30 { border-color: var(--on-ink-border); }
+
+/* Horizontal scroller that admits it scrolls: items keep their width and the
+   trailing edge fades, so a clipped last chip reads as "more", not as broken. */
+.t-scroll-x {
+  display: flex;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+  mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 28px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 28px), transparent 100%);
+}
+.t-scroll-x::-webkit-scrollbar { display: none; }
+.t-scroll-x > * { flex: 0 0 auto; }
+
+/* Nothing to fade once everything fits. */
+@media (min-width: 900px) {
+  .t-scroll-x { mask-image: none; -webkit-mask-image: none; }
+}

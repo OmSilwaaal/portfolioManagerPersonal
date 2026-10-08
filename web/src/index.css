@@ -207,6 +207,82 @@ html:not(.dark) {
   }
 }
 
+/* ─── Auth / sign-up ───────────────────────────────────────────────────────
+   Split layout: a brand panel carrying the ASCII-and-grain language of the
+   landing page beside the form, so the first screen of the product does not
+   read as a lone input column floating in the dark. The panel is decorative,
+   so it collapses entirely on narrow screens rather than pushing the form
+   below the fold. */
+.tvx-auth {
+  display: grid;
+  grid-template-columns: 1fr;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--ink-900);
+}
+.tvx-auth__brand { display: none; }
+.tvx-auth__form {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: clamp(72px, 10vh, 96px) clamp(20px, 6vw, 56px) clamp(32px, 6vh, 56px);
+  position: relative;
+}
+.tvx-auth__col { width: 100%; max-width: 380px; }
+
+/* Wordmark above the form, for when the brand panel is not showing. Driven by a
+   class rather than an inline style, which a utility class could never override,
+   and tied to the same breakpoint as the split so it can't double up. */
+.tvx-auth__mark { display: flex; justify-content: center; margin-bottom: 28px; }
+
+@media (min-width: 900px) {
+  .tvx-auth { grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr); }
+  .tvx-auth__mark { display: none; }
+  .tvx-auth__brand {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 44px clamp(32px, 4vw, 64px);
+    border-right: 1px solid rgba(240, 235, 224, 0.10);
+    position: relative;
+    overflow: hidden;
+  }
+}
+
+/* The ASCII strip is ornament: never let it widen the page or steal a tap. */
+.tvx-auth__ascii {
+  font-family: var(--font-mono);
+  font-size: clamp(7px, 0.78vw, 11px);
+  line-height: 1.22;
+  white-space: pre;
+  color: rgba(240, 235, 224, 0.20);
+  user-select: none;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.tvx-auth__feature {
+  display: flex;
+  gap: 14px;
+  align-items: baseline;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.7;
+  color: rgba(240, 235, 224, 0.62);
+}
+.tvx-auth__feature b {
+  color: var(--paper);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+/* Visible keyboard focus — the old inputs had none. */
+.tvx-auth :where(input, button, a):focus-visible {
+  outline: 2px solid var(--moss-200);
+  outline-offset: 2px;
+}
+
 @layer utilities {
   /* While a workspace panel is being dragged or resized, drop the frosted-glass
      backdrop on the canvas. backdrop-filter re-blurs everything behind a moving

@@ -166,7 +166,7 @@ function Row({ r, board }) {
 /* ── ladder strip ───────────────────────────────────────────────────────── */
 function Ladder({ elo }) {
   return (
-    <ol aria-label="Elo tiers" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', gap: 6, overflowX: 'auto' }}>
+    <ol aria-label="Elo tiers" className="t-scroll-x" style={{ listStyle: 'none', margin: 0, padding: 0, gap: 6 }}>
       {TIERS.map((t) => {
         const here = elo != null && tierFor(elo).id === t.id
         return (
@@ -217,7 +217,7 @@ export default function Leaderboard() {
 
       <Ladder elo={meQ.data?.elo} />
 
-      <div role="tablist" aria-label="Boards" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+      <div role="tablist" aria-label="Boards" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         {BOARDS.map((x) => <button key={x.id} role="tab" aria-selected={board === x.id} onClick={() => setBoard(x.id)} className="t-tab">{x.label}</button>)}
       </div>
       <p style={{ ...MONO, fontSize: 12, color: 'var(--on-ink-text-3)', margin: '-8px 0 0' }}>{b.hint}</p>
