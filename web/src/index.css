@@ -6,10 +6,23 @@
 
 /* ─── Travauxus Design Tokens ──────────────────────────────────────────────── */
 :root {
-  /* Ink & Paper anchors */
-  --ink-900:  #0b0b0b;
-  --ink-950:  #070707;
-  --ink-800:  #141414;
+  /* Ink & Paper anchors.
+     The ink ramp is a warm olive near-black (hue ~50), not a neutral one. The
+     ASCII glyph ramp runs #3a3a37 -> #9a9a91, which is warm-neutral, and paper,
+     ochre and moss all sit between 37 and 84 degrees — a neutral #0b0b0b behind
+     warm glyphs made them read as grubby rather than drawn. Every step keeps at
+     least 13:1 against --paper, so nothing lost contrast in the move. */
+  --ink-950:  #070704;  /* deepest recess: inputs, chart wells */
+  --ink-900:  #13120c;  /* page background */
+  --ink-800:  #1f1d14;  /* raised panel — 1.11 on the page, so it lifts without a border */
+  --ink-700:  #2b2819;  /* hover / selected row */
+  --ink-600:  #39351f;  /* pressed / strong neutral fill */
+
+  /* Terminal surfaces. The canvas is darker than the page so floating panels
+     read as above it, and the texture is the ASCII backdrop's glyph colour:
+     1.13 against the canvas, which is present as grain and nothing more. */
+  --terminal-canvas:  #0d0c08;
+  --terminal-texture: #1d1b12;
   --paper:    #f0ebe0;
   --paper-warm: #ece5d5;
   --paper-cool: #f6f3eb;
@@ -49,8 +62,17 @@
   --urgency-low:   #9eae84;
 
   /* Price deltas */
-  --positive: #7ea968;
-  --negative: #d35c4a;
+  /* Lifted from #7ea968 / #d35c4a: on the raised panel those sat at 6.2 and
+     4.3, and the red missed AA for body text. These read 7.4 and 5.0. */
+  --positive: #8cb874;
+  --negative: #dd6a56;
+
+  /* Buy/sell action fills. Saturated enough to find without reading, with the
+     label in ink rather than paper — ink on these clears 7.8 and 4.8. */
+  --buy:      #6cb24f;
+  --buy-ink:  #070704;
+  --sell:     #d44e38;
+  --sell-ink: #070704;
 
   /* Party (gov trades) */
   --party-dem: #5b7fbb;
@@ -108,6 +130,10 @@ html:not(.dark) {
   --ink-900:  #efeee9;
   --ink-950:  #e6e5df;
   --ink-800:  #e8e7e1;
+  --ink-700:  #dedcd4;
+  --ink-600:  #cfcdc2;
+  --terminal-canvas:  #e4e2da;
+  --terminal-texture: #d3d0c5;
   --paper:    #111110;
   --paper-warm: #1b1b19;
   --paper-cool: #0b0b0a;
@@ -141,6 +167,10 @@ html:not(.dark) {
   --urgency-low:   #3c5a22;
   --positive: #2f7a3a;
   --negative: #b3392a;
+  --buy:      #2f7a3a;
+  --buy-ink:  #f7f6f2;
+  --sell:     #b3392a;
+  --sell-ink: #f7f6f2;
   --party-dem: #2f5aa8;
   --party-rep: #a8372f;
 
@@ -323,3 +353,36 @@ html:not(.dark) {
 .tvx-navrow:not([aria-current="page"]):hover { background: var(--on-ink-2) !important; }
 .tvx-card { transition: transform 120ms, box-shadow 120ms; }
 .tvx-card:hover { transform: translate(-2px, -2px); box-shadow: 4px 4px 0 var(--on-ink-text-4); }
+
+/* ─── Legacy neutral surfaces → the warm ink ramp ──────────────────────────
+   About 190 call sites across the app hard-code neutral greys (bg-[#141414],
+   border-[#2a2a2a], …) from before the tokens existed. Against the warm olive
+   ink ramp a neutral grey reads as a cold patch, so rather than rewrite every
+   call site — and miss some — they are remapped here, the same way terminal.css
+   already remaps the old text tiers.
+
+   Scoped to html.dark so these never fight the generated light-theme.css rules,
+   which are html:not(.dark). Specificity (html.dark + class) beats the bare
+   Tailwind utility without needing !important.
+
+   New work should use var(--ink-*) directly; this is for what is already there. */
+html.dark .bg-\[\#080808\], html.dark .bg-\[\#0a0a0a\] { background-color: var(--ink-950); }
+html.dark .bg-\[\#0f0f0f\], html.dark .bg-\[\#111\]     { background-color: var(--ink-900); }
+html.dark .bg-\[\#141414\], html.dark .bg-\[\#1a1a1a\]  { background-color: var(--ink-800); }
+html.dark .bg-\[\#1f1f1f\], html.dark .bg-\[\#222\], html.dark .bg-\[\#252525\] { background-color: var(--ink-700); }
+html.dark .bg-\[\#2a2a2a\], html.dark .bg-\[\#3f3f46\]  { background-color: var(--ink-600); }
+html.dark .bg-\[\#0f0f0f\]\/60   { background-color: color-mix(in srgb, var(--ink-900) 60%, transparent); }
+html.dark .bg-\[\#121212\]\/95   { background-color: color-mix(in srgb, var(--ink-900) 95%, transparent); }
+
+/* Hairlines: two weights only — a faint one between rows, a firmer one around
+   a surface. Both are paper at low alpha, so they warm with the background. */
+html.dark .border-\[\#1a1a1a\], html.dark .border-\[\#1b1b1b\], html.dark .border-\[\#1e1e1e\],
+html.dark .border-\[\#1f1f1f\], html.dark .border-\[\#222\] { border-color: var(--on-ink-border); }
+html.dark .border-\[\#2a2a2a\], html.dark .border-\[\#3a3a3a\], html.dark .border-\[\#3f3f46\] { border-color: var(--on-ink-3); }
+html.dark .divide-\[\#2a2a2a\] > :not([hidden]) ~ :not([hidden]) { border-color: var(--on-ink-3); }
+
+/* Hover variants of the same legacy greys. A :hover utility outranks the plain
+   remap above, so it needs its own rule or a hovered row snaps back to grey. */
+html.dark .hover\:bg-\[\#141414\]:hover { background-color: var(--ink-800); }
+html.dark .hover\:bg-\[\#1f1f1f\]:hover, html.dark .hover\:bg-\[\#252525\]:hover { background-color: var(--ink-700); }
+html.dark .hover\:border-\[\#2a2a2a\]:hover, html.dark .hover\:border-\[\#3a3a3a\]:hover { border-color: var(--on-ink-3); }
