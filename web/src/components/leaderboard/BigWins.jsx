@@ -40,10 +40,6 @@ function Avatar({ w, size = 44 }) {
 // A big win. Pro traders get their calling card behind them and a killcam; free traders get a plain tier-coloured header (no card, no effect).
 function WinCard({ w, mine }) {
   const handle = w.username ? `@${w.username}` : w.displayName ?? 'trader'
-  // Seeded demo rows carry no userId: they are sample data, not a real person's
-  // trade, so exporting one takes nothing from anybody. A real trader's win that
-  // is not yours stays off limits.
-  const canExport = mine || !w.userId
   const tier = tierById(w.tier)
   const top = w.rank <= 3
   return (
@@ -93,9 +89,11 @@ function WinCard({ w, mine }) {
 
           {/* Exporting does not need the on-screen killcam — the recorder draws the
               scene itself from the trade's seed — so this is offered on any win of
-              yours, with or without the Pro calling card above it. */}
+              yours, with or without the Pro calling card above it. Seeded demo rows
+              are treated like any other account: only their owner can export them,
+              and an unclaimed one has no owner, so nobody can. */}
           <ExportKillcamButton
-            mine={canExport}
+            mine={mine}
             anim={w.anim}
             seed={w.id}
             ticker={w.symbol}
