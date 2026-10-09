@@ -2,7 +2,6 @@ const express = require('express')
 const router = express.Router()
 const { requireAuth } = require('../middleware/auth')
 const { supabase } = require('../services/supabaseAdmin')
-const { safeEqual } = require('../middleware/validate')
 
 const stripe = process.env.STRIPE_SECRET_KEY
   ? require('stripe')(process.env.STRIPE_SECRET_KEY)
@@ -34,31 +33,31 @@ router.post('/pro-checkout', requireAuth, async (req, res) => {
   }
 })
 
-// POST /api/stripe/redeem-code — validate a promo code server-side and grant Pro
-router.post('/redeem-code', requireAuth, async (req, res) => {
-  const { code } = req.body ?? {}
-  if (!code || typeof code !== 'string' || code.length > 100) {
-    return res.status(400).json({ error: true, message: 'No code provided.' })
-  }
-
-  const validCode = process.env.PROMO_CODE
-  if (!validCode) {
-    return res.status(503).json({ error: true, message: 'Promo codes not configured.' })
-  }
-
-  if (!safeEqual(code.trim().toUpperCase(), validCode.trim().toUpperCase())) {
-    return res.status(400).json({ error: true, message: 'Invalid code. Please check and try again.' })
-  }
-
-  const { error } = await supabase.auth.admin.updateUserById(req.user.id, {
-    app_metadata: { isPro: true },
+// POST /api/stripe/redeem-code — RETIRED. Kept only to answer the existing UI politely.
+//
+// This used to compare a submitted string against a single shared PROMO_CODE in the
+// environment and, on a match, set `app_metadata.isPro = true` — permanently, for anyone who
+// ever learned that one string. That is the "admin password for free Pro" path, and it cannot
+// be made safe by making the password longer:
+//
+//   * one constant grants a paid tier to everybody who has it, forever
+//   * it is unattributable — after a leak you cannot tell who used it or what they got
+//   * it cannot be revoked for one person without revoking it for everyone
+//   * it leaves no audit trail, so with real money in the system there is no way to
+//     reconstruct who was comped and by whom
+//
+// The replacement is in services/entitlements.js: a per-user `admin` role row, granted by an
+// authenticated admin account, writing an `admin_audit` row and a bounded `pro_grants` row
+// for every comp. See POST /api/billing/admin/pro.
+//
+// It now grants nothing, whatever PROMO_CODE is set to.
+router.post('/redeem-code', requireAuth, (req, res) => {
+  console.warn('[stripe] redeem-code was called but is retired; it grants nothing. Use /api/billing/admin/pro.')
+  res.status(410).json({
+    error: true,
+    code: 'retired',
+    message: 'Promo codes are no longer accepted. Ask an admin to apply Pro to your account.',
   })
-  if (error) {
-    console.error('[stripe] redeem-code failed to set isPro', req.user.id, error)
-    return res.status(500).json({ error: true, message: 'Something went wrong. Please try again.' })
-  }
-
-  res.json({ success: true })
 })
 
 // GET /api/stripe/status — sanity check (auth required: don't advertise config to the public)
