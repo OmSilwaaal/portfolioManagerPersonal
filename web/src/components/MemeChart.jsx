@@ -7,8 +7,8 @@ import { MousePointer2, TrendingUp, Minus, MessageSquarePlus, Eraser } from 'luc
 
 // Chart colours live in the canvas, so they can't use CSS variables: one palette per theme.
 const PALETTES = {
-  dark: { bg: '#0b0b0b', text: '#b3ad9d', grid: 'rgba(255,255,255,0.05)', border: '#2a2a28', up: '#7ea968', down: '#d35c4a', volUp: 'rgba(126,169,104,0.45)', volDown: 'rgba(211,92,74,0.45)' },
-  light: { bg: '#efeee9', text: '#55554f', grid: 'rgba(17,17,16,0.08)', border: '#c9c8c1', up: '#2f7a3a', down: '#b3392a', volUp: 'rgba(47,122,58,0.4)', volDown: 'rgba(179,57,42,0.4)' },
+  dark: { bg: '#070704', text: '#b4afa4', grid: 'rgba(240,235,224,0.06)', border: '#2b2819', up: '#8cb874', down: '#dd6a56', volUp: 'rgba(140,184,116,0.45)', volDown: 'rgba(221,106,86,0.45)' },
+  light: { bg: '#e6e5df', text: '#55554f', grid: 'rgba(17,17,16,0.08)', border: '#cfcdc2', up: '#2f7a3a', down: '#b3392a', volUp: 'rgba(47,122,58,0.4)', volDown: 'rgba(179,57,42,0.4)' },
 }
 const ACCENT = '#d6b87a'
 
@@ -23,6 +23,13 @@ const TOOLS = [
   { id: 'hline', icon: Minus, label: 'Horizontal line' },
   { id: 'note', icon: MessageSquarePlus, label: 'Note' },
 ]
+
+// candleMerge keeps the series ascending, but this component is also handed data
+// straight from the API, so the cheap check earns the right to skip the sort.
+function isAscending(list) {
+  for (let i = 1; i < list.length; i++) if (list[i].time < list[i - 1].time) return false
+  return true
+}
 
 function precisionFor(price) {
   if (!price || price >= 1) return 4
@@ -40,6 +47,9 @@ export default function MemeChart({ candles, fitKey }) {
   const hostRef = useRef(null)
   const apiRef = useRef({})
   const drawRef = useRef({ lines: [], priceLines: [], markers: [], pending: null })
+  const appliedRef = useRef(null)      // what the series currently holds, so a tick can be an update()
+  const precisionRef = useRef(null)
+  const positionedRef = useRef(null)   // the fitKey the view was last positioned for
   const [mode, setMode] = useState('cursor')
   const isDark = useSelector((s) => s.theme.isDark)
   const pal = PALETTES[isDark ? 'dark' : 'light']
@@ -116,14 +126,45 @@ export default function MemeChart({ candles, fitKey }) {
   useEffect(() => {
     const { chart, candle, volume } = apiRef.current
     if (!chart || !candles?.length) return
-    const sorted = [...candles].sort((a, b) => a.time - b.time)
-    const p = precisionFor(sorted[sorted.length - 1].close)
-    candle.applyOptions({ priceFormat: { type: 'price', precision: p, minMove: Math.pow(10, -p) } })
-    candle.setData(sorted.map(({ time, open, high, low, close }) => ({ time, open, high, low, close })))
-    volume.setData(sorted.map((c) => ({
-      time: c.time, value: c.volume || 0, color: c.close >= c.open ? pal.volUp : pal.volDown,
-    })))
-  }, [candles, pal])
+
+    // setData() replaces the whole dataset, so using it for a live tick costs a
+    // copy, a sort and two full maps every time a single price moves — and the
+    // series is rebuilt under the user's cursor. The library has update() for
+    // exactly this, which is why the cheap cases below are detected first.
+    const prev = appliedRef.current
+    const last = candles[candles.length - 1]
+    const bar = ({ time, open, high, low, close }) => ({ time, open, high, low, close })
+    const vol = (c) => ({ time: c.time, value: c.volume || 0, color: c.close >= c.open ? pal.volUp : pal.volDown })
+
+    // Price precision is derived from the latest close, and re-applying it is not
+    // free, so it is only pushed when it actually changes.
+    const p = precisionFor(last.close)
+    if (p !== precisionRef.current) {
+      precisionRef.current = p
+      candle.applyOptions({ priceFormat: { type: 'price', precision: p, minMove: Math.pow(10, -p) } })
+    }
+
+    const sameSeries = prev && prev.fitKey === fitKey && prev.palette === pal && prev.first === candles[0].time
+    // The newest bucket moved in place: one point, not a dataset.
+    if (sameSeries && candles.length === prev.len && last.time === prev.last) {
+      candle.update(bar(last))
+      volume.update(vol(last))
+    // A bucket closed and a new one opened: settle the old one, then append.
+    } else if (sameSeries && candles.length === prev.len + 1 && candles[candles.length - 2].time === prev.last) {
+      const settled = candles[candles.length - 2]
+      candle.update(bar(settled))
+      volume.update(vol(settled))
+      candle.update(bar(last))
+      volume.update(vol(last))
+    } else {
+      // Anything else — a new token, a timeframe change, backfilled history, a
+      // theme flip — is a genuine replacement, and update() cannot express it.
+      const sorted = isAscending(candles) ? candles : [...candles].sort((a, b) => a.time - b.time)
+      candle.setData(sorted.map(bar))
+      volume.setData(sorted.map(vol))
+    }
+    appliedRef.current = { len: candles.length, first: candles[0].time, last: last.time, palette: pal, fitKey }
+  }, [candles, pal, fitKey])
 
   // Switching theme restyles the live chart instead of rebuilding it.
   useEffect(() => {
@@ -138,9 +179,15 @@ export default function MemeChart({ candles, fitKey }) {
     candle.applyOptions({ upColor: pal.up, downColor: pal.down, borderUpColor: pal.up, borderDownColor: pal.down, wickUpColor: pal.up, wickDownColor: pal.down })
   }, [pal])
 
+  // Position the view on a token/timeframe switch and when the first data lands —
+  // but never again. This used to run on every change of candles.length, so each
+  // new bar yanked the view back and undid whatever the user had panned or
+  // zoomed to. lightweight-charts already follows new bars on its own while the
+  // view is at the right edge, and leaves it alone when it is not.
   useEffect(() => {
     const { chart } = apiRef.current
-    if (!chart || !candles?.length) return
+    if (!chart || !candles?.length || positionedRef.current === fitKey) return
+    positionedRef.current = fitKey
     const ts = chart.timeScale()
     if (candles.length < DENSE_THRESHOLD) {
       ts.applyOptions({ barSpacing: FIXED_BAR_SPACING, rightOffset: 4 })
