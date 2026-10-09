@@ -119,6 +119,21 @@ test('a win that cannot be logged never throws (the trade it describes must stil
   assert.strictEqual(wins.recordWin({ userId: BOB, symbol: 'PEPE', pnlUsd: 100 }, broken), null);
 });
 
+test('a recorded win can pin its killcam scene, and rejects an unknown one', async () => {
+  const db = getDb();
+  // These rows would otherwise show up in the winners feed and skew the
+  // assertions in the other tests, so this cleans up after itself.
+  try {
+    wins.recordWin({ userId: BOB, kind: 'meme', symbol: 'PINNED', pnlUsd: 120, pnlPct: 9, anim: 'lion' }, db);
+    wins.recordWin({ userId: BOB, kind: 'meme', symbol: 'NOTREAL', pnlUsd: 120, pnlPct: 9, anim: 'nope' }, db);
+    const row = (sym) => db.prepare('SELECT anim FROM trade_wins WHERE user_id = ? AND symbol = ?').get(BOB, sym);
+    assert.strictEqual(row('PINNED').anim, 'lion', 'an allowed scene is used as given');
+    assert.ok(wins.ANIMS.includes(row('NOTREAL').anim), 'an unknown scene falls back to a real one');
+  } finally {
+    db.prepare("DELETE FROM trade_wins WHERE user_id = ? AND symbol IN ('PINNED','NOTREAL')").run(BOB);
+  }
+});
+
 test('winners feed: real + seeded wins, ranked by profit, USD + SOL on every row', async () => {
   const db = getDb();
   db.prepare("INSERT INTO user_cosmetics (user_id, banner, effect) VALUES (?, 'storm', 'fire')").run(BOB);

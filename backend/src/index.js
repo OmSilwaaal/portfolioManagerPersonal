@@ -174,7 +174,6 @@ app.use('/api/memecoin-alerts', requireAuth, require('./routes/memecoinAlerts'))
 app.use('/api/sms', requireAuth, smsRouter);
 app.use('/api/friends', requireAuth, friendsRouter);
 app.use('/api/messages', requireAuth, messagesRouter);
-app.use('/api/winners', requireAuth, winnersRouter);
 app.use('/api/referrals', requireAuth, referralsRouter);
 app.use('/api/recovery', recoveryRouter);
 app.use('/api/recover', recoverSignInRouter); // public: signing in with a recovery phrase
@@ -182,6 +181,9 @@ app.use('/api/preferences', requireAuth, preferencesRouter);
 app.use('/api/portfolio', requireAuth, portfolioRouter);
 
 // Public routes — no auth needed
+// The winners board is the public shop window: handles, calling cards and
+// profit on the biggest paper trades. Nothing here is private to an account.
+app.use('/api/winners', winnersRouter);
 app.use('/api/calendar', calendarRouter);
 app.use('/api/search', searchRouter);
 app.use('/api/paper-trading', paperTradingRouter);

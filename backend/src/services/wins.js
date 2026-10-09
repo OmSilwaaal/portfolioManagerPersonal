@@ -19,7 +19,10 @@ function pickAnim() {
 }
 const animFor = (id) => ANIMS[Math.abs(Number(id) || 0) % ANIMS.length];
 
-/** Log a profitable sell. Never throws: a failed log must not fail the trade it describes. */
+/**
+ * Log a profitable sell. Never throws: a failed log must not fail the trade it
+ * describes. `w.anim` pins the killcam scene; omit it and one is picked.
+ */
 function recordWin(w, dbArg) {
   try {
     const db = dbArg || getDb(); // resolved inside the guard: a database problem must never fail the trade being logged
@@ -31,7 +34,8 @@ function recordWin(w, dbArg) {
     ).run(
       String(w.userId), w.kind === 'meme' ? 'meme' : 'stock', String(w.symbol).slice(0, 24).toUpperCase(),
       w.address ? String(w.address).slice(0, 64) : null,
-      num(w.entry), num(w.exit), num(w.qty), pnlUsd, num(w.pnlPct), num(w.solPrice), pickAnim()
+      num(w.entry), num(w.exit), num(w.qty), pnlUsd, num(w.pnlPct), num(w.solPrice),
+      ANIMS.includes(w.anim) ? w.anim : pickAnim()
     );
     return Number(info.lastInsertRowid);
   } catch (err) {
