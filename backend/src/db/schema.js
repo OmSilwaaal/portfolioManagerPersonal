@@ -1,5 +1,6 @@
 const Database = require('better-sqlite3');
 const path = require('path');
+const fs = require('fs');
 
 // On Railway, mount a Volume and the database lives on it, surviving deploys.
 // Locally it sits in the backend directory.
@@ -16,8 +17,62 @@ const DB_PATH = process.env.DB_PATH || (
 
 let db;
 
+// Count real tables, or -1 if the file cannot be opened as a database.
+function userTableCount(file) {
+  try {
+    const d = new Database(file, { readonly: true });
+    const n = d.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").get().n;
+    d.close();
+    return n;
+  } catch { return -1; }
+}
+
+/**
+ * One-time rescue of a database stranded by the old path bug.
+ *
+ * Until f243179 the volume path was joined with the '../..' the local fallback
+ * needs, so on Railway the file landed at the container root instead of on the
+ * volume — ephemeral, and wiped by each deploy. If that stranded file is still
+ * present and the volume has nothing in it yet, fold it onto the volume before
+ * anything opens the database.
+ *
+ * VACUUM INTO is used rather than a file copy because it is a consistent
+ * snapshot and it includes whatever is still sitting in the -wal, which a plain
+ * copy of the .sqlite silently drops.
+ *
+ * Deliberately conservative: it runs only when the destination has no tables of
+ * its own, so it can never overwrite live data, and it never throws — a failed
+ * rescue must not stop the server booting.
+ */
+function rescueStrandedDatabase() {
+  const volume = process.env.RAILWAY_VOLUME_MOUNT_PATH;
+  if (!volume || process.env.DB_PATH) return;
+
+  const stranded = path.join(volume, '../../market_intelligence.sqlite'); // the old, buggy expression
+  if (path.resolve(stranded) === path.resolve(DB_PATH) || !fs.existsSync(stranded)) return;
+
+  const strandedTables = userTableCount(stranded);
+  if (strandedTables <= 0) return;                       // nothing worth moving
+
+  const destTables = fs.existsSync(DB_PATH) ? userTableCount(DB_PATH) : 0;
+  if (destTables > 0) return;                            // the volume already holds data; leave it alone
+
+  try {
+    // VACUUM INTO refuses an existing destination, and the only thing it could
+    // be here is the empty placeholder we just checked.
+    for (const f of [DB_PATH, `${DB_PATH}-wal`, `${DB_PATH}-shm`]) fs.rmSync(f, { force: true });
+    const src = new Database(stranded, { readonly: true });
+    src.exec(`VACUUM INTO '${DB_PATH.replace(/'/g, "''")}'`);
+    src.close();
+    console.log(`[db] recovered ${strandedTables} tables from ${stranded} onto the volume at ${DB_PATH}`);
+  } catch (err) {
+    console.error('[db] could not recover the stranded database:', err.message);
+  }
+}
+
 function getDb() {
   if (!db) {
+    rescueStrandedDatabase();
     db = new Database(DB_PATH);
     db.pragma('journal_mode = WAL');
     initSchema();
