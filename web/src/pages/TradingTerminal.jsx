@@ -792,7 +792,6 @@ function OrderTicket({ token, position }) {
   const submit = async () => {
     if (!address || !validAmount || !validSlip || trading) return
     setStatus(null)
-    setArmed(false)
     // clientOrderId lets the server collapse an accidental double submit into one fill
     const body = { address, side, ...orderAmount, slippageBps, clientOrderId: newOrderId() }
     const res = await trade(body)
