@@ -17,6 +17,16 @@ function tagMock(data) {
 }
 export const isMockData = (data) => !!(data && data.__mock)
 
+/* Why a candle series is empty, carried on the series itself (non-enumerable, like __mock above)
+ * so the panel can explain it without the endpoint having to return an envelope. */
+const REASON = '__chartReason'
+function tagReason(series, reason) {
+  if (!reason || !series || typeof series !== 'object') return series
+  try { Object.defineProperty(series, REASON, { value: reason, enumerable: false, configurable: true }) } catch { /* frozen */ }
+  return series
+}
+export const chartReason = (d) => (d && d[REASON]) || null
+
 // Unwrap common envelope shapes: [..] | { tokens: [..] } | { data: [..] }
 const unwrap = (d, key) => (Array.isArray(d) ? d : d?.[key] ?? d?.data ?? d)
 
@@ -106,10 +116,32 @@ export function usePoll(ms) {
   return live ? ms * LIVE_FACTOR : ms
 }
 
+/* ─── Transient upstream failures, which the chart's first load is full of ──────────
+ * The aggregator behind the candles refuses a sizeable share of first loads on a freshly listed
+ * coin and then answers the very same request a moment later. The backend retries once or twice
+ * inside its own request; RTK Query retries nothing at all, so without this the answer for a coin
+ * the user just clicked settles into an error box until the next poll. Retrying here keeps the
+ * query in its loading state, which is what is actually true.
+ *
+ * Bounded (two extra attempts), backed off and jittered, and never for a 429 — that one is our own
+ * limiter telling every poller to stop, and noteRateLimit already handles it. */
+const RETRY_WAITS = [500, 1200]
+const TRANSIENT = new Set([502, 503, 504, 'FETCH_ERROR', 'TIMEOUT_ERROR'])
+const isTransient = (err) => TRANSIENT.has(err?.status)
+const jitter = (ms) => Math.round(ms * (0.7 + Math.random() * 0.6))
+
+async function attempt(run) {
+  for (let i = 0; ; i += 1) {
+    const res = await run()
+    if (!res?.error || !isTransient(res.error) || i >= RETRY_WAITS.length) return res
+    await new Promise((r) => setTimeout(r, jitter(RETRY_WAITS[i])))
+  }
+}
+
 /** queryFn builder: real endpoint first; in dev a failure falls back to the mock; prod surfaces the error. */
-function withMock(request, mock, key, norm) {
+function withMock(request, mock, key, norm, { retry = false } = {}) {
   return async (arg, _api, _extra, baseQuery) => {
-    const res = await baseQuery(request(arg))
+    const res = retry ? await attempt(() => baseQuery(request(arg))) : await baseQuery(request(arg))
     noteRateLimit(res)
     if (!res.error) {
       const d = key ? unwrap(res.data, key) : res.data
@@ -120,13 +152,43 @@ function withMock(request, mock, key, norm) {
   }
 }
 /** queryFn builder with no mock fallback (still tracks 429s). */
-function plain(request, transform) {
+function plain(request, transform, { retry = false } = {}) {
   return async (arg, _api, _extra, baseQuery) => {
-    const res = await baseQuery(request(arg))
+    const res = retry ? await attempt(() => baseQuery(request(arg))) : await baseQuery(request(arg))
     noteRateLimit(res)
     if (res.error) return { error: res.error }
     return { data: transform ? transform(res.data) : res.data }
   }
+}
+
+/* ─── Candles ─────────────────────────────────────────────────────────
+ * Closed buckets come back authoritative, but the bucket still forming is already being built
+ * from the price stream and is ahead of this answer; applyLiveCandles puts it back, or the chart
+ * rewinds to whatever was indexed when the request was served.
+ *
+ * A coin whose pool no aggregator has indexed yet — a pump.fun launch still on its bonding curve —
+ * has no candles upstream and answers 404. That is not a chart failure, it is a chart that has not
+ * started: the price stream builds its buckets here, and all it needs is an array to land in. So a
+ * 404 answers with the series accumulated so far (empty on the first poll) rather than an error,
+ * tagged with the reason so the panel can say why it is bare. Returning the accumulated series,
+ * not a fresh [], is what stops each poll from wiping the live buckets that have formed since. */
+const isNoPool = (err) => err?.status === 404
+
+// No attempt() here on purpose: the chart panel retries this one itself, so that the user can see
+// it happening, and two retry layers would multiply into a dozen requests for one click.
+function ohlcvQueryFn(arg, api, _extra, baseQuery) {
+  const url = `/memecoins/${arg.address}/ohlcv?tf=${arg.tf}`
+  return baseQuery(url).then((res) => {
+    noteRateLimit(res)
+    if (!res.error) return { data: applyLiveCandles(arg, unwrap(res.data, 'candles')) }
+    if (isNoPool(res.error)) {
+      const held = memecoinApi.endpoints.getMemecoinOhlcv.select(arg)(api.getState())?.data
+      const series = Array.isArray(held) ? held : []
+      return { data: tagReason(applyLiveCandles(arg, series), 'no-pool') }
+    }
+    if (USE_MOCK_ON_FAIL && res.error.status !== 429) return { data: tagMock(mockOhlcv(arg.address, arg.tf)) }
+    return { error: res.error }
+  })
 }
 
 // 'MemePositions' is not in baseApi's tagTypes (owned elsewhere); add it here.
@@ -148,21 +210,13 @@ export const memecoinApi = api.injectEndpoints({
       queryFn: withMock((q) => `/memecoins/search?q=${encodeURIComponent(q)}`, mockSearch, 'tokens', normTokens),
     }),
     getMemecoin: builder.query({
-      queryFn: withMock((address) => `/memecoins/${address}`, mockTokenDetail, undefined, normToken),
+      queryFn: withMock((address) => `/memecoins/${address}`, mockTokenDetail, undefined, normToken, { retry: true }),
       // The cache entry's lifetime is the subscription: the stream is told which token the
       // terminal is showing without the terminal having to say so.
       onCacheEntryAdded: liveUpdates((address) => ({ address })),
     }),
     getMemecoinOhlcv: builder.query({
-      queryFn: withMock(
-        ({ address, tf }) => `/memecoins/${address}/ohlcv?tf=${tf}`,
-        ({ address, tf }) => mockOhlcv(address, tf),
-        'candles',
-        // Closed buckets come back authoritative, but the bucket still forming is already
-        // being built from the price stream and is ahead of this answer. Put it back, or the
-        // chart rewinds to whatever was indexed when the request was served.
-        (candles, arg) => applyLiveCandles(arg, candles),
-      ),
+      queryFn: ohlcvQueryFn,
       onCacheEntryAdded: liveUpdates(({ address, tf }) => ({ address, tf })),
     }),
     getMemecoinTrades: builder.query({
@@ -174,7 +228,7 @@ export const memecoinApi = api.injectEndpoints({
       queryFn: plain((list) => `/memecoins/signals?list=${list}`, (r) => r?.signals || []),
     }),
     getMemecoinSignal: builder.query({
-      queryFn: plain((address) => `/memecoins/${address}/signal`),
+      queryFn: plain((address) => `/memecoins/${address}/signal`, undefined, { retry: true }),
       onCacheEntryAdded: liveUpdates((address) => ({ address })),
     }),
     // Radar discovery feed (PumpPortal launches + model score + security flags). Answers {enabled:false, reason} when off.

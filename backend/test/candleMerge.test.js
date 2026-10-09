@@ -346,3 +346,35 @@ test('live has nothing to say once its bucket has closed', () => {
   assert.strictEqual(h.store.live(ADDR, '1m', null), null);
   assert.strictEqual(h.store.live(ADDR, '7m', null), null, 'or for a timeframe we do not know');
 });
+
+// A coin whose pool no aggregator has indexed yet starts with no series at all: the chart is
+// built from live ticks and nothing else. (This is applyLiveCandles in web/src/api/liveFeed,
+// which is those same two lines around a series that happens to be empty.)
+test('a token with no history anywhere grows a chart from live ticks alone', () => {
+  const h = live(BASE + 10);
+  let series = [];
+  const apply = () => {
+    const c = h.store.live(ADDR, '1m', series[series.length - 1] ?? null);
+    series = c ? M.mergeCandle(series, c, '1m') : series;
+  };
+
+  apply();
+  assert.deepStrictEqual(series, [], 'nothing live yet: still empty, not a fabricated candle');
+
+  h.tick({ price: 10, volumeUsd: 40 });
+  apply();
+  assert.strictEqual(series.length, 1, 'seeded from empty by the first tick');
+  assert.strictEqual(series[0].time, BASE);
+  assert.strictEqual(series[0].volume, 40);
+
+  const unchanged = series;
+  apply();
+  assert.strictEqual(series, unchanged, 'a re-merge with nothing new keeps the array reference');
+
+  const first = series[0];
+  h.at(BASE + 70);
+  h.tick({ price: 12 });
+  apply();
+  assert.deepStrictEqual(series.map((c) => c.time), [BASE, BASE + 60], 'and grows forward only');
+  assert.strictEqual(series[0], first, 'the bucket that closed keeps its identity');
+});

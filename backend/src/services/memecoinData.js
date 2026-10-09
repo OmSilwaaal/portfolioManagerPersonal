@@ -6,6 +6,28 @@ const geckoBudget = require('./geckoBudget');
 
 const DEXSCREENER = 'https://api.dexscreener.com';
 const GECKO = 'https://api.geckoterminal.com/api/v2';
+
+// GeckoTerminal's keyless tier is the single hardest limit in this file: measured from one IP it
+// starts refusing at roughly 6-8 calls a minute, nowhere near its published 30, and no amount of
+// budgeting can manufacture quota. A CoinGecko key lifts that, and the same endpoints are served
+// under /onchain there, path for path — verified: both hosts answer this URL shape with 401
+// "API Key Missing" rather than 404, so only the prefix and a header differ.
+//
+// Unset, nothing changes: same host, no header, exactly today's behaviour.
+const CG_KEY = process.env.COINGECKO_API_KEY || '';
+const CG_PRO = process.env.COINGECKO_PLAN === 'pro';
+const CG_BASE = CG_PRO ? 'https://pro-api.coingecko.com/api/v3/onchain' : 'https://api.coingecko.com/api/v3/onchain';
+const CG_HEADER = CG_PRO ? 'x-cg-pro-api-key' : 'x-cg-demo-api-key';
+
+/** The URL and headers to actually use for a GeckoTerminal path, keyed or not. */
+function geckoRequest(url) {
+  if (!CG_KEY || !url.startsWith(GECKO)) return { url, headers: { Accept: 'application/json' } };
+  return {
+    url: CG_BASE + url.slice(GECKO.length),
+    headers: { Accept: 'application/json', [CG_HEADER]: CG_KEY },
+  };
+}
+const hasGeckoKey = () => Boolean(CG_KEY);
 const JUP_PRICE = 'https://lite-api.jup.ag/price/v3';
 const JUP_QUOTE = 'https://lite-api.jup.ag/swap/v1/quote';
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
@@ -51,6 +73,16 @@ async function cached(key, ttlMs, loader) {
   return p;
 }
 
+// A value we were handed rather than fetched (see notePools). Same eviction rule as cached().
+function remember(key, ttlMs, val) {
+  const now = Date.now();
+  if (cache.size >= MAX_ENTRIES) {
+    for (const [k, v] of cache) if (v.exp <= now) cache.delete(k);
+    if (cache.size >= MAX_ENTRIES) cache.delete(cache.keys().next().value);
+  }
+  cache.set(key, { val, exp: now + ttlMs });
+}
+
 // Is there a live entry? Lets a caller skip spending a request budget on something it already has.
 const isFresh = (key) => { const h = cache.get(key); return Boolean(h && h.exp > Date.now()); };
 // The last value for a key, fresh or not. Only for callers that choose to skip the loader entirely.
@@ -58,22 +90,79 @@ const peek = (key) => cache.get(key)?.val;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function getJson(url, params) {
-  // Every GeckoTerminal request this process makes goes through here, so this is the one place
-  // that can keep an honest count of what the shared free-tier budget has spent.
-  if (url.startsWith(GECKO)) geckoBudget.record();
+// A 429 is often a blip rather than a verdict: the keyless tier refuses a third of chart loads at
+// a human click pace and answers `retry-after: 0`, meaning it will take the same request again
+// now. So a call somebody is waiting on asks again instead of becoming "chart unavailable" in the
+// UI. Only ever for the GETs this module makes (nothing here is non-idempotent), bounded by
+// RETRY_WAITS, jittered so two tabs do not line their retries up, and dropped entirely while the
+// budget is still cooling off from an earlier refusal — measured against the live tier, a retry
+// into a limit that is known to be full gets refused as well, so asking twice would only spend
+// twice the quota for the same answer. It is the same rule the terminal applies to its own retry,
+// which is what retryAfterMs below tells it.
+// A retry-after longer than RETRY_MAX_WAIT is honoured by giving up at once rather than sleeping
+// on it: upstream has said it is still refusing, and making the user wait seconds for the same
+// error is worse than saying so.
+const RETRY_WAITS = [250, 700];
+const RETRY_MAX_WAIT = 1_500;
+const RETRY_JITTER = 0.4;
+
+/** retry-after as ms (it may be seconds or an HTTP date), or null when it is absent/unusable. */
+function retryAfterMs(response) {
+  const raw = response?.headers?.['retry-after'] ?? response?.headers?.get?.('retry-after');
+  if (raw === undefined || raw === null || raw === '') return null;
+  const secs = Number(raw);
+  if (Number.isFinite(secs)) return Math.max(0, secs * 1000);
+  const at = Date.parse(raw);
+  return Number.isFinite(at) ? Math.max(0, at - Date.now()) : null;
+}
+
+/** How long to wait before attempt+1, or null when the wait is not worth making anyone sit through. */
+function backoffMs(attempt, afterMs) {
+  const base = RETRY_WAITS[attempt] ?? RETRY_WAITS[RETRY_WAITS.length - 1];
+  const want = afterMs === null ? base : Math.max(afterMs, base);
+  if (want > RETRY_MAX_WAIT) return null;
+  return Math.round(want * (1 + (Math.random() * 2 - 1) * RETRY_JITTER));
+}
+
+/**
+ * opts.retries  extra attempts after a 429 (capped at RETRY_WAITS.length); default none.
+ * opts.priority 'user' marks the call as one somebody is waiting on, which makes the
+ *               opportunistic lane of the GeckoTerminal budget stand down while it is in flight.
+ */
+async function getJson(url, params, opts = {}) {
+  const gecko = url.startsWith(GECKO);
+  const retries = Math.min(opts.retries ?? 0, RETRY_WAITS.length);
+  const release = gecko && opts.priority === 'user' ? geckoBudget.beginUserCall() : null;
   try {
-    const r = await axios.get(url, {
-      params,
-      timeout: TIMEOUT,
-      headers: { Accept: 'application/json' },
-    });
-    return r.data;
-  } catch (err) {
-    const status = err.response?.status;
-    if (status === 404) throw new MemecoinDataError('Not found upstream', 404);
-    if (status === 429) throw new MemecoinDataError('Upstream rate limited, try again shortly', 503);
-    throw new MemecoinDataError(`Upstream request failed: ${err.code || status || err.message}`, 502);
+    for (let attempt = 0; ; attempt += 1) {
+      // Every GeckoTerminal request this process makes goes through here, so this is the one place
+      // that can keep an honest count of what the shared free-tier budget has spent.
+      if (gecko) geckoBudget.record();
+      try {
+        const req = geckoRequest(url);
+        const r = await axios.get(req.url, { params, timeout: TIMEOUT, headers: req.headers });
+        return r.data;
+      } catch (err) {
+        const status = err.response?.status;
+        if (status === 404) throw new MemecoinDataError('Not found upstream', 404);
+        if (status !== 429) throw new MemecoinDataError(`Upstream request failed: ${err.code || status || err.message}`, 502);
+        const after = retryAfterMs(err.response);
+        const knownFull = gecko && geckoBudget.coolingOff();
+        // Whoever got refused, the limit is now known to be tight: the prefetch lane stands down.
+        if (gecko) geckoBudget.note429(after ?? 0);
+        const wait = attempt < retries && !knownFull ? backoffMs(attempt, after) : null;
+        if (wait === null) {
+          const e = new MemecoinDataError('Upstream rate limited, try again shortly', 503);
+          // How long we know the limit will stay full. A client that is told this can wait for its
+          // next poll instead of spending three requests discovering the same thing.
+          if (gecko) e.retryAfterMs = geckoBudget.coolOffRemaining();
+          throw e;
+        }
+        await sleep(wait);
+      }
+    }
+  } finally {
+    if (release) release();
   }
 }
 
@@ -214,8 +303,33 @@ async function geckoPools(path, page = 1) {
   return dedupe((data.data || []).map((p) => fromGeckoPool(p, data.included)));
 }
 
+// ── address -> pool ─────────────────────────────────────────────────────────
+// A token's main pool is the only thing the chart and the trade feed need from the token detail,
+// and a pool address does not change. Remembering it on its own turns a chart load from two
+// serial requests (DexScreener detail, then GeckoTerminal OHLCV) into one — and every list row
+// already carries it, so clicking a coin in the terminal usually needs no lookup at all.
+const POOL_TTL = 6 * 60 * 60_000;
+const poolKey = (address) => `pool:${address}`;
+
+function notePools(list) {
+  for (const t of Array.isArray(list) ? list : []) {
+    const p = t?.pair?.pair_address;
+    if (t?.address && typeof p === 'string' && p) remember(poolKey(t.address), POOL_TTL, p);
+  }
+  return list;
+}
+
+const knownPool = (address) => (isFresh(poolKey(address)) ? peek(poolKey(address)) : null);
+
+/** The token's pool, from the full detail lookup. Null when no DEX has paired it yet. */
+async function resolvePool(address) {
+  const token = await getToken(address);   // notePools runs inside it, via indexed()
+  return token.pair?.pair_address || null;
+}
+
 // Discovery-index writes are best-effort and lazily required so a DB problem never breaks a response.
 function indexed(list, source) {
+  notePools(list);   // every row already knows its pool; this is what makes the next click one request
   try { require('./tokenIndex').recordTokens(list, source); } catch (err) { console.error('[tokenIndex]', err.message); }
   return list;
 }
@@ -233,20 +347,29 @@ function indexed(list, source) {
 const GECKO_DEEP_PAGES = 5;        // page 1 plus four deep pages ≈ 100 pools per list
 const DEEP_PAGE_TTL = 10 * 60_000;
 const DEEP_WARM_BUDGET_MS = 2_000; // most we will ever spend spacing deep-page calls apart in one load
+// How many pages one load is allowed to go and fetch. Four of them back to back is a burst that
+// puts us over the limit for the next half minute, which is exactly when somebody opens the
+// terminal and clicks a coin: measured, that burst was the difference between 2 charts out of 8
+// and 6 out of 8. The pages the burst used to win still arrive, two at a time, on the refreshes
+// that follow — and once a page is won it is kept, so breadth builds up rather than oscillating.
+const DEEP_WARM_PER_LOAD = 2;
 
 async function geckoDeepPools(path) {
   const out = [];
   let waited = 0;
+  let fetching = 0;
   for (let page = 2; page <= GECKO_DEEP_PAGES; page++) {
     const key = `gkpage:${path}:${page}`;
     if (!isFresh(key)) {
+      const serveLast = () => { const last = peek(key); if (last) out.push(...last); };
+      if (fetching >= DEEP_WARM_PER_LOAD) { serveLast(); continue; }
       const wait = geckoBudget.waitFor();
       if (wait > 0 && waited + wait <= DEEP_WARM_BUDGET_MS) { await sleep(wait); waited += wait; }
       if (!geckoBudget.tryTake(1)) {
-        const last = peek(key);          // out of budget: whatever this page last held, or nothing
-        if (last) out.push(...last);
+        serveLast();                     // out of budget: whatever this page last held, or nothing
         continue;
       }
+      fetching += 1;
     }
     // cached() serves the stale page when a refresh fails, so a deep page can only ever add rows
     const rows = await cached(key, DEEP_PAGE_TTL, () => geckoPools(path, page)).catch(() => null);
@@ -447,7 +570,7 @@ async function getTokenInfo(address) {
   // holders / decimals from GeckoTerminal; optional
   return cached(`info:${address}`, 5 * 60_000, async () => {
     try {
-      const d = await getJson(`${GECKO}/networks/solana/tokens/${address}/info`);
+      const d = await getJson(`${GECKO}/networks/solana/tokens/${address}/info`, undefined, { priority: 'user' });
       const a = d.data?.attributes || {};
       return { holders: num(a.holders?.count), decimals: num(a.decimals), image: cleanUrl(a.image_url) };
     } catch (_) {
@@ -479,16 +602,11 @@ const TF = {
   '1h': { unit: 'hour', agg: 1 },
 };
 
-async function getOhlcv(address, tf = '5m') {
-  const cfg = TF[tf];
-  if (!cfg) throw new MemecoinDataError('tf must be one of 1m, 5m, 15m, 1h', 400);
-  const token = await getToken(address);
-  const pool = token.pair?.pair_address;
-  if (!pool) throw new MemecoinDataError('No pool for token', 404);
+function ohlcvForPool(pool, tf, cfg) {
   return cached(`ohlcv:${pool}:${tf}`, tf === '1m' ? 10_000 : 20_000, async () => {
     const d = await getJson(`${GECKO}/networks/solana/pools/${pool}/ohlcv/${cfg.unit}`, {
       aggregate: cfg.agg, limit: 300, currency: 'usd',
-    });
+    }, { retries: 2, priority: 'user' });
     const list = d.data?.attributes?.ohlcv_list || [];
     return list
       .map(([t, o, h, l, c, v]) => ({ time: t, open: +o, high: +h, low: +l, close: +c, volume: +v }))
@@ -496,13 +614,34 @@ async function getOhlcv(address, tf = '5m') {
   });
 }
 
+async function getOhlcv(address, tf = '5m') {
+  const cfg = TF[tf];
+  if (!cfg) throw new MemecoinDataError('tf must be one of 1m, 5m, 15m, 1h', 400);
+  if (!isValidAddress(address)) throw new MemecoinDataError('Invalid Solana address', 400);
+  const remembered = knownPool(address);
+  const pool = remembered || await resolvePool(address);
+  if (!pool) throw new MemecoinDataError('No pool for token', 404);
+  try {
+    return await ohlcvForPool(pool, tf, cfg);
+  } catch (err) {
+    // A remembered pool can go stale in one way: the pair migrates and the old one stops existing.
+    // Re-resolve once on a 404 rather than telling the user the chart is unavailable.
+    if (err.status !== 404 || !remembered) throw err;
+    cache.delete(poolKey(address));
+    const fresh = await resolvePool(address);
+    if (!fresh) throw new MemecoinDataError('No pool for token', 404);
+    if (fresh === pool) throw err;
+    return ohlcvForPool(fresh, tf, cfg);
+  }
+}
+
 // ── trades ──────────────────────────────────────────────────────────────────
 async function getTrades(address) {
-  const token = await getToken(address);
-  const pool = token.pair?.pair_address;
+  if (!isValidAddress(address)) throw new MemecoinDataError('Invalid Solana address', 400);
+  const pool = knownPool(address) || await resolvePool(address);
   if (!pool) throw new MemecoinDataError('No pool for token', 404);
   return cached(`trades:${pool}`, 8_000, async () => {
-    const d = await getJson(`${GECKO}/networks/solana/pools/${pool}/trades`);
+    const d = await getJson(`${GECKO}/networks/solana/pools/${pool}/trades`, undefined, { retries: 1, priority: 'user' });
     return (d.data || []).map((t) => {
       const a = t.attributes || {};
       const side = a.kind === 'buy' || a.kind === 'sell' ? a.kind : null;
@@ -621,10 +760,13 @@ async function getQuote({ address, side, amountSol, amountTokens, slippageBps })
 }
 
 module.exports = {
+  hasGeckoKey,
   MemecoinDataError, isValidAddress, getTrending, getNew, search, getToken,
   getOhlcv, getTrades, getSolPrice, getQuote, SOL_MINT,
   sanitizeText, cleanSymbol, cleanName, cleanUrl, shortMint, fromDexPair, fromGeckoPool,
-  matchTier, fromIndexRow, GECKO_DEEP_PAGES, SEARCH_RESULTS,
+  matchTier, fromIndexRow, GECKO_DEEP_PAGES, DEEP_WARM_PER_LOAD, SEARCH_RESULTS, POOL_TTL,
+  // test helpers: what the long-lived address -> pool mapping currently holds
+  _knownPool: knownPool,
   // test helpers: drop entries, or age them out while keeping the value cached() falls back to
   _resetCache: (pred) => {
     for (const k of [...cache.keys()]) if (!pred || pred(k)) cache.delete(k);

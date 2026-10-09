@@ -87,15 +87,31 @@ const geckoCalls = (calls) => calls.filter((c) => c.url.includes('geckoterminal'
 
 const clearIndex = () => getDb().prepare('DELETE FROM token_index').run();
 
+// One load no longer goes and fetches every deep page: a burst of four is what put us over
+// GeckoTerminal's real limit just as somebody clicked a coin. So a test that needs the whole list
+// warms it the way a running server does — refresh, next minute's allowance, refresh.
+async function warmFully(load, key) {
+  let list = [];
+  for (let i = 0; i < 4; i++) {
+    data._resetCache((k) => k === key);
+    budget._reset();
+    list = await load();
+    if (list.length >= PAGE_SIZE * data.GECKO_DEEP_PAGES) return list;
+  }
+  throw new Error(`deep pages never warmed: ${list.length} rows`);
+}
+
 // ── 1. breadth in the lists ─────────────────────────────────────────────────
-test('trending walks past page 1: one page is 20 pools, the list is ~100', async () => {
+test('trending walks past page 1, a couple of pages per load, until the list is ~100', async () => {
   const calls = stub([['trending_pools', (_u, p) => geckoPage('trending_pools', p.page || 1)]]);
-  const list = await data.getTrending();
-  assert.equal(list.length, PAGE_SIZE * data.GECKO_DEEP_PAGES, 'page 1 plus every deep page');
-  assert.equal(geckoCalls(calls).length, data.GECKO_DEEP_PAGES);
-  assert.deepEqual(geckoCalls(calls).map((c) => c.params.page), [1, 2, 3, 4, 5]);
+  const first = await data.getTrending();
+  assert.equal(first.length, PAGE_SIZE * (1 + data.DEEP_WARM_PER_LOAD), 'page 1 plus what one load may fetch');
+  assert.deepEqual(geckoCalls(calls).map((c) => c.params.page), [1, 2, 3]);
+
+  const full = await warmFully(() => data.getTrending(), 'trending');
+  assert.equal(full.length, PAGE_SIZE * data.GECKO_DEEP_PAGES, 'the rest arrive on the refreshes after it');
   // every row is a distinct token
-  assert.equal(new Set(list.map((t) => t.address)).size, list.length);
+  assert.equal(new Set(full.map((t) => t.address)).size, full.length);
 });
 
 test('a 429 on a deep page degrades to the pages we have instead of a 503', async () => {
@@ -119,13 +135,13 @@ test('page 1 failing still falls back to DexScreener boosted tokens', async () =
 
 test('a refresh re-fetches page 1 only: the deep pages stay warm on their long TTL', async () => {
   const calls = stub([['new_pools', (_u, p) => geckoPage('new_pools', p.page || 1)]]);
-  await data.getNew();
-  assert.equal(geckoCalls(calls).length, data.GECKO_DEEP_PAGES, 'cold: every page');
+  await warmFully(() => data.getNew(), 'new');
+  const won = geckoCalls(calls).length;
 
   data._resetCache((k) => k === 'new');   // the 30s list entry lapses; the warm deep pages do not
   const list = await data.getNew();
   assert.equal(list.length, PAGE_SIZE * data.GECKO_DEEP_PAGES, 'still the full list');
-  assert.equal(geckoCalls(calls).length, data.GECKO_DEEP_PAGES + 1, 'one GeckoTerminal request, for page 1');
+  assert.equal(geckoCalls(calls).length, won + 1, 'one GeckoTerminal request, for page 1');
   assert.equal(geckoCalls(calls).at(-1).params.page, 1);
 });
 
@@ -137,7 +153,7 @@ test('deep-page rows are repriced from DexScreener; page 1 keeps its GeckoTermin
       .map((a) => dexPair(a, { priceUsd: '9', liq: 42_000, mcap: 777 }))],
   ]);
   const list = await data.getTrending();
-  assert.equal(list.length, PAGE_SIZE * data.GECKO_DEEP_PAGES);
+  assert.equal(list.length, PAGE_SIZE * (1 + data.DEEP_WARM_PER_LOAD));
   // page 1 is fresh from GeckoTerminal already and is deliberately left alone
   assert.equal(list[0].price, 1);
   assert.equal(list[0].liquidity_usd, 1000);
@@ -147,7 +163,7 @@ test('deep-page rows are repriced from DexScreener; page 1 keeps its GeckoTermin
     assert.equal(t.liquidity_usd, 42_000);
   }
   const batches = calls.filter((c) => c.url.includes('/tokens/v1/solana/'));
-  assert.equal(batches.length, 3, '80 deep rows in batches of 30');
+  assert.equal(batches.length, 2, '40 deep rows in batches of 30');
 });
 
 test('repricing keeps the pool creation time when DexScreener has none (the age column)', async () => {
@@ -172,16 +188,17 @@ test('repricing failing leaves the GeckoTerminal numbers in place rather than dr
     ['/tokens/v1/solana/', Object.assign(new Error('down'), { response: { status: 502 } })],
   ]);
   const list = await data.getTrending();
-  assert.equal(list.length, PAGE_SIZE * data.GECKO_DEEP_PAGES);
+  assert.equal(list.length, PAGE_SIZE * (1 + data.DEEP_WARM_PER_LOAD));
   assert.equal(list.at(-1).price, 1, 'the pool price it was discovered with');
 });
 
 test('a deep page won once is not lost when its refresh is refused', async () => {
   let page1Only = false;
   stub([['trending_pools', (_u, p) => ((p.page || 1) > 1 && page1Only ? rateLimited() : geckoPage('trending_pools', p.page || 1))]]);
-  assert.equal((await data.getTrending()).length, PAGE_SIZE * data.GECKO_DEEP_PAGES);
+  assert.equal((await warmFully(() => data.getTrending(), 'trending')).length, PAGE_SIZE * data.GECKO_DEEP_PAGES);
 
   page1Only = true;                                  // GeckoTerminal starts refusing deep pages
+  budget._reset();
   data._resetCache((k) => k === 'trending');
   data._expireCache((k) => k.startsWith('gkpage:')); // the 10-minute pages age out, values retained
   const list = await data.getTrending();
@@ -190,7 +207,7 @@ test('a deep page won once is not lost when its refresh is refused', async () =>
 
 test('with the budget spent, deep pages serve what they have and page 1 still goes out', async () => {
   const calls = stub([['trending_pools', (_u, p) => geckoPage('trending_pools', p.page || 1)]]);
-  await data.getTrending();
+  await warmFully(() => data.getTrending(), 'trending');
   const won = geckoCalls(calls).length;
 
   data._resetCache((k) => k === 'trending');
@@ -240,9 +257,10 @@ test('warming the deep pages stays inside the budget across a full minute of pol
 });
 
 test('every GeckoTerminal request through memecoinData is counted', async () => {
-  stub([['trending_pools', (_u, p) => geckoPage('trending_pools', p.page || 1)]]);
+  const calls = stub([['trending_pools', (_u, p) => geckoPage('trending_pools', p.page || 1)]]);
   await data.getTrending();
-  assert.equal(budget.spentLastMinute(), data.GECKO_DEEP_PAGES);
+  assert.equal(budget.spentLastMinute(), geckoCalls(calls).length);
+  assert.equal(budget.spentLastMinute(), 1 + data.DEEP_WARM_PER_LOAD, 'page 1 and the pages this load warmed');
 });
 
 // ── 3. the discovery index ──────────────────────────────────────────────────
@@ -377,16 +395,16 @@ test('the lists feed the index, so a coin DexScreener cannot find is still searc
   clearIndex();
   stub([['trending_pools', (_u, p) => geckoPage('trending_pools', p.page || 1)]]);
   await data.getTrending();
-  assert.equal(tokenIndex.countRows(), PAGE_SIZE * data.GECKO_DEEP_PAGES);
+  assert.equal(tokenIndex.countRows(), PAGE_SIZE * (1 + data.DEEP_WARM_PER_LOAD));
 
-  const deepOnly = mint(80);                      // TK80: page 5, nowhere near DexScreener's answer
+  const deepOnly = mint(50);                      // TK50: page 3, nowhere near DexScreener's answer
   assert.ok(tokenIndex.lookup(deepOnly), 'indexed from a deep page');
 
   stub([
     ['/latest/dex/search', { pairs: [] }],         // upstream finds nothing, as it did for "pump"
     ['/tokens/v1/solana/', []],                    // and cannot price any of them either
   ]);
-  const hits = await data.search('TK8');
+  const hits = await data.search('TK5');
   assert.ok(hits.length >= 10, `index answered with ${hits.length} where DexScreener had 0`);
   assert.ok(hits.some((t) => t.address === deepOnly));
   const row = hits.find((t) => t.address === deepOnly);

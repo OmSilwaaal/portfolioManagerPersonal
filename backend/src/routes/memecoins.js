@@ -42,7 +42,13 @@ const h = (fn) => async (req, res) => {
   } catch (err) {
     const status = err.status || 500;
     if (status >= 500) console.error('[memecoins]', req.method, req.path, err.message);
-    res.status(status).json({ error: true, message: status >= 500 && !err.status ? 'Internal error' : err.message });
+    res.status(status).json({
+      error: true,
+      message: status >= 500 && !err.status ? 'Internal error' : err.message,
+      // Only set when upstream is rate limiting us and we know for how long: the terminal reads it
+      // to decide between retrying in a moment and simply waiting for its next poll.
+      ...(err.retryAfterMs > 0 ? { retryAfterMs: err.retryAfterMs } : {}),
+    });
   }
 };
 
@@ -331,8 +337,44 @@ function shape(token, sig) {
     score: sig.score, level: sig.level, confidence: sig.confidence, mode: sig.mode,
     source: sig.source || 'activity-v0', model: sig.model || MODEL_VERSION, radar: sig.radar,
     components: sig.components, riskFlags: sig.riskFlags, asOf: sig.asOf,
-    modelVersion: sig.modelVersion, notes: sig.notes,
+    modelVersion: sig.modelVersion, notes: sig.notes, reason: sig.reason,
   };
+}
+
+// Why a score has no candles behind it. The panel shows this instead of a near-empty score with
+// no explanation, which is what a bare mode:'list-only' looked like to anyone reading it.
+function thinNote(err) {
+  if (err?.status === 503) return 'Candles are rate limited upstream; scored from list data only';
+  if (err?.status === 404) return 'No DEX pool for this token yet; scored from list data only';
+  return 'Candles unavailable; scored from list data only';
+}
+
+/**
+ * The answer when even the token detail could not be fetched. Deliberately empty rather than
+ * zeroed: a 0/100 QUIET score would read as "nothing happening" when the truth is "we do not
+ * know yet". The UI reads `mode` and `reason` and says which.
+ */
+function unavailableSignal(err) {
+  const limited = err?.status === 503;
+  return {
+    score: null, level: null, confidence: 0, mode: 'unavailable',
+    source: 'activity-v0', model: MODEL_VERSION, components: null, riskFlags: [],
+    asOf: Date.now(), modelVersion: MODEL_VERSION,
+    reason: limited ? 'rate-limited' : 'no-market-data',
+    notes: [limited
+      ? 'Market data is rate limited right now; this usually clears in a few seconds'
+      : 'No market data for this token yet'],
+  };
+}
+
+// Identity for a token no upstream would answer for. The discovery index has seen almost every
+// token the terminal can show, and a symbol is better than a shortened mint in the panel header.
+function knownToken(address) {
+  try {
+    const row = require('../services/tokenIndex').lookup(address);
+    if (row) return { address, symbol: row.symbol, name: row.name };
+  } catch (_) { /* index is best-effort everywhere else too */ }
+  return { address, symbol: null };
 }
 
 function finish(token, sig, mode) {
@@ -345,12 +387,18 @@ function finish(token, sig, mode) {
 // Full score for one token: detail + 5m (+1m when budget allows) OHLCV.
 async function fullSignal(token) {
   const now = Date.now();
-  const candles5m = await data.getOhlcv(token.address, '5m').catch(() => null);
+  let candleErr = null;
+  const candles5m = await data.getOhlcv(token.address, '5m').catch((e) => { candleErr = e; return null; });
   const candles1m = takeGeckoBudget(1) ? await data.getOhlcv(token.address, '1m').catch(() => null) : null;
   const sig = computeSignal({
     token, candles5m, candles1m, now, prevLiquidityUsd: previousLiquidity(token.address, now),
   });
-  return finish(token, sig, candles5m || candles1m ? 'full' : 'list-only');
+  const full = Boolean(candles5m || candles1m);
+  if (!full) {
+    sig.notes = [...(sig.notes || []), thinNote(candleErr)];
+    sig.reason = candleErr?.status === 503 ? 'rate-limited' : candleErr?.status === 404 ? 'no-pool' : 'no-candles';
+  }
+  return finish(token, sig, full ? 'full' : 'list-only');
 }
 
 router.get('/signals', h(async (req, res) => {
@@ -411,7 +459,22 @@ router.get('/signals', h(async (req, res) => {
 async function signalFor(address) {
   if (!data.isValidAddress(address)) return null;
   const hit = signalCache.get(address);
-  const token = await data.getToken(address);
+  let token;
+  try {
+    token = await data.getToken(address);
+  } catch (err) {
+    // The detail lookup is the one call this path cannot do without, and the one most likely to be
+    // rate limited. Failing the whole request here is what the terminal rendered as "Signal
+    // unavailable"; a thin, shaped answer lets the panel say what is actually missing. The last
+    // score we computed is the better thin answer when there is one.
+    if (err.status >= 500 || err.status === 404) {
+      const stale = hit && Date.now() - hit.at < SIGNAL_STALE_MAX ? hit.sig : null;
+      const stub = knownToken(address);
+      if (stale) return shape(stub, { ...stale, notes: [...(stale.notes || []), 'cached score'] });
+      return shape(stub, unavailableSignal(err));
+    }
+    throw err;   // a 400 is our bug or a bad address, not something to paper over
+  }
   const rs = radarLookup([address]).get(address);
   if (rs) return shape(token, radarShape(token, rs, computeSignal({ token, now: Date.now() })));
   if (hit && hit.exp > Date.now() && hit.sig.mode === 'full') return shape(token, hit.sig);

@@ -23,6 +23,7 @@ import {
   useQuoteMemecoinMutation,
   useTradeMemecoinMutation,
   isMockData,
+  chartReason,
   usePoll,
   useRateLimited,
   rateLimitedUntil,
@@ -357,7 +358,7 @@ function FlagBadge({ f, compact = false }) {
 }
 
 function SignalBadge({ sig }) {
-  if (!sig) return null
+  if (!sig || sig.score == null) return null
   const st = levelStyle(sig.level)
   const low = sig.confidence != null && sig.confidence < 0.5
   return (
@@ -369,12 +370,34 @@ function SignalBadge({ sig }) {
   )
 }
 
+/* What the backend says is missing when a score is thin. `mode` and `reason` come from
+   routes/memecoins; the panel explains them rather than showing a near-empty score with no
+   components and leaving the user to guess. */
+const THIN_TEXT = {
+  'rate-limited': 'Market data is rate limited upstream right now, so this is scored from list data only. It usually clears within seconds.',
+  'no-pool': 'No DEX pool for this coin yet, so there are no candles to score. List data only.',
+  'no-candles': 'Candles are unavailable for this coin, so this is scored from list data only.',
+  'no-market-data': 'No market data for this coin yet, so there is nothing to score.',
+}
+function thinText(sig) {
+  if (!sig) return null
+  // Nothing scored at all reads differently from a score built on less: say which.
+  if (sig.mode === 'unavailable') {
+    return sig.reason === 'rate-limited'
+      ? 'Market data is rate limited upstream right now, so there is nothing to score yet. This usually clears within seconds.'
+      : THIN_TEXT['no-market-data']
+  }
+  if (sig.mode !== 'list-only') return null
+  return THIN_TEXT[sig.reason] || safeText(sig.notes?.[sig.notes.length - 1], 140) || null
+}
+
 function SignalPanel({ address }) {
   const q = useGetMemecoinSignalQuery(address, { skip: !address, pollingInterval: usePoll(POLL.signal) })
   const sig = q.data
   const st = levelStyle(sig?.level)
   const components = Object.entries(sig?.components || {})
   const radar = sig?.source === 'radar' ? sig.radar : null
+  const thin = thinText(sig)
   return (
     <div className="t-rule px-4 py-3">
       <div className="flex items-center gap-2">
@@ -389,14 +412,22 @@ function SignalPanel({ address }) {
       ) : sig ? (
         <div className="mt-2 space-y-2.5">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <div className="t-score" style={{ color: st.color }}>
-              <span className="t-score-n">{Math.round(sig.score)}</span>
-              <span className="t-score-d">/100</span>
-            </div>
-            <span className="t-chip t-solid" style={{ background: st.fill, color: st.ink, fontSize: 12, padding: '4px 10px' }}>{sig.level}</span>
-            <span className="t-chip" title={sig.mode === 'list-only' ? 'Scored from list data only' : 'Model confidence in this score'}>
-              conf {Math.round((sig.confidence ?? 0) * 100)}%{sig.mode === 'list-only' ? ' · list' : ''}
-            </span>
+            {/* No score at all is its own state: a 0/100 QUIET would read as "nothing happening"
+                when the truth is that nothing could be fetched. */}
+            {sig.score == null ? (
+              <span className="t-chip" data-tone="warn">no score yet</span>
+            ) : (
+              <>
+                <div className="t-score" style={{ color: st.color }}>
+                  <span className="t-score-n">{Math.round(sig.score)}</span>
+                  <span className="t-score-d">/100</span>
+                </div>
+                <span className="t-chip t-solid" style={{ background: st.fill, color: st.ink, fontSize: 12, padding: '4px 10px' }}>{sig.level}</span>
+                <span className="t-chip" title={sig.mode === 'list-only' ? 'Scored from list data only' : 'Model confidence in this score'}>
+                  conf {Math.round((sig.confidence ?? 0) * 100)}%{sig.mode === 'list-only' ? ' · list' : ''}
+                </span>
+              </>
+            )}
             {radar?.launch?.state && <span className="t-chip">{safeText(radar.launch.state, 12)}{radar.launch.ageMin != null ? ` · ${fmtAge(radar.launch.ageMin)}` : ''}</span>}
             {radar && (
               <span className="t-chip" data-tone={radar.passesSafetyGate ? 'ok' : 'bad'} title="Radar safety gate: authorities, holder concentration, insiders, creator history">
@@ -404,6 +435,10 @@ function SignalPanel({ address }) {
               </span>
             )}
           </div>
+
+          {thin && (
+            <p className="t-fineprint" style={{ color: 'var(--on-ink-text-3)' }}>{thin}</p>
+          )}
 
           {sig.riskFlags?.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
@@ -706,10 +741,55 @@ function TokenHeader({ q }) {
   )
 }
 
+/* The chart's first load is the one request that routinely fails, and for four different reasons.
+ * A transient refusal upstream is a wait, so it keeps the loading state and retries faster than
+ * the poll would (bounded, backing off, reset per coin); a coin with no pool yet is a chart that
+ * has not started rather than one that is broken. Only something we cannot name gets an error box. */
+// Two attempts past the first, spaced far enough apart to be worth making against a per-minute
+// limit, and far fewer than the /api limiter's 60/min can be spent on one coin.
+const CHART_RETRIES = 2
+const CHART_RETRY_STEP = 2_000
+const SOFT_STATUS = new Set([429, 502, 503, 504, 'FETCH_ERROR', 'TIMEOUT_ERROR'])
+
+function ChartNote({ children, spinner = false }) {
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center text-xs" style={{ color: 'var(--on-ink-text-3)' }}>
+      {spinner && <Loader2 className="w-4 h-4 animate-spin" />}
+      <span>{children}</span>
+    </div>
+  )
+}
+
 function ChartPanel({ address }) {
   const [tf, setTf] = useState('1m')
   const q = useGetMemecoinOhlcvQuery({ address, tf }, { skip: !address, pollingInterval: usePoll(CHART_POLL[tf]) })
   const candles = Array.isArray(q.data) ? q.data : []
+  const hasCandles = candles.length > 0
+  const noPool = chartReason(q.data) === 'no-pool'
+  const soft = q.isError && SOFT_STATUS.has(q.error?.status)
+  // A 429 is our own limiter, not the aggregator's: every poller is already paused for 15-120s and
+  // asking again is the one thing that must not happen. It gets the message, never the retry.
+  // retryAfterMs is the backend saying how long it knows the upstream limit will stay full; asking
+  // again inside that window spends three requests to learn the same thing, so we wait for the
+  // poll instead. Without it, a refusal is a blip and worth asking again about straight away.
+  const waitMs = q.error?.data?.retryAfterMs
+  const canRetry = soft && q.error?.status !== 429 && !(waitMs > CHART_RETRY_STEP)
+
+  // Bounded, backing-off retry of a first load that was refused. refetch comes from the hook and
+  // is read through a ref so this effect depends only on values, never on the hook's identity.
+  const [attempt, setAttempt] = useState(0)
+  const refetch = useRef(q.refetch)
+  refetch.current = q.refetch
+  useEffect(() => { setAttempt(0) }, [address, tf])
+  useEffect(() => {
+    if (!canRetry || hasCandles || attempt >= CHART_RETRIES) return undefined
+    const t = setTimeout(() => { setAttempt((n) => n + 1); refetch.current() }, CHART_RETRY_STEP * (attempt + 1))
+    return () => clearTimeout(t)
+  }, [canRetry, hasCandles, attempt])
+  const retrying = canRetry && attempt < CHART_RETRIES
+  const softMsg = q.error?.status === 429
+    ? 'Live updates are paused for a moment. The chart picks up again by itself.'
+    : 'Upstream is rate limiting us. The chart keeps retrying.'
 
   return (
     <div className="flex flex-col h-[340px] lg:h-full lg:min-h-0">
@@ -724,8 +804,8 @@ function ChartPanel({ address }) {
       </div>
       <div className="relative flex-1 min-h-0" style={{ background: 'var(--ink-950)' }}>
         {!address ? (
-          <div className="absolute inset-0 flex items-center justify-center text-xs" style={{ color: 'var(--on-ink-text-3)' }}>Select a token to load its chart</div>
-        ) : candles.length > 0 ? (
+          <ChartNote>Select a token to load its chart</ChartNote>
+        ) : hasCandles ? (
           // Stale-while-revalidate: once we have candles, keep showing them through a transient poll
           // error instead of swapping to a full error box (that was the main source of "chart unavailable" flicker).
           <>
@@ -736,10 +816,16 @@ function ChartPanel({ address }) {
           </>
         ) : q.isLoading ? (
           <Skel className="absolute inset-0" />
+        ) : retrying ? (
+          <ChartNote spinner>{softMsg}</ChartNote>
+        ) : noPool ? (
+          <ChartNote spinner>No DEX pool for this coin yet, so there is no price history to load. The chart builds itself from live trades as they land.</ChartNote>
+        ) : soft ? (
+          <ChartNote spinner>{softMsg}</ChartNote>
         ) : q.isError ? (
           <div className="absolute inset-0 flex items-center justify-center"><ErrorBox error={q.error} onRetry={q.refetch} label="Chart unavailable" /></div>
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center text-xs" style={{ color: 'var(--on-ink-text-3)' }}>No candle data yet for this token</div>
+          <ChartNote>No candle data yet for this token</ChartNote>
         )}
       </div>
     </div>
