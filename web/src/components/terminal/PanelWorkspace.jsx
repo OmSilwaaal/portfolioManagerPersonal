@@ -63,6 +63,10 @@ export default function PanelWorkspace({
   className = '',
   // Canvas chrome. Pass `surface=""` to let a page's own background show through.
   surface = 'rounded-xl border border-[#1b1b1b] bg-[#080808]',
+  // Optional element painted on the canvas floor, under everything, in both the free and the stacked view.
+  // It is forced non-interactive here rather than trusted to opt out, because anything that swallowed a
+  // pointerdown would break dragging.
+  backdrop = null,
   showGrid = true,
   // Minimum canvas width for free dragging. Raise it to line up with a page that
   // only pins itself to the viewport height at a wider breakpoint.
@@ -413,14 +417,18 @@ export default function PanelWorkspace({
           className,
         ].join(' ')}
       >
+        {backdrop && (
+          <div aria-hidden className="pointer-events-none absolute inset-0 z-0 overflow-hidden">{backdrop}</div>
+        )}
+
         {/* Figma-style dot grid — brightens while something is being moved. */}
         {showGrid && (
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-0 rounded-xl transition-opacity duration-200"
+            className="pointer-events-none absolute inset-0 z-0 rounded-xl transition-opacity duration-200"
             style={{
               opacity: active ? 0.85 : 0.35,
-              backgroundImage: 'radial-gradient(rgba(255,255,255,0.09) 1px, transparent 1px)',
+              backgroundImage: 'radial-gradient(var(--on-ink-text-4) 1px, transparent 1px)',
               backgroundSize: '22px 22px',
             }}
           />
@@ -466,9 +474,10 @@ export default function PanelWorkspace({
                 aria-hidden
                 data-workspace-readout
                 ref={readoutRef}
-                className="pointer-events-none absolute left-0 top-0 z-[80] rounded-sm px-2 py-0.5 font-mono text-[11px] font-bold text-white"
+                className="pointer-events-none absolute left-0 top-0 z-[80] rounded-sm px-2 py-0.5 font-mono text-[11px] font-bold"
                 style={{
                   backgroundColor: accent,
+                  color: '#0d0c08',
                   transform: `translate3d(${Math.max(active.rectPx.x, 2)}px, ${Math.max(active.rectPx.y + active.rectPx.h + 6, 2)}px, 0)`,
                 }}
               >

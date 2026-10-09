@@ -15,7 +15,7 @@ import AsciiCanvas from '../../ascii/AsciiCanvas'
  * where it is the subject rather than the background.
  */
 
-const CELL_PX = 26          // glyph size; the cell is this wide, the ink much smaller
+const CELL_PX = 30          // glyph size; the cell is this wide, the ink much smaller
 const FPS = 8               // ambient, so a third of the panel refresh rate is plenty
 const MAX_CELLS = 3000      // ceiling on per-frame work however large the display
 const RESIZE_QUIET_MS = 120 // reallocating the canvas mid-resize is a known jank source
@@ -35,12 +35,18 @@ const FALLBACK = { texture: '#1d1b12', canvas: '#0d0c08' }
 function makePainter(colour) {
   return function paintMark(ctx, { U, V, t }) {
     const cx = U / 2
-    const cy = V / 2
+    // The tilt and the perspective both push the near, lower half outwards, so
+    // the ink does not sit symmetrically about the geometric centre; nudging up
+    // by 2.5% of the height evens out the clearance top and bottom.
+    const cy = V / 2 - V * 0.025
     // The painter's units are cell widths, so a span of R reads as R cells across
     // but only R/aspect cells down — meaning R has to be measured against
     // whichever of U and V is scarcer, or the mark runs off the top and bottom.
-    // At 0.35 it covers ~70% of the shorter axis: large, with room to turn.
-    const R = Math.min(U, V) * 0.35
+    // 0.40 fills the floor rather than sitting in the middle of it, while
+    // leaving clearance at the widest point of the turn: the tilt swings the
+    // vertical extent to about 1.25x the nominal radius, so sizing right up to
+    // the edge would clip twice a revolution.
+    const R = Math.min(U, V) * 0.4
     const a = t * 0.42 // ~15s a revolution
     const ca = Math.cos(a)
     const sa = Math.sin(a)

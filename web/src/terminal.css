@@ -1,5 +1,9 @@
 /* Axiom terminal skin. Operate-mode surface: flat solid panels, hairlines, square controls, tabular numerals,
-   readable text tiers. Everything reads from the theme tokens, so it follows paper / ink. */
+   readable text tiers. Everything reads from the theme tokens, so it follows paper / ink.
+
+   Contrast discipline: the floor (--terminal-canvas) is darker than the page, panels (--ink-800) sit above it,
+   and inputs/wells (--ink-950) cut back into it. Three levels of surface, no shadows and no borders doing the
+   lifting. Labels stay small, uppercase and quiet; the number they label is the loud thing. */
 
 .tvx-terminal {
   font-family: var(--font-data);
@@ -28,84 +32,168 @@
 .tvx-terminal .tv-up { color: var(--positive); }
 .tvx-terminal .tv-down { color: var(--negative); }
 .tvx-terminal .tv-dim { color: var(--on-ink-text-3); }
-.tvx-terminal .bg-\[\#7ea968\]\/15 { background: color-mix(in srgb, var(--positive) 16%, transparent); }
-.tvx-terminal .bg-\[\#d35c4a\]\/15 { background: color-mix(in srgb, var(--negative) 16%, transparent); }
-.tvx-terminal .bg-\[\#d6b87a\]\/15 { background: color-mix(in srgb, var(--ochre-300) 18%, transparent); }
-.tvx-terminal .bg-\[\#9eae84\]\/10, .tvx-terminal .bg-\[\#9eae84\]\/15 { background: color-mix(in srgb, var(--moss-200) 14%, transparent); }
+.tvx-terminal .bg-\[\#7ea968\]\/15 { background: color-mix(in srgb, var(--positive) 22%, transparent); }
+.tvx-terminal .bg-\[\#d35c4a\]\/15 { background: color-mix(in srgb, var(--negative) 22%, transparent); }
+.tvx-terminal .bg-\[\#d6b87a\]\/15 { background: color-mix(in srgb, var(--ochre-300) 24%, transparent); }
+.tvx-terminal .bg-\[\#9eae84\]\/10, .tvx-terminal .bg-\[\#9eae84\]\/15 { background: color-mix(in srgb, var(--moss-200) 20%, transparent); }
+
+/* A white veil is invisible on paper. Route the generic white/x utilities through the ink tokens so hover and
+   zebra striping survive the light theme, which is where they used to disappear entirely. */
+.tvx-terminal .bg-white\/5 { background-color: var(--on-ink-1); }
+.tvx-terminal .bg-white\/10 { background-color: var(--on-ink-3); }
+.tvx-terminal .hover\:bg-white\/5:hover { background-color: var(--on-ink-2); }
+.tvx-terminal .hover\:bg-white\/10:hover { background-color: var(--ink-700); }
 
 /* the smallest sizes were 9-10px: lift the floor a notch */
 .tvx-terminal .text-\[9px\] { font-size: 10px; }
 .tvx-terminal .text-\[10px\] { font-size: 11px; }
 
-/* surfaces */
-.t-panel { background: var(--ink-800); border: 1px solid var(--on-ink-border); border-radius: 2px; }
-.t-panel[data-tone="buy"] { border-top: 2px solid var(--positive); }
-.t-panel[data-tone="sell"] { border-top: 2px solid var(--negative); }
+/* ── surfaces ──────────────────────────────────────────────────────────────
+   The floor is darker than the page so a panel reads as floating above it without a shadow. */
+.t-canvas { background: var(--terminal-canvas); border: 1px solid var(--on-ink-border); border-radius: 2px; }
+.t-panel { background: var(--ink-800); border: 1px solid var(--on-ink-3); border-radius: 2px; }
+.t-panel[data-tone="buy"] { border-top: 3px solid var(--buy); }
+.t-panel[data-tone="sell"] { border-top: 3px solid var(--sell); }
 
-/* controls */
-.t-btn, .t-input, .tvx-terminal select {
-  background: var(--ink-900); color: var(--on-ink-text-1); border: 1px solid var(--on-ink-border); border-radius: 2px;
+/* A panel's own section rule, for the bands inside a panel (header / signal / chart). */
+.t-rule { border-top: 1px solid var(--on-ink-3); }
+
+/* Label above a number. Small, uppercase and quiet on purpose: the value is what should carry. */
+.t-label {
+  display: block; font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--on-ink-text-3);
 }
-.t-btn { cursor: pointer; font-weight: 700; transition: background 120ms, color 120ms; }
-.t-btn:hover:not(:disabled) { background: var(--on-ink-2); }
-.t-btn.t-on, .t-btn-primary { background: var(--paper); color: var(--ink-900); border-color: var(--paper); }
-.t-btn.t-on:hover, .t-btn-primary:hover { background: var(--paper); filter: brightness(1.08); }
-.t-btn:disabled { cursor: not-allowed; }
-.t-input { padding-block: 6px; padding-inline: 10px; width: 100%; }
+.t-value { font-size: 14px; font-weight: 700; color: var(--paper); }
+.t-fineprint { font-size: 10px; line-height: 1.45; color: var(--on-ink-text-3); }
+
+/* ── controls ─────────────────────────────────────────────────────────────── */
+.t-btn, .t-input, .tvx-terminal select {
+  background: var(--ink-950); color: var(--on-ink-text-1); border: 1px solid var(--on-ink-3); border-radius: 2px;
+}
+.t-btn { cursor: pointer; font-weight: 700; transition: background 120ms, color 120ms, border-color 120ms; }
+.t-btn:hover:not(:disabled) { background: var(--ink-700); border-color: var(--on-ink-text-3); color: var(--paper); }
+.t-btn.t-on, .t-btn-primary { background: var(--paper); color: var(--ink-950); border-color: var(--paper); }
+.t-btn.t-on:hover, .t-btn-primary:hover { background: var(--paper); color: var(--ink-950); filter: brightness(1.08); }
+.t-btn:disabled { cursor: not-allowed; color: var(--on-ink-text-4); border-color: var(--on-ink-border); }
+.t-input { padding-block: 7px; padding-inline: 10px; width: 100%; }
 .t-input.pl-9 { padding-left: 2.25rem; }
 .t-input::placeholder { color: var(--on-ink-text-3); }
+.t-input:focus { border-color: var(--on-ink-text-3); }
 .t-input[aria-invalid="true"] { border-color: var(--negative); }
-.tvx-terminal select { padding: 3px 8px; }
+.tvx-terminal select { padding: 4px 8px; font-weight: 700; }
 
 .t-tab {
-  padding: 6px 10px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
-  color: var(--on-ink-text-2); background: transparent; border: 1px solid transparent; border-radius: 2px; cursor: pointer;
-  transition: background 120ms, color 120ms;
+  padding: 7px 11px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--on-ink-text-2); background: var(--ink-950); border: 1px solid var(--on-ink-3); border-radius: 2px;
+  cursor: pointer; transition: background 120ms, color 120ms, border-color 120ms;
 }
-/* An unselected tab had a transparent border, so a tablist that wrapped onto a
-   second line read as a run-on sentence rather than a row of controls. */
-.t-tab { border-color: var(--on-ink-border); }
-.t-tab:hover { background: var(--on-ink-2); color: var(--paper); border-color: var(--on-ink-3); }
-.t-tab[aria-selected="true"] { background: var(--paper); color: var(--ink-900); }
+.t-tab:hover { background: var(--ink-700); color: var(--paper); border-color: var(--on-ink-text-3); }
+.t-tab[aria-selected="true"] { background: var(--paper); color: var(--ink-950); border-color: var(--paper); }
 
 .t-chip {
-  display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
-  padding: 2px 6px; border: 1px solid var(--on-ink-border); color: var(--on-ink-text-2); border-radius: 2px;
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 2px 6px; border: 1px solid var(--on-ink-3); color: var(--on-ink-text-2); border-radius: 2px;
 }
-.t-chip[data-tone="warn"] { color: var(--ochre-300); border-color: currentColor; }
-.t-chip[data-tone="ok"] { color: var(--positive); border-color: currentColor; }
-.t-chip[data-tone="bad"] { color: var(--negative); border-color: currentColor; }
+.t-chip[data-tone="warn"] { color: var(--ochre-300); border-color: currentColor; background: color-mix(in srgb, var(--ochre-300) 16%, transparent); }
+.t-chip[data-tone="ok"] { color: var(--positive); border-color: currentColor; background: color-mix(in srgb, var(--positive) 16%, transparent); }
+.t-chip[data-tone="bad"] { color: var(--negative); border-color: currentColor; background: color-mix(in srgb, var(--negative) 16%, transparent); }
+/* Solid variant: the chip IS the status, so it is filled and reads at a glance. --ink-950 flips with the theme,
+   so dark ink on a light fill in the dark theme becomes light ink on a dark fill on paper. */
+.t-chip.t-solid { color: var(--ink-950); border-color: transparent; }
 
 .t-stat {
   display: inline-flex; align-items: baseline; gap: 6px; padding: 5px 10px; font-size: 12px;
-  background: var(--ink-900); border: 1px solid var(--on-ink-border); border-radius: 2px;
+  background: var(--ink-950); border: 1px solid var(--on-ink-3); border-radius: 2px;
 }
 
-/* order ticket */
-.t-side { background: transparent; color: var(--on-ink-text-2); border: 1px solid var(--on-ink-border); border-radius: 2px; cursor: pointer; transition: background 120ms, color 120ms; }
-.t-side:hover { background: var(--on-ink-2); }
-.t-side[aria-pressed="true"][data-side="buy"] { background: var(--positive); color: var(--ink-900); border-color: var(--positive); }
-.t-side[aria-pressed="true"][data-side="sell"] { background: var(--negative); color: var(--ink-900); border-color: var(--negative); }
-.t-submit { border-radius: 2px; cursor: pointer; border: 1px solid transparent; transition: filter 120ms; }
-.t-submit[data-side="buy"] { background: var(--positive); color: var(--ink-900); border-color: var(--positive); }
-.t-submit[data-side="sell"] { background: var(--negative); color: var(--ink-900); border-color: var(--negative); }
+/* A risk flag is a shout, not a sentence: WARNING LOW LIQUIDITY, with the prose kept in the title. */
+.t-flag {
+  display: inline-flex; align-items: center; gap: 4px; max-width: 100%;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 3px 6px; border: 1px solid currentColor; border-radius: 2px;
+}
+.t-flag[data-sev="danger"] { color: var(--negative); background: color-mix(in srgb, var(--negative) 20%, transparent); }
+.t-flag[data-sev="warn"] { color: var(--ochre-300); background: color-mix(in srgb, var(--ochre-300) 20%, transparent); }
+
+/* ── the score ─────────────────────────────────────────────────────────────
+   One number, big enough to read from across the desk; everything near it is deliberately smaller. */
+.t-score { display: flex; align-items: baseline; gap: 2px; line-height: 0.85; }
+.t-score-n { font-size: 46px; font-weight: 800; letter-spacing: -0.04em; }
+.t-score-d { font-size: 12px; font-weight: 700; color: var(--on-ink-text-3); }
+
+/* Component breakdown, closed by default: the default view has to be scannable in about a second. */
+.t-disclose > summary {
+  list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--on-ink-text-2); padding: 3px 7px; border: 1px solid var(--on-ink-3); border-radius: 2px;
+}
+.t-disclose > summary::-webkit-details-marker { display: none; }
+.t-disclose > summary:hover { color: var(--paper); border-color: var(--on-ink-text-3); background: var(--on-ink-2); }
+.t-disclose[open] > summary { color: var(--paper); border-color: var(--on-ink-text-3); }
+.t-meter { height: 6px; background: var(--ink-950); border: 1px solid var(--on-ink-border); overflow: hidden; }
+.t-meter > i { display: block; height: 100%; }
+
+/* ── order ticket ──────────────────────────────────────────────────────────
+   The two biggest targets on the page. Resting, a side still shows its own colour so you can tell them apart
+   at a glance; selected, it is filled, and only one of the pair can be. */
+.t-side {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 48px; padding: 10px 12px; font-size: 15px; font-weight: 800;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  background: var(--ink-950); border: 2px solid var(--on-ink-3); border-radius: 2px;
+  cursor: pointer; transition: background 120ms, color 120ms, border-color 120ms;
+}
+.t-side[data-side="buy"] { color: var(--positive); }
+.t-side[data-side="sell"] { color: var(--negative); }
+.t-side:hover { background: var(--ink-700); border-color: currentColor; }
+.t-side[aria-pressed="true"][data-side="buy"] { background: var(--buy); color: var(--buy-ink); border-color: var(--buy); }
+.t-side[aria-pressed="true"][data-side="sell"] { background: var(--sell); color: var(--sell-ink); border-color: var(--sell); }
+
+.t-submit {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; min-height: 56px; padding: 12px 14px; font-size: 16px; font-weight: 800;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  border: 2px solid transparent; border-radius: 2px; cursor: pointer;
+  transition: filter 120ms, background 120ms, color 120ms;
+}
+.t-submit[data-side="buy"] { background: var(--buy); color: var(--buy-ink); border-color: var(--buy); }
+.t-submit[data-side="sell"] { background: var(--sell); color: var(--sell-ink); border-color: var(--sell); }
 .t-submit:hover:not(:disabled) { filter: brightness(1.1); }
+.t-submit:disabled {
+  background: var(--ink-700); color: var(--on-ink-text-4); border-color: var(--on-ink-border);
+  cursor: not-allowed; filter: none;
+}
+.t-submit[data-pending="true"] { cursor: progress; }
 
-/* list rows: dense, one hairline between them, the selected row is shaded and bold */
-.t-row { padding: 8px 12px; border: 0; border-bottom: 1px solid var(--on-ink-border); background: transparent; cursor: pointer; transition: background 100ms; color: inherit; }
-.t-row:hover { background: var(--on-ink-2); }
-.t-row[aria-current="true"] { background: var(--on-ink-3); }
+/* ── list rows: dense, one hairline between them; the selected row is unmistakable ── */
+.t-row {
+  position: relative; padding: 8px 12px 8px 14px; border: 0; border-bottom: 1px solid var(--on-ink-border);
+  background: transparent; cursor: pointer; transition: background 100ms; color: inherit;
+}
+.t-row:hover { background: var(--ink-700); }
+.t-row[aria-current="true"] { background: var(--ink-600); }
+/* A colour change alone was easy to miss on a scrolling list, so the selected row also grows an edge. */
+.t-row[aria-current="true"]::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--paper);
+}
 
-/* tables */
-.t-thead { background: var(--ink-800); color: var(--on-ink-text-3); border-bottom: 1px solid var(--on-ink-border); }
+/* ── tables ───────────────────────────────────────────────────────────────── */
+.t-thead {
+  background: var(--ink-950); color: var(--on-ink-text-2);
+  border-bottom: 1px solid var(--on-ink-3);
+  font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+}
 .t-table td { border-bottom: 1px solid var(--on-ink-border); }
+.t-table tbody tr:nth-child(odd) { background: var(--on-ink-1); }
+.t-table tbody tr:hover { background: var(--ink-700); }
 .t-table[data-right~="1"] td:nth-child(2), .t-table[data-right~="2"] td:nth-child(3), .t-table[data-right~="3"] td:nth-child(4),
 .t-table[data-right~="4"] td:nth-child(5), .t-table[data-right~="5"] td:nth-child(6), .t-table[data-right~="6"] td:nth-child(7) { text-align: right; }
 
 /* alert pill + popover (MemecoinAlerts) */
-.tvx-terminal .bg-\[\#9eae84\] { background: var(--paper); color: var(--ink-900); }
+.tvx-terminal .bg-\[\#9eae84\] { background: var(--paper); color: var(--ink-950); }
 .tvx-terminal .text-\[\#c8d3b6\], .tvx-terminal .text-\[\#c9c3b3\] { color: var(--on-ink-text-1); }
-.tvx-terminal .border-\[\#9eae84\]\/30 { border-color: var(--on-ink-border); }
+.tvx-terminal .border-\[\#9eae84\]\/30 { border-color: var(--on-ink-3); }
 
 /* Horizontal scroller that admits it scrolls: items keep their width and the
    trailing edge fades, so a clipped last chip reads as "more", not as broken. */

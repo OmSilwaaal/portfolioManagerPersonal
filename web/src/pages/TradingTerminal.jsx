@@ -29,6 +29,7 @@ import {
 } from '../api/memecoinApi'
 import PanelWorkspace from '../components/terminal/PanelWorkspace'
 import WorkspacePanel from '../components/terminal/Panel'
+import LogoBackdrop from '../components/terminal/LogoBackdrop'
 import MemecoinAlerts from '../components/alerts/MemecoinAlerts'
 import { Glyph } from '../ascii/glyphs'
 import { useCelebrate } from '../components/ProfitCelebration'
@@ -290,12 +291,19 @@ const RADAR_CAPTION = 'Radar activity/risk score (hand-set model, not validated)
 const SOURCE_LABEL = { radar: 'Radar', 'activity-v0': 'Activity v0' }
 const captionFor = (sig) => (sig?.source === 'radar' ? RADAR_CAPTION : SIGNAL_CAPTION)
 const RADAR_OFF_HINT = 'Radar is off. Set ENABLE_RADAR=true on the backend to see new launches.'
+// One colour per level, used for the score, its chip and its meters. `fill` has to be opaque because the level
+// chip is filled solid, and `ink` is what reads on it: --ink-950 flips with the theme, so a coloured fill always
+// gets the opposite ink. QUIET has no colour of its own and borrows the neutral ramp, which is the one fill the
+// flipped ink does not survive, so it names its own.
 const LEVEL_STYLE = {
-  QUIET: { text: 'text-[#a39d8d]', chip: 'bg-[#555143]/20', bar: 'bg-[#555143]' },
-  WARMING: { text: 'text-[#d6b87a]', chip: 'bg-[#d6b87a]/15', bar: 'bg-[#d6b87a]' },
-  ACTIVE: { text: 'text-[#9eae84]', chip: 'bg-[#9eae84]/15', bar: 'bg-[#9eae84]' },
-  HOT: { text: 'text-[#d35c4a]', chip: 'bg-[#d35c4a]/15', bar: 'bg-[#d35c4a]' },
+  QUIET: { color: 'var(--on-ink-text-2)', fill: 'var(--ink-600)', ink: 'var(--paper)' },
+  WARMING: { color: 'var(--ochre-300)', fill: 'var(--ochre-300)', ink: 'var(--ink-950)' },
+  ACTIVE: { color: 'var(--positive)', fill: 'var(--positive)', ink: 'var(--ink-950)' },
+  HOT: { color: 'var(--negative)', fill: 'var(--negative)', ink: 'var(--ink-950)' },
 }
+const levelStyle = (level) => LEVEL_STYLE[level] || LEVEL_STYLE.QUIET
+
+// Full sentences for the tooltip; the visible label is the short one below.
 const COMPONENT_LABELS = {
   volume_accel: 'Volume vs typical',
   price_accel: 'Price move vs own volatility',
@@ -310,32 +318,53 @@ const COMPONENT_LABELS = {
   market_regime: 'Market buy pressure',
   calm_price: 'Price calmness',
 }
+const COMPONENT_SHORT = {
+  volume_accel: 'VOLUME', price_accel: 'PRICE', buy_sell_imbalance: 'BUY/SELL', realized_vol: 'VOLATILITY',
+  liquidity_delta: 'LIQUIDITY', rank_vs_cohort: 'COHORT', buy_pressure: 'BUY PRESSURE', txn_accel: 'TXNS',
+  price_momentum: 'MOMENTUM', curve_progress: 'CURVE', market_regime: 'MARKET', calm_price: 'CALM',
+}
+
+// Risk flags shout. The backend's prose stays, as the tooltip; what you read on the panel is two words.
+const FLAG_LABEL = {
+  LOW_LIQUIDITY: 'LOW LIQUIDITY', VERY_NEW: 'BRAND NEW', SPIKE_SELL_HEAVY: 'SELL HEAVY', WASH_TRADE_HINT: 'WASH VOLUME',
+  UNVETTED: 'UNVETTED', RUGGED: 'RUGGED', MINT_AUTHORITY: 'MINT OPEN', FREEZE_AUTHORITY: 'FREEZE OPEN',
+  TOP_HOLDER: 'WHALE', HOLDER_CONCENTRATION: 'CONCENTRATED', CREATOR_HOLDS: 'CREATOR BAG', INSIDERS: 'INSIDERS',
+  SERIAL_RUGGER: 'RUG HISTORY', RUGCHECK_DANGER: 'RUGCHECK', LP_NOT_LOCKED: 'LP UNLOCKED', DEV_SOLD: 'CREATOR SOLD',
+  CONCENTRATED_BUYING: 'FAKE VOLUME',
+}
+// An unmapped code still reads as a shout rather than as snake_case, so a new backend flag needs no UI change.
+const flagLabel = (code) => FLAG_LABEL[code] || safeText(String(code || 'RISK').replace(/_/g, ' '), 24).toUpperCase()
 
 function SourceTag({ source }) {
   if (!source) return null
   return (
-    <span className={`shrink-0 text-[9px] px-1.5 py-0.5 rounded-full uppercase tracking-wider ${source === 'radar' ? 'text-[#9eae84] bg-[#9eae84]/10' : 'text-[#555143] bg-white/5'}`}
-      title={`Score source: ${SOURCE_LABEL[source] || source}`}>{source === 'radar' ? 'radar' : 'v0'}</span>
+    <span className="t-chip shrink-0" title={`Score source: ${SOURCE_LABEL[source] || source}`}>
+      {source === 'radar' ? 'radar' : 'v0'}
+    </span>
   )
 }
 
-function FlagBadge({ f }) {
+/* `compact` drops the DANGER/WARNING word for the discovery rows, where four flags on a 260px column would
+   otherwise be four wrapped lines; severity still reads from the colour, and the prose stays in the title. */
+function FlagBadge({ f, compact = false }) {
   const danger = f.severity === 'danger'
   return (
-    <span title={f.detail} className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full backdrop-blur-sm ${danger ? 'text-[#d35c4a] bg-[#d35c4a]/15' : 'text-[#d6b87a] bg-[#d6b87a]/15'}`}>
-      <AlertTriangle className="w-3 h-3" />{f.label}
+    <span className="t-flag" data-sev={danger ? 'danger' : 'warn'} title={f.detail || f.label}>
+      <AlertTriangle className="w-3 h-3 shrink-0" />
+      {compact ? '' : danger ? 'DANGER ' : 'WARNING '}{flagLabel(f.code)}
     </span>
   )
 }
 
 function SignalBadge({ sig }) {
   if (!sig) return null
-  const st = LEVEL_STYLE[sig.level] || LEVEL_STYLE.QUIET
+  const st = levelStyle(sig.level)
   const low = sig.confidence != null && sig.confidence < 0.5
   return (
     <span
       title={`${SOURCE_LABEL[sig.source] || 'Activity'} score ${sig.score} (${sig.level})${low ? ', low confidence' : ''}. Not a prediction.`}
-      className={`shrink-0 min-w-[28px] text-center px-1.5 py-0.5 rounded-full text-[10px] font-bold ${st.text} ${st.chip} ${low ? 'opacity-60' : ''}`}
+      className="t-chip t-solid shrink-0 justify-center"
+      style={{ background: st.fill, color: st.ink, minWidth: 30, opacity: low ? 0.75 : 1 }}
     >{Math.round(sig.score)}</span>
   )
 }
@@ -343,50 +372,66 @@ function SignalBadge({ sig }) {
 function SignalPanel({ address }) {
   const q = useGetMemecoinSignalQuery(address, { skip: !address, pollingInterval: usePoll(POLL.signal) })
   const sig = q.data
-  const st = LEVEL_STYLE[sig?.level] || LEVEL_STYLE.QUIET
+  const st = levelStyle(sig?.level)
+  const components = Object.entries(sig?.components || {})
+  const radar = sig?.source === 'radar' ? sig.radar : null
   return (
-    <div className="px-4 py-3">
-      <div className="flex items-center gap-2 mb-1.5">
-        <span className="text-[11px] text-[#8a8574] uppercase tracking-wide">Activity signal</span>
+    <div className="t-rule px-4 py-3">
+      <div className="flex items-center gap-2">
+        <span className="t-label">Activity signal</span>
         <SourceTag source={sig?.source} />
-        {q.isFetching && !q.isLoading && <Loader2 className="w-3 h-3 animate-spin text-[#555143]" />}
+        {q.isFetching && !q.isLoading && <Loader2 className="w-3 h-3 animate-spin" style={{ color: 'var(--on-ink-text-3)' }} />}
       </div>
       {q.isLoading ? (
-        <Skel className="h-12 w-full" />
+        <Skel className="mt-2 h-12 w-full" />
       ) : q.isError ? (
         <ErrorBox error={q.error} onRetry={q.refetch} label="Signal unavailable" />
       ) : sig ? (
-        <div className="flex flex-wrap gap-x-6 gap-y-2">
-          <div className="shrink-0">
-            <div className={`text-2xl font-bold leading-none ${st.text}`}>{Math.round(sig.score)}<span className="text-[10px] text-[#555143]">/100</span></div>
-            <div className={`text-[10px] font-bold tracking-wider ${st.text}`}>{sig.level}</div>
-            <div className="text-[10px] text-[#555143]">confidence {Math.round((sig.confidence ?? 0) * 100)}%{sig.mode === 'list-only' ? ' (list data only)' : ''}</div>
-            {sig.source === 'radar' && sig.radar && (
-              <div className="text-[10px] text-[#555143]">
-                {sig.radar.launch?.state}{sig.radar.launch?.ageMin != null ? ` · ${fmtAge(sig.radar.launch.ageMin)}` : ''}
-                {sig.radar.passesSafetyGate ? ' · gate ok' : ' · gate failed'}
-              </div>
+        <div className="mt-2 space-y-2.5">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <div className="t-score" style={{ color: st.color }}>
+              <span className="t-score-n">{Math.round(sig.score)}</span>
+              <span className="t-score-d">/100</span>
+            </div>
+            <span className="t-chip t-solid" style={{ background: st.fill, color: st.ink, fontSize: 12, padding: '4px 10px' }}>{sig.level}</span>
+            <span className="t-chip" title={sig.mode === 'list-only' ? 'Scored from list data only' : 'Model confidence in this score'}>
+              conf {Math.round((sig.confidence ?? 0) * 100)}%{sig.mode === 'list-only' ? ' · list' : ''}
+            </span>
+            {radar?.launch?.state && <span className="t-chip">{safeText(radar.launch.state, 12)}{radar.launch.ageMin != null ? ` · ${fmtAge(radar.launch.ageMin)}` : ''}</span>}
+            {radar && (
+              <span className="t-chip" data-tone={radar.passesSafetyGate ? 'ok' : 'bad'} title="Radar safety gate: authorities, holder concentration, insiders, creator history">
+                gate {radar.passesSafetyGate ? 'ok' : 'failed'}
+              </span>
             )}
           </div>
-          <div className="flex-1 min-w-[180px] space-y-1.5">
-            {Object.entries(sig.components || {}).map(([k, c]) => (
-              <div key={k} className="flex items-center gap-2 text-[10px] text-[#a39d8d]">
-                <span className="w-36 shrink-0 truncate">{COMPONENT_LABELS[k] || k}</span>
-                <div className="flex-1 h-1.5 rounded-full bg-white/10 overflow-hidden">
-                  {c.score != null && <div className={`h-full rounded-full ${st.bar}`} style={{ width: `${c.score}%` }} />}
-                </div>
-                <span className="w-7 text-right text-[#555143]">{c.score != null ? Math.round(c.score) : 'n/a'}</span>
-              </div>
-            ))}
-          </div>
+
           {sig.riskFlags?.length > 0 && (
-            <div className="w-full flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap gap-1.5">
               {sig.riskFlags.map((f) => <FlagBadge key={f.code} f={{ severity: 'danger', ...f }} />)}
             </div>
           )}
+
+          {/* Closed by default: the score and the flags are the whole answer, the per-component maths is for
+              whoever asks a second question. */}
+          {components.length > 0 && (
+            <details className="t-disclose">
+              <summary>Breakdown · {components.length}</summary>
+              <div className="mt-2 space-y-1.5">
+                {components.map(([k, c]) => (
+                  <div key={k} className="flex items-center gap-2 text-[10px]" title={COMPONENT_LABELS[k] || k}>
+                    <span className="w-24 shrink-0 truncate font-bold tracking-wider" style={{ color: 'var(--on-ink-text-2)' }}>{COMPONENT_SHORT[k] || (COMPONENT_LABELS[k] || k).toUpperCase()}</span>
+                    <div className="t-meter flex-1">
+                      {c.score != null && <i style={{ width: `${Math.max(0, Math.min(100, c.score))}%`, background: st.fill }} />}
+                    </div>
+                    <span className="w-7 text-right font-bold" style={{ color: 'var(--paper)' }}>{c.score != null ? Math.round(c.score) : '--'}</span>
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
         </div>
       ) : null}
-      <div className="mt-1.5 text-[10px] text-[#555143] italic">{captionFor(sig)}</div>
+      <p className="t-fineprint mt-2">{captionFor(sig)}</p>
     </div>
   )
 }
@@ -431,23 +476,23 @@ function TokenRow({ t, active, onSelect, sig }) {
             {t.image ? <img src={t.image} alt="" className="w-full h-full object-cover" loading="lazy" /> : safeText(t.symbol || '?', 4).slice(0, 2)}
           </div>
           <div className="min-w-0">
-            <div className="text-sm font-bold text-white flex items-center gap-1.5"><SignalBadge sig={sig} /><SourceTag source={sig?.source} /><span className="truncate">{safeText(t.symbol)} <span className="font-normal text-[#b3ad9d]">{safeText(t.name, 48)}</span></span></div>
-            <div className="text-[11px] text-[#6b6657]">{short(t.address)}{t.ageMinutes != null && ` · ${fmtAge(t.ageMinutes)}`}</div>
+            <div className="flex items-center gap-1.5 text-sm font-black" style={{ color: 'var(--paper)' }}><SignalBadge sig={sig} /><SourceTag source={sig?.source} /><span className="truncate tracking-wide">{safeText(t.symbol)} <span className="font-normal" style={{ color: 'var(--on-ink-text-2)' }}>{safeText(t.name, 48)}</span></span></div>
+            <div className="text-[11px]" style={{ color: 'var(--on-ink-text-3)' }}>{short(t.address)}{t.ageMinutes != null && ` · ${fmtAge(t.ageMinutes)}`}</div>
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <MiniTrend points={[{ label: '5m', value: t.change5m }, { label: '1h', value: t.change1h }, { label: '24h', value: t.change24h }]} />
           <div className="text-right">
-            <div className="text-sm text-white">{fmtUsd(t.marketCap)}</div>
-            <div className={`text-[11px] font-semibold ${pctColor(t.change24h ?? t.change1h)}`}>{fmtPct(t.change24h ?? t.change1h)}</div>
+            <div className="text-sm font-bold" style={{ color: 'var(--paper)' }}>{fmtUsd(t.marketCap)}</div>
+            <div className={`text-[11px] font-bold ${pctColor(t.change24h ?? t.change1h)}`}>{fmtPct(t.change24h ?? t.change1h)}</div>
           </div>
         </div>
       </div>
-      <div className="flex gap-3 mt-1.5 text-[11px] text-[#6b6657]">
+      <div className="flex gap-3 mt-1.5 text-[11px]" style={{ color: 'var(--on-ink-text-3)' }}>
         <span>V {fmtUsd(t.volume24h)}</span><span>L {fmtUsd(t.liquidity)}</span>{t.holders != null && <span>H {fmtNum(t.holders)}</span>}
       </div>
       {t.bondingProgress != null && (
-        <div className="mt-1.5 h-1 rounded-full bg-white/10 overflow-hidden"><div className="h-full rounded-full bg-[#9eae84]" style={{ width: `${Math.min(100, t.bondingProgress)}%` }} /></div>
+        <div className="t-meter mt-1.5"><i style={{ width: `${Math.min(100, t.bondingProgress)}%`, background: 'var(--moss-200)' }} /></div>
       )}
     </button>
   )
@@ -467,12 +512,12 @@ function RadarRow({ s, active, onSelect }) {
     >
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <div className="text-sm font-bold text-white flex items-center gap-1.5">
-            {sig ? <SignalBadge sig={sig} /> : <span className="shrink-0 min-w-[28px] text-center px-1.5 py-0.5 rounded-full text-[10px] bg-white/5 text-[#555143]" title="No market snapshot yet">new</span>}
+          <div className="flex items-center gap-1.5 text-sm font-black" style={{ color: 'var(--paper)' }}>
+            {sig ? <SignalBadge sig={sig} /> : <span className="t-chip shrink-0 justify-center" style={{ minWidth: 30 }} title="No market snapshot yet">new</span>}
             <SourceTag source="radar" />
-            <span className="truncate">{safeText(s.symbol) || '?'} <span className="font-normal text-[#b3ad9d]">{safeText(s.name, 48)}</span></span>
+            <span className="truncate tracking-wide">{safeText(s.symbol) || '?'} <span className="font-normal" style={{ color: 'var(--on-ink-text-2)' }}>{safeText(s.name, 48)}</span></span>
           </div>
-          <div className="text-[11px] text-[#6b6657]">{short(s.address)} · {fmtAge(l.ageMin)} · {l.state}{l.curveProgress != null ? ` ${Math.round(Math.min(l.curveProgress, 1) * 100)}%` : ''}</div>
+          <div className="text-[11px]" style={{ color: 'var(--on-ink-text-3)' }}>{short(s.address)} · {fmtAge(l.ageMin)} · {l.state}{l.curveProgress != null ? ` ${Math.round(Math.min(l.curveProgress, 1) * 100)}%` : ''}</div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <MiniTrend points={[
@@ -481,21 +526,21 @@ function RadarRow({ s, active, onSelect }) {
             { label: '60m', value: s.features?.price_chg_60m != null ? s.features.price_chg_60m * 100 : null },
           ]} />
           <div className="text-right">
-            <div className="text-sm text-white">{fmtUsd(s.market?.fdv)}</div>
-            <div className={`text-[11px] font-semibold ${pctColor(s.features?.price_chg_15m != null ? s.features.price_chg_15m * 100 : null)}`}>{s.features?.price_chg_15m != null ? `${fmtPct(s.features.price_chg_15m * 100)} 15m` : '--'}</div>
+            <div className="text-sm font-bold" style={{ color: 'var(--paper)' }}>{fmtUsd(s.market?.fdv)}</div>
+            <div className={`text-[11px] font-bold ${pctColor(s.features?.price_chg_15m != null ? s.features.price_chg_15m * 100 : null)}`}>{s.features?.price_chg_15m != null ? `${fmtPct(s.features.price_chg_15m * 100)} 15m` : '--'}</div>
           </div>
         </div>
       </div>
       <div className="flex flex-wrap gap-1.5 mt-1.5">
-        {danger.map((f) => <FlagBadge key={f.code} f={f} />)}
-        {warn.map((f) => <FlagBadge key={f.code} f={f} />)}
-        {s.passesSafetyGate && <span className="text-[10px] px-2 py-0.5 rounded-full text-[#7ea968] bg-[#7ea968]/15" title="Passed the radar safety gate (authorities, holder concentration, insiders, creator history)">vetted</span>}
-        {p.boostTotal > 0 && <span className="text-[10px] px-2 py-0.5 rounded-full text-[#d6b87a] bg-[#d6b87a]/15" title="Paid DexScreener boost">boost</span>}
-        {p.hasProfile && <span className="text-[10px] px-2 py-0.5 rounded-full text-[#a39d8d] bg-white/5" title="Paid DexScreener profile">profile</span>}
-        {p.cto && <span className="text-[10px] px-2 py-0.5 rounded-full text-[#a39d8d] bg-white/5" title="Community takeover">CTO</span>}
-        {p.twitter && <span className="text-[10px] px-2 py-0.5 rounded-full text-[#555143] bg-white/5">X</span>}
-        {p.telegram && <span className="text-[10px] px-2 py-0.5 rounded-full text-[#555143] bg-white/5">TG</span>}
-        {p.website && <span className="text-[10px] px-2 py-0.5 rounded-full text-[#555143] bg-white/5">web</span>}
+        {danger.map((f) => <FlagBadge key={f.code} f={f} compact />)}
+        {warn.map((f) => <FlagBadge key={f.code} f={f} compact />)}
+        {s.passesSafetyGate && <span className="t-chip" data-tone="ok" title="Passed the radar safety gate (authorities, holder concentration, insiders, creator history)">vetted</span>}
+        {p.boostTotal > 0 && <span className="t-chip" data-tone="warn" title="Paid DexScreener boost">boost</span>}
+        {p.hasProfile && <span className="t-chip" title="Paid DexScreener profile">profile</span>}
+        {p.cto && <span className="t-chip" title="Community takeover">CTO</span>}
+        {p.twitter && <span className="t-chip">X</span>}
+        {p.telegram && <span className="t-chip">TG</span>}
+        {p.website && <span className="t-chip">web</span>}
       </div>
     </button>
   )
@@ -507,13 +552,13 @@ function RadarList({ selected, onSelect }) {
   const d = q.data
   return (
     <>
-      <div className="px-3 py-2 flex items-center gap-2 text-[10px] text-[#a39d8d]" title={RADAR_CAPTION}>
-        <span>Radar</span>
-        <select value={sort} onChange={(e) => setSort(e.target.value)} className="rounded-full bg-black/30 text-[10px] px-2.5 py-1">
+      <div className="t-rule px-3 py-2 flex items-center gap-2" title={RADAR_CAPTION}>
+        <span className="t-label">Radar</span>
+        <select value={sort} onChange={(e) => setSort(e.target.value)} className="text-[10px]">
           <option value="new">Newest launches</option>
           <option value="score">Top score</option>
         </select>
-        {q.isFetching && !q.isLoading && <Loader2 className="w-3 h-3 animate-spin text-[#555143]" />}
+        {q.isFetching && !q.isLoading && <Loader2 className="w-3 h-3 animate-spin" style={{ color: 'var(--on-ink-text-3)' }} />}
       </div>
       <div className="flex-1 overflow-y-auto min-h-0">
         {q.isLoading ? (
@@ -523,7 +568,7 @@ function RadarList({ selected, onSelect }) {
         ) : d && d.enabled === false ? (
           <div className="p-4 text-xs text-[#a39d8d] text-center space-y-1">
             <div>{RADAR_OFF_HINT}</div>
-            {d.reason && <div className="text-[10px] text-[#555143]">{d.reason}</div>}
+            {d.reason && <div className="t-fineprint">{d.reason}</div>}
           </div>
         ) : !d?.signals?.length ? (
           <div className="p-4 text-xs text-[#a39d8d] text-center">No radar tokens yet.</div>
@@ -531,7 +576,7 @@ function RadarList({ selected, onSelect }) {
           d.signals.map((s) => <RadarRow key={s.address} s={s} active={s.address === selected} onSelect={onSelect} />)
         )}
       </div>
-      <div className="px-3 py-2 text-[10px] text-[#555143] italic">{RADAR_CAPTION}</div>
+      <p className="t-rule t-fineprint px-3 py-2">{RADAR_CAPTION}</p>
     </>
   )
 }
@@ -585,23 +630,23 @@ function DiscoveryPanel({ selected, onSelect }) {
             { id: 'trending', label: 'Trending', icon: <Flame className="w-3 h-3" /> },
           ]}
         />
-        {isMockData(q.data) && <span className="text-[9px] px-2 py-0.5 rounded-full bg-[#d6b87a]/15 text-[#d6b87a] shrink-0">MOCK</span>}
+        {isMockData(q.data) && <span className="t-chip shrink-0" data-tone="warn">mock</span>}
       </div>
       {tab === 'radar' ? <RadarList selected={selected} onSelect={onSelect} /> : (<>
-      <div className="px-3 py-2 flex items-center gap-2 text-[10px] text-[#a39d8d]" title={SIGNAL_CAPTION}>
-        <span>Activity</span>
-        <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="rounded-full bg-black/30 text-[10px] px-2.5 py-1">
+      <div className="t-rule px-3 py-2 flex flex-wrap items-center gap-2" title={SIGNAL_CAPTION}>
+        <span className="t-label">Activity</span>
+        <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="text-[10px]">
           <option value="default">Default order</option>
           <option value="score">Sort by score</option>
         </select>
-        <select value={minLevel} onChange={(e) => setMinLevel(Number(e.target.value))} className="rounded-full bg-black/30 text-[10px] px-2.5 py-1">
+        <select value={minLevel} onChange={(e) => setMinLevel(Number(e.target.value))} className="text-[10px]">
           <option value={0}>All</option>
           <option value={25}>Warming+ (25)</option>
           <option value={50}>Active+ (50)</option>
           <option value={75}>Hot (75)</option>
         </select>
-        {(sigNew.isLoading || sigTrend.isLoading) && <Loader2 className="w-3 h-3 animate-spin text-[#555143]" />}
-        {sigFailed && <span className="text-[#d6b87a]" title="Signals could not be loaded">scores unavailable</span>}
+        {(sigNew.isLoading || sigTrend.isLoading) && <Loader2 className="w-3 h-3 animate-spin" style={{ color: 'var(--on-ink-text-3)' }} />}
+        {sigFailed && <span className="t-chip" data-tone="warn" title="Signals could not be loaded">no scores</span>}
       </div>
       <div className="flex-1 overflow-y-auto min-h-0">
         {q.isLoading ? (
@@ -625,8 +670,8 @@ function DiscoveryPanel({ selected, onSelect }) {
 function Stat({ label, value, className = '' }) {
   return (
     <div className="min-w-0">
-      <div className="text-[11px] text-[#6b6657] uppercase">{label}</div>
-      <div className={`text-sm font-bold truncate ${className || 'text-white'}`}>{value}</div>
+      <span className="t-label">{label}</span>
+      <div className={`t-value truncate ${className}`}>{value}</div>
     </div>
   )
 }
@@ -639,15 +684,15 @@ function TokenHeader({ q }) {
   if (!t) return null
   const ch = t.change24h ?? t.change1h
   return (
-    <div className="p-4 flex flex-wrap items-center gap-x-6 gap-y-2">
+    <div className="p-4 flex flex-wrap items-center gap-x-5 gap-y-3">
       <div className="min-w-0">
-        <div className="text-base font-bold text-white font-display">{safeText(t.symbol)} <span className="text-[#a39d8d] font-normal text-sm">{safeText(t.name, 48)}</span></div>
-        <div className="text-[11px] text-[#6b6657]">{short(t.address, 6)}</div>
+        <div className="font-display text-lg font-black tracking-wide" style={{ color: 'var(--paper)' }}>{safeText(t.symbol)}</div>
+        <div className="truncate text-[11px]" style={{ color: 'var(--on-ink-text-3)' }} title={t.address}>{safeText(t.name, 48)} · {short(t.address, 6)}</div>
       </div>
       <div>
-        <div className="text-xl font-bold text-white leading-none">{fmtPrice(t.price)}</div>
-        <div className={`text-xs flex items-center ${pctColor(ch)}`}>
-          {ch != null && (ch >= 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />)}{fmtPct(ch)}
+        <div className="text-2xl font-black leading-none" style={{ color: 'var(--paper)' }}>{fmtPrice(t.price)}</div>
+        <div className={`mt-0.5 flex items-center text-sm font-bold ${pctColor(ch)}`}>
+          {ch != null && (ch >= 0 ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />)}{fmtPct(ch)}
         </div>
       </div>
       <Stat label="MCap" value={fmtUsd(t.marketCap)} />
@@ -655,8 +700,8 @@ function TokenHeader({ q }) {
       <Stat label="Volume 24h" value={fmtUsd(t.volume24h)} />
       <Stat label="Holders" value={fmtNum(t.holders)} />
       {t.change1h != null && <Stat label="1h" value={fmtPct(t.change1h)} className={pctColor(t.change1h)} />}
-      {isMockData(t) && <span className="text-[9px] px-2 py-0.5 rounded-full bg-[#d6b87a]/15 text-[#d6b87a]">MOCK DATA</span>}
-      {q.isError && <span className="text-[9px] px-2 py-0.5 rounded-full bg-[#d6b87a]/15 text-[#d6b87a]" title="Showing the last known values; reconnecting">reconnecting</span>}
+      {isMockData(t) && <span className="t-chip" data-tone="warn">mock data</span>}
+      {q.isError && <span className="t-chip" data-tone="warn" title="Showing the last known values; reconnecting">reconnecting</span>}
     </div>
   )
 }
@@ -668,29 +713,25 @@ function ChartPanel({ address }) {
 
   return (
     <div className="flex flex-col h-[340px] lg:h-full lg:min-h-0">
-      <div className="flex items-center gap-2 px-3 py-2">
-        <div className="flex items-center gap-1 rounded-full bg-black/30 p-1">
+      <div className="t-rule flex items-center gap-2 px-3 py-2">
+        <div role="tablist" className="flex items-center gap-1">
           {TIMEFRAMES.map((x) => (
-            <button
-              key={x}
-              onClick={() => setTf(x)}
-              className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-all ${tf === x ? 'bg-[#3e4d26]/70 text-white shadow-[0_0_0_1px_rgba(158,174,132,0.35),0_4px_14px_-4px_rgba(158,174,132,0.55)]' : 'text-[#a39d8d] hover:text-white hover:bg-white/5'}`}
-            >{x}</button>
+            <button key={x} role="tab" aria-selected={tf === x} onClick={() => setTf(x)} className="t-tab">{x}</button>
           ))}
         </div>
-        {q.isFetching && !q.isLoading && <Loader2 className="w-3 h-3 ml-1 animate-spin text-[#555143]" />}
-        {isMockData(q.data) && <span className="ml-auto text-[9px] px-2 py-0.5 rounded-full bg-[#d6b87a]/15 text-[#d6b87a]">MOCK</span>}
+        {q.isFetching && !q.isLoading && <Loader2 className="w-3 h-3 ml-1 animate-spin" style={{ color: 'var(--on-ink-text-3)' }} />}
+        {isMockData(q.data) && <span className="t-chip ml-auto" data-tone="warn">mock</span>}
       </div>
-      <div className="relative flex-1 min-h-0">
+      <div className="relative flex-1 min-h-0" style={{ background: 'var(--ink-950)' }}>
         {!address ? (
-          <div className="absolute inset-0 flex items-center justify-center text-xs text-[#6b6657]">Select a token to load its chart</div>
+          <div className="absolute inset-0 flex items-center justify-center text-xs" style={{ color: 'var(--on-ink-text-3)' }}>Select a token to load its chart</div>
         ) : candles.length > 0 ? (
           // Stale-while-revalidate: once we have candles, keep showing them through a transient poll
           // error instead of swapping to a full error box (that was the main source of "chart unavailable" flicker).
           <>
             <MemeChart candles={candles} fitKey={`${address}:${tf}`} />
             {q.isError && (
-              <span className="absolute top-2 right-2 text-[9px] px-2 py-0.5 rounded-full bg-[#d6b87a]/15 text-[#d6b87a] backdrop-blur-sm">reconnecting</span>
+              <span className="t-chip absolute top-2 right-2" data-tone="warn">reconnecting</span>
             )}
           </>
         ) : q.isLoading ? (
@@ -698,7 +739,7 @@ function ChartPanel({ address }) {
         ) : q.isError ? (
           <div className="absolute inset-0 flex items-center justify-center"><ErrorBox error={q.error} onRetry={q.refetch} label="Chart unavailable" /></div>
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center text-xs text-[#6b6657]">No candle data yet for this token</div>
+          <div className="absolute inset-0 flex items-center justify-center text-xs" style={{ color: 'var(--on-ink-text-3)' }}>No candle data yet for this token</div>
         )}
       </div>
     </div>
@@ -751,6 +792,7 @@ function OrderTicket({ token, position }) {
   const submit = async () => {
     if (!address || !validAmount || !validSlip || trading) return
     setStatus(null)
+    setArmed(false)
     // clientOrderId lets the server collapse an accidental double submit into one fill
     const body = { address, side, ...orderAmount, slippageBps, clientOrderId: newOrderId() }
     const res = await trade(body)
@@ -767,6 +809,8 @@ function OrderTicket({ token, position }) {
   }
 
   const buy = side === 'buy'
+  const canSubmit = Boolean(token) && validAmount && validSlip && !trading
+  const sym = safeText(token?.symbol) || ''
   return (
     <Panel className="flex flex-col" tone={buy ? 'buy' : 'sell'}>
       <div className="grid grid-cols-2 gap-2 m-3 mb-0">
@@ -774,27 +818,27 @@ function OrderTicket({ token, position }) {
           <button
             key={s}
             onClick={() => { setSide(s); setStatus(null) }}
-            className="t-side flex items-center justify-center gap-1.5 py-2.5 text-sm font-extrabold uppercase tracking-wider"
+            className="t-side"
             data-side={s}
             aria-pressed={side === s}
           >
-            {s === 'buy' ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
+            {s === 'buy' ? <ArrowUpRight className="w-5 h-5" /> : <ArrowDownRight className="w-5 h-5" />}
             {s}
           </button>
         ))}
       </div>
 
       <div className="p-4 space-y-3.5">
-        <div className="text-sm truncate px-3 py-2" style={{ border: '1px solid var(--on-ink-border)', color: 'var(--on-ink-text-1)' }}>
-          {token ? <><span className="font-extrabold" style={{ color: buy ? 'var(--positive)' : 'var(--negative)' }}>{buy ? 'Buying' : 'Selling'} {safeText(token.symbol)}</span> @ {fmtPrice(token.price)}</> : 'Select a token to trade'}
+        <div className="truncate px-3 py-2 text-sm" style={{ background: 'var(--ink-950)', border: '1px solid var(--on-ink-3)', color: 'var(--on-ink-text-1)' }}>
+          {token ? <><span className="font-black uppercase tracking-wider" style={{ color: buy ? 'var(--buy)' : 'var(--sell)' }}>{buy ? 'Buying' : 'Selling'} {sym}</span> @ {fmtPrice(token.price)}</> : 'Select a token to trade'}
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-[11px] text-[#8a8574] uppercase tracking-wide">Amount (SOL)</label>
+          <label className="t-label">Amount (SOL)</label>
           <div className="grid grid-cols-5 gap-1.5">
             {SOL_PRESETS.map((v) => (
               <button key={v} onClick={() => { setAmount(String(v)); setSellPct(null) }}
-                className={`t-btn py-1.5 text-[11px] font-bold ${amountNum === v ? 't-on' : ''}`} aria-pressed={amountNum === v}>
+                className={`t-btn py-2 text-[12px] font-bold ${amountNum === v ? 't-on' : ''}`} aria-pressed={amountNum === v}>
                 {v}
               </button>
             ))}
@@ -806,7 +850,8 @@ function OrderTicket({ token, position }) {
               {SELL_PCTS.map((p) => (
                 <button key={p} disabled={!heldTokens}
                   onClick={() => setSellPct(p)}
-                  className="t-btn py-1.5 text-[11px] disabled:opacity-40">
+                  aria-pressed={sellPct === p}
+                  className={`t-btn py-2 text-[12px] font-bold ${sellPct === p ? 't-on' : ''}`}>
                   {p}%
                 </button>
               ))}
@@ -816,52 +861,55 @@ function OrderTicket({ token, position }) {
 
         <div className="grid grid-cols-2 gap-2.5">
           <div>
-            <label className="text-[11px] text-[#8a8574] uppercase tracking-wide">Slippage (%)</label>
+            <label className="t-label">Slippage (%)</label>
             <input type="number" min="0" max="100" step="0.5" value={slippage} onChange={(e) => setSlippage(e.target.value)}
               className="t-input w-full text-xs" aria-invalid={!validSlip} aria-label="Slippage percent" />
           </div>
           <div>
-            <label className="text-[11px] text-[#8a8574] uppercase tracking-wide">Priority fee (SOL)</label>
+            <label className="t-label">Priority fee (SOL)</label>
             <input type="number" min="0" step="0.0005" value={priority} onChange={(e) => setPriority(e.target.value)}
               className="t-input w-full text-xs" aria-label="Priority fee in SOL" />
           </div>
         </div>
 
         {/* Quote */}
-        <div className="p-3 text-[11px] space-y-1.5 min-h-[68px]" style={{ border: '1px dashed var(--on-ink-border)' }}>
+        <div className="p-3 text-[11px] space-y-1.5 min-h-[68px]" style={{ background: 'var(--ink-950)', border: '1px solid var(--on-ink-3)' }}>
           {quoting ? (
             <><Skel className="h-3 w-full" /><Skel className="h-3 w-2/3" /><Skel className="h-3 w-1/2" /></>
           ) : quoteErr ? (
-            <div className="text-[#d35c4a] break-words">Quote failed: {quoteErr}</div>
+            <div className="break-words" style={{ color: 'var(--negative)' }}>Quote failed: {quoteErr}</div>
           ) : quote ? (
             <>
               <Row k={buy ? 'You receive' : 'You receive (SOL)'} v={fmtNum(buy ? quote.tokens : quote.amountSol)} />
               <Row k="Min received" v={fmtNum(quote.minReceived)} />
               <Row k="Price impact" v={quote.priceImpactPct != null ? `${Number(quote.priceImpactPct).toFixed(2)}%` : '--'} warn={quote.priceImpactPct > 5} />
               {quote.feeSol != null && <Row k="Fee" v={`${quote.feeSol} SOL`} />}
-              {isMockData(quote) && <div className="text-[9px] text-[#d6b87a]">MOCK QUOTE</div>}
+              {isMockData(quote) && <span className="t-chip" data-tone="warn">mock quote</span>}
             </>
           ) : (
-            <div className="text-[#555143]">{!token ? 'Pick a token' : !validAmount ? 'Enter an amount' : !validSlip ? 'Slippage must be 0-100%' : ''}</div>
+            <div style={{ color: 'var(--on-ink-text-3)' }}>{!token ? 'Pick a token' : !validAmount ? 'Enter an amount' : !validSlip ? 'Slippage must be 0-100%' : ''}</div>
           )}
         </div>
 
-        <button
-          onClick={submit}
-          disabled={!token || !validAmount || !validSlip || trading}
-          className="t-submit w-full py-3 text-sm font-extrabold uppercase tracking-wider flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
-          data-side={buy ? 'buy' : 'sell'}
-        >
-          {trading ? <Loader2 className="w-4 h-4 animate-spin" /> : buy ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
-          {trading ? 'Submitting...' : `${buy ? 'Buy' : 'Sell'} ${token?.symbol || ''}`}
-        </button>
+        <div className="space-y-1.5">
+          <button
+            onClick={() => { if (!canSubmit) return; setStatus(null); submit() }}
+            disabled={!canSubmit}
+            className="t-submit"
+            data-side={buy ? 'buy' : 'sell'}
+            data-pending={trading ? 'true' : undefined}
+          >
+            {trading ? <Loader2 className="w-5 h-5 animate-spin" /> : buy ? <ArrowUpRight className="w-5 h-5" /> : <ArrowDownRight className="w-5 h-5" />}
+            {trading ? 'Submitting' : `${buy ? 'Buy' : 'Sell'} ${sym}`}
+          </button>
+        </div>
 
         {status && (
-          <div role="status" className="p-2.5 text-xs font-semibold break-words" style={{ border: `1px solid ${status.ok ? 'var(--positive)' : 'var(--negative)'}`, color: status.ok ? 'var(--positive)' : 'var(--negative)' }}>
+          <div role="status" className="p-2.5 text-xs font-bold break-words" style={{ border: `2px solid ${status.ok ? 'var(--positive)' : 'var(--negative)'}`, color: status.ok ? 'var(--positive)' : 'var(--negative)' }}>
             {status.msg}
           </div>
         )}
-        <p className="text-[11px] text-[#6b6657] leading-snug">Orders execute through the paper-trading system. No real funds move.</p>
+        <p className="t-fineprint">Orders execute through the paper-trading system. No real funds move.</p>
       </div>
     </Panel>
   )
@@ -877,7 +925,7 @@ function Table({ head, children, empty, right = [] }) {
     <div className="overflow-auto h-full">
       <table className="t-table w-full text-xs min-w-[480px]" data-right={right.join(' ')}>
         <thead className="t-thead sticky top-0 uppercase">
-          <tr>{head.map((h, i) => <th key={h} scope="col" className={`font-normal px-3 py-2 whitespace-nowrap ${right.includes(i) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr>
+          <tr>{head.map((h, i) => <th key={h} scope="col" className={`px-3 py-2 whitespace-nowrap ${right.includes(i) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr>
         </thead>
         <tbody>{children}</tbody>
       </table>
@@ -901,10 +949,10 @@ function HistoryTab({ onSelect }) {
       <div className="flex-1 min-h-0">
         <Table head={['Time', 'Token', 'Side', 'Qty', 'Price', 'Total']} right={[3, 4, 5]} empty={items.length === 0 && <Empty text="No memecoin trades yet." />}>
           {items.map((f) => (
-            <tr key={f.id} onClick={() => onSelect(f.address)} className="odd:bg-white/[0.025] hover:bg-white/10 cursor-pointer transition-colors">
-              <td className="px-3 py-1.5 text-[#a39d8d]" title={f.createdAt}>{f.createdAt ? `${timeAgo(Date.parse(f.createdAt))} ago` : '--'}</td>
-              <td className="px-3 py-1.5 font-bold text-white">{safeText(f.symbol)}</td>
-              <td className={`px-3 py-1.5 uppercase ${f.type === 'buy' ? 'tv-up' : 'tv-down'}`}>{f.type}</td>
+            <tr key={f.id} onClick={() => onSelect(f.address)} className="cursor-pointer transition-colors">
+              <td className="px-3 py-1.5" style={{ color: 'var(--on-ink-text-3)' }} title={f.createdAt}>{f.createdAt ? `${timeAgo(Date.parse(f.createdAt))} ago` : '--'}</td>
+              <td className="px-3 py-1.5 font-black" style={{ color: 'var(--paper)' }}>{safeText(f.symbol)}</td>
+              <td className={`px-3 py-1.5 font-bold uppercase ${f.type === 'buy' ? 'tv-up' : 'tv-down'}`}>{f.type}</td>
               <td className="px-3 py-1.5">{fmtTokens(f.tokens)}</td>
               <td className="px-3 py-1.5">{fmtPrice(f.price)}</td>
               <td className="px-3 py-1.5">{fmtUsd(f.totalUsd)}</td>
@@ -913,7 +961,7 @@ function HistoryTab({ onSelect }) {
         </Table>
       </div>
       {total > HISTORY_PAGE && (
-        <div className="flex items-center justify-between gap-2 px-3 py-1 text-[10px] text-[#a39d8d]">
+        <div className="t-rule flex items-center justify-between gap-2 px-3 py-1.5 text-[10px]" style={{ color: 'var(--on-ink-text-2)' }}>
           <button disabled={page === 0 || q.isFetching} onClick={() => setPage((p) => Math.max(0, p - 1))} className="px-2 py-0.5 disabled:opacity-40">Newer</button>
           <span>{page * HISTORY_PAGE + 1}-{Math.min(total, page * HISTORY_PAGE + items.length)} of {total}</span>
           <button disabled={!q.data?.hasMore || q.isFetching} onClick={() => setPage((p) => p + 1)} className="px-2 py-0.5 disabled:opacity-40">Older</button>
@@ -933,20 +981,20 @@ function PositionsTab({ q, onSelect }) {
       <div className="flex-1 min-h-0">
         <Table head={['Token', 'Qty', 'Avg price', 'Price', 'Cost', 'Value', 'PnL']} right={[1, 2, 3, 4, 5, 6]} empty={positions.length === 0 && <Empty text="No open positions. Buy a token to get started." />}>
           {positions.map((p) => (
-            <tr key={p.address} onClick={() => onSelect(p.address)} className="odd:bg-white/[0.025] hover:bg-white/10 cursor-pointer transition-colors">
-              <td className="px-3 py-1.5 font-bold text-white">{safeText(p.symbol)}</td>
+            <tr key={p.address} onClick={() => onSelect(p.address)} className="cursor-pointer transition-colors">
+              <td className="px-3 py-1.5 font-black" style={{ color: 'var(--paper)' }}>{safeText(p.symbol)}</td>
               <td className="px-3 py-1.5">{fmtTokens(p.tokens)}</td>
               <td className="px-3 py-1.5">{fmtPrice(p.avgCost)}</td>
-              <td className="px-3 py-1.5">{p.currentPrice == null ? <span title="Live price unavailable" className="text-[#d6b87a]">n/a</span> : fmtPrice(p.currentPrice)}</td>
+              <td className="px-3 py-1.5">{p.currentPrice == null ? <span title="Live price unavailable" style={{ color: 'var(--ochre-300)' }}>n/a</span> : fmtPrice(p.currentPrice)}</td>
               <td className="px-3 py-1.5">{fmtUsd(p.costUsd)}</td>
               <td className="px-3 py-1.5">{fmtUsd(p.value)}</td>
-              <td className={`px-3 py-1.5 whitespace-nowrap ${pctColor(p.pnlPct)}`}>{p.pnl == null ? '--' : `${fmtUsdSigned(p.pnl)} (${fmtPct(p.pnlPct)})`}</td>
+              <td className={`px-3 py-1.5 whitespace-nowrap font-bold ${pctColor(p.pnlPct)}`}>{p.pnl == null ? '--' : `${fmtUsdSigned(p.pnl)} (${fmtPct(p.pnlPct)})`}</td>
             </tr>
           ))}
         </Table>
       </div>
       {positions.length > 0 && t && (
-        <div className="flex items-center justify-between gap-2 px-3 py-1 text-[10px] text-[#a39d8d]">
+        <div className="t-rule flex items-center justify-between gap-2 px-3 py-1.5 text-[10px] font-bold" style={{ color: 'var(--on-ink-text-2)' }}>
           <span>Open value {fmtUsd(t.valueUsd)}{t.unpriced > 0 ? ` (+${t.unpriced} unpriced)` : ''}</span>
           <span className={pctColor(t.pnlPct)}>Unrealized {fmtUsdSigned(t.pnl)} ({fmtPct(t.pnlPct)})</span>
         </div>
@@ -987,12 +1035,12 @@ function BottomPanel({ address, positionsQuery, onSelect }) {
           : (
             <Table head={['Age', 'Side', 'Size', 'Price', 'Maker']} right={[2, 3]} empty={list.length === 0 && <Empty text="No trades yet for this token." />}>
               {list.map((t, i) => (
-                <tr key={t.id ?? t.signature ?? i} className="odd:bg-white/[0.025] hover:bg-white/10 transition-colors">
-                  <td className="px-3 py-1 text-[#a39d8d]">{t.timestamp ? timeAgo(t.timestamp) : '--'}</td>
-                  <td className={`px-3 py-1 uppercase font-bold ${t.side === 'buy' ? 'tv-up' : 'tv-down'}`}>{t.side}</td>
+                <tr key={t.id ?? t.signature ?? i} className="transition-colors">
+                  <td className="px-3 py-1" style={{ color: 'var(--on-ink-text-3)' }}>{t.timestamp ? timeAgo(t.timestamp) : '--'}</td>
+                  <td className={`px-3 py-1 font-bold uppercase ${t.side === 'buy' ? 'tv-up' : 'tv-down'}`}>{t.side}</td>
                   <td className="px-3 py-1">{t.amountSol != null ? `${fmtNum(t.amountSol)} SOL` : fmtUsd(t.amountUsd)}</td>
                   <td className="px-3 py-1">{fmtPrice(t.price)}</td>
-                  <td className="px-3 py-1 text-[#555143]">{short(t.maker)}</td>
+                  <td className="px-3 py-1" style={{ color: 'var(--on-ink-text-3)' }}>{short(t.maker)}</td>
                 </tr>
               ))}
             </Table>
@@ -1086,7 +1134,8 @@ export default function TradingTerminal() {
           panels={PANELS}
           storageKey={LAYOUT_KEY}
           controls={workspace}
-          surface=""
+          surface="t-canvas"
+          backdrop={<LogoBackdrop />}
           showGrid={false}
           freeformMinWidth={FREEFORM_MIN_CANVAS_WIDTH}
           accent="#9eae84"
