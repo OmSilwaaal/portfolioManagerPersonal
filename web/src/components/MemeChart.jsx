@@ -135,10 +135,17 @@ export default function MemeChart({ candles, fitKey }) {
     const last = candles[candles.length - 1]
     const bar = ({ time, open, high, low, close }) => ({ time, open, high, low, close })
     const vol = (c) => ({ time: c.time, value: c.volume || 0, color: c.close >= c.open ? pal.volUp : pal.volDown })
+    // lightweight-charts throws "Value is null" out of setData on a bar with a missing price, which
+    // takes the whole terminal down with it. Upstream OHLCV does occasionally carry a null, and a
+    // chart is not the place to find out: anything unusable is dropped before the library sees it.
+    const usable = (c) => c
+      && Number.isFinite(c.time)
+      && Number.isFinite(c.open) && Number.isFinite(c.high)
+      && Number.isFinite(c.low) && Number.isFinite(c.close)
 
     // Price precision is derived from the latest close, and re-applying it is not
     // free, so it is only pushed when it actually changes.
-    const p = precisionFor(last.close)
+    const p = precisionFor(Number.isFinite(last.close) ? last.close : candles.find(usable)?.close)
     if (p !== precisionRef.current) {
       precisionRef.current = p
       candle.applyOptions({ priceFormat: { type: 'price', precision: p, minMove: Math.pow(10, -p) } })
@@ -147,11 +154,13 @@ export default function MemeChart({ candles, fitKey }) {
     const sameSeries = prev && prev.fitKey === fitKey && prev.palette === pal && prev.first === candles[0].time
     // The newest bucket moved in place: one point, not a dataset.
     if (sameSeries && candles.length === prev.len && last.time === prev.last) {
+      if (!usable(last)) return
       candle.update(bar(last))
       volume.update(vol(last))
     // A bucket closed and a new one opened: settle the old one, then append.
     } else if (sameSeries && candles.length === prev.len + 1 && candles[candles.length - 2].time === prev.last) {
       const settled = candles[candles.length - 2]
+      if (!usable(settled) || !usable(last)) return
       candle.update(bar(settled))
       volume.update(vol(settled))
       candle.update(bar(last))
@@ -159,7 +168,8 @@ export default function MemeChart({ candles, fitKey }) {
     } else {
       // Anything else — a new token, a timeframe change, backfilled history, a
       // theme flip — is a genuine replacement, and update() cannot express it.
-      const sorted = isAscending(candles) ? candles : [...candles].sort((a, b) => a.time - b.time)
+      const clean = candles.filter(usable)
+      const sorted = isAscending(clean) ? clean : [...clean].sort((a, b) => a.time - b.time)
       candle.setData(sorted.map(bar))
       volume.setData(sorted.map(vol))
     }
