@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useGetMyEloQuery } from '../api/eloApi'
 import CallingCard from '../ascii/CallingCard'
@@ -11,10 +12,25 @@ const P = { ...MONO, fontSize: 14, lineHeight: 1.6, color: 'var(--on-ink-text-2)
 
 function TierRow({ t, i, current, reached }) {
   const next = TIERS[i + 1]
+  const artRef = useRef(null)
+  // One animated ASCII canvas per tier, and there are eight of them. Mounting the
+  // lot at once was most of this page's load cost, so a card waits until its row
+  // is nearly on screen. It is never unmounted again: remounting would restart
+  // the scene and cost more than leaving it, and AsciiCanvas already stops
+  // drawing whatever is scrolled away.
+  const [showArt, setShowArt] = useState(false)
+  useEffect(() => {
+    const el = artRef.current
+    if (!el || showArt) return undefined
+    if (typeof IntersectionObserver !== 'function') { setShowArt(true); return undefined }
+    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) setShowArt(true) }, { rootMargin: '300px' })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [showArt])
   return (
     <li style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', border: `${current ? 2 : 1}px solid ${current ? t.color : BORDER}`, background: 'var(--ink-800)' }}>
-      <div style={{ position: 'relative', minHeight: 124, background: '#07070a', filter: reached ? 'none' : 'grayscale(0.7) brightness(0.7)' }}>
-        <CallingCard scene={t.id} cols={110} rows={16} fps={9} style={{ border: 0 }} label={`${t.name} calling card`} />
+      <div ref={artRef} style={{ position: 'relative', minHeight: 124, background: '#07070a', filter: reached ? 'none' : 'grayscale(0.7) brightness(0.7)' }}>
+        {showArt && <CallingCard scene={t.id} cols={110} rows={16} fps={9} style={{ border: 0 }} label={`${t.name} calling card`} />}
       </div>
       <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 6 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
