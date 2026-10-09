@@ -117,6 +117,21 @@ function createHub(deps = {}) {
 
   const wants = (addr) => (c) => c.addresses.has(addr);
 
+  // The on-chain price feed subscribes to exactly what the hub is watching, so it has to be
+  // told whenever that changes — which is only ever on a connect or a disconnect.
+  const onWatched = deps.onWatched || ((list) => {
+    try { require('./solanaPriceFeed').setWatched(list); } catch (_) { /* accelerator only */ }
+  });
+  let watchedKey = '';
+
+  function syncWatched() {
+    const list = watched();
+    const key = list.join(',');
+    if (key === watchedKey) return;
+    watchedKey = key;
+    onWatched(list);
+  }
+
   // ── ticks ─────────────────────────────────────────────────────────────────
   async function tickDetail() {
     for (const address of watched()) {
@@ -211,6 +226,35 @@ function createHub(deps = {}) {
     try { deliver([alert], t); } catch (err) { console.error('[meme-stream] alert delivery:', err.message); }
   }
 
+  /**
+   * A price read straight off the Solana bonding curve, arriving between detail ticks. It is a
+   * separate event rather than a `token`: the `token` payload is a whole aggregator record and
+   * the client replaces its cache entry with it, so a price-only token would blank out market
+   * cap, liquidity, volume and the change figures. This carries just the price, and the client
+   * folds it into the record already there.
+   *
+   * Deliberately NOT fed through observe(): the volatility watcher compares consecutive
+   * observations, and samples arriving several times a second would turn its windows into noise.
+   */
+  function pushPrice(p) {
+    if (!p?.address || typeof p.price !== 'number' || !Number.isFinite(p.price) || p.price <= 0) return;
+    const num = (v, dflt) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : dflt);
+    const frame = {
+      address: p.address,
+      price: p.price,
+      // Extremes and traded size since the previous frame, which is what the client needs to
+      // build the forming candle: the price alone would lose a spike between two frames.
+      high: num(p.high, p.price),
+      low: num(p.low, p.price),
+      volumeUsd: num(p.volumeUsd, 0),
+      source: p.source || 'onchain',
+      ts: p.ts ?? now(),
+    };
+    // A curve write that moves nothing (a trade too small to shift the price) is not news.
+    if (!changed(`price:${p.address}`, [frame.price, frame.high, frame.low, frame.volumeUsd])) return;
+    broadcast('price', frame, wants(p.address));
+  }
+
   /** New launches arrive from outside (Helius) rather than from a tick. */
   function pushLaunch(launch) {
     if (!launch?.address) return;
@@ -256,6 +300,9 @@ function createHub(deps = {}) {
     for (const t of timers.values()) clearInterval(t);
     timers.clear();
     running = false;
+    // Nobody is watching anything, so the on-chain feed should hold no socket either.
+    onWatched([]);
+    watchedKey = '';
     // Nothing is watched any more, so held payloads and price history are dead weight.
     lastSent.clear();
     samples.clear();
@@ -269,7 +316,7 @@ function createHub(deps = {}) {
     const n = (byIp.get(client.ip) || 1) - 1;
     if (n > 0) byIp.set(client.ip, n); else byIp.delete(client.ip);
     try { client.res.end(); } catch (_) { /* already gone */ }
-    if (clients.size === 0) stop();
+    if (clients.size === 0) stop(); else syncWatched();
   }
 
   /** Express handler. */
@@ -317,6 +364,7 @@ function createHub(deps = {}) {
     });
 
     start();
+    syncWatched();
 
     const cleanup = () => drop(client);
     req.on('close', cleanup);
@@ -332,7 +380,7 @@ function createHub(deps = {}) {
     return { clients: clients.size, ips: byIp.size, watched: watched(), running, samples: samples.size };
   }
 
-  return { handler, pushLaunch, stats, broadcast, stop, __clients: clients };
+  return { handler, pushLaunch, pushPrice, stats, broadcast, stop, __clients: clients };
 }
 
 function launchesEnabled() {
@@ -345,6 +393,7 @@ module.exports = {
   createHub,
   handler: hub.handler,
   pushLaunch: hub.pushLaunch,
+  pushPrice: hub.pushPrice,
   stats: hub.stats,
   MAX_PER_IP,
   MAX_WATCHED,

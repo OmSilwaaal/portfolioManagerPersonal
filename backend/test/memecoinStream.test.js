@@ -336,3 +336,71 @@ test('an upstream failure does not take the stream down', async (t) => {
   assert.ok(res.events().some((e) => e.event === 'hello'));
   hub.stop();
 });
+
+test('an on-chain price only reaches the clients watching that token, and only when it moves', async () => {
+  const hub = createHub(deps().opts);
+  const watcher = fakeRes();
+  const other = fakeRes();
+  hub.handler(fakeReq({ address: ADDR_A }, '1.1.1.1'), watcher);
+  hub.handler(fakeReq({ address: ADDR_B }, '2.2.2.2'), other);
+  await settle();
+
+  hub.pushPrice({ address: ADDR_A, price: 0.5, high: 0.6, low: 0.4, volumeUsd: 120, source: 'pumpfun-curve', ts: 7 });
+  const [p] = watcher.events().filter((e) => e.event === 'price');
+  assert.deepStrictEqual(p.data, {
+    address: ADDR_A, price: 0.5, high: 0.6, low: 0.4, volumeUsd: 120, source: 'pumpfun-curve', ts: 7,
+  });
+  assert.strictEqual(other.events().filter((e) => e.event === 'price').length, 0, 'not a token it asked for');
+
+  // Nothing moved: not news.
+  hub.pushPrice({ address: ADDR_A, price: 0.5, high: 0.6, low: 0.4, volumeUsd: 120, source: 'pumpfun-curve', ts: 8 });
+  assert.strictEqual(watcher.events().filter((e) => e.event === 'price').length, 1);
+  // A swap that leaves the price alone still moves the volume, and that is news.
+  hub.pushPrice({ address: ADDR_A, price: 0.5, high: 0.6, low: 0.4, volumeUsd: 130, source: 'pumpfun-curve', ts: 9 });
+  assert.strictEqual(watcher.events().filter((e) => e.event === 'price').length, 2);
+
+  // Extremes and volume default to something usable rather than being absent.
+  hub.pushPrice({ address: ADDR_A, price: 0.7 });
+  const last = watcher.events().filter((e) => e.event === 'price').pop();
+  assert.strictEqual(last.data.high, 0.7);
+  assert.strictEqual(last.data.low, 0.7);
+  assert.strictEqual(last.data.volumeUsd, 0);
+  assert.strictEqual(last.data.source, 'onchain');
+
+  for (const bad of [null, {}, { address: ADDR_A }, { address: ADDR_A, price: 0 }, { address: ADDR_A, price: NaN }]) {
+    hub.pushPrice(bad);
+  }
+  assert.strictEqual(watcher.events().filter((e) => e.event === 'price').length, 3, 'rubbish is dropped');
+  hub.stop();
+});
+
+test('the on-chain feed is told exactly what the hub is watching, as it changes', async () => {
+  const seen = [];
+  const hub = createHub(deps({ opts: { onWatched: (l) => seen.push(l) } }).opts);
+  const a = fakeRes();
+  hub.handler(fakeReq({ address: ADDR_A }, '1.1.1.1'), a);
+  await settle();
+  assert.deepStrictEqual(seen, [[ADDR_A]]);
+
+  // A second client on the same token changes nothing upstream.
+  const dup = fakeRes();
+  const dupReq = fakeReq({ address: ADDR_A }, '2.2.2.2');
+  hub.handler(dupReq, dup);
+  await settle();
+  assert.strictEqual(seen.length, 1, 'the set did not change');
+
+  const bReq = fakeReq({ address: ADDR_B }, '3.3.3.3');
+  hub.handler(bReq, fakeRes());
+  await settle();
+  assert.deepStrictEqual(seen[seen.length - 1].slice().sort(), [ADDR_A, ADDR_B].sort());
+
+  bReq.close();
+  await settle();
+  assert.deepStrictEqual(seen[seen.length - 1], [ADDR_A], 'and it shrinks again');
+
+  dupReq.close();
+  await settle();
+  assert.deepStrictEqual(seen[seen.length - 1], [ADDR_A], 'one of two subscribers leaving is not a change');
+  hub.stop();
+  assert.deepStrictEqual(seen[seen.length - 1], [], 'a stopped hub watches nothing');
+});

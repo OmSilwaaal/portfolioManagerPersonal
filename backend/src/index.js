@@ -67,6 +67,12 @@ require('./services/heliusLaunches').startHeliusLaunches({
   hasListeners: () => require('./services/memecoinStream').stats().clients > 0,
 });
 
+// Sub-second prices for watched pump.fun tokens, read off the bonding curve instead of waiting
+// for an aggregator to index the swap. On whenever HELIUS_API_KEY is set (ENABLE_HELIUS_PRICE=false
+// opts out); with no key it is inert and the stream behaves exactly as it did. The socket only
+// opens while the hub is actually watching something.
+require('./services/solanaPriceFeed').startPriceFeed();
+
 // Memecoin radar collector (Solana new pools → snapshots). Opt-in via ENABLE_RADAR=true.
 require('./radar').startRadar();
 // Enable the optional smart-money / social radar feature groups when their collectors are on (RADAR_EXTRA_FEATURES=off disables)

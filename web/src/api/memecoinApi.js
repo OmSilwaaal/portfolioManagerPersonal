@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { baseApi } from './baseApi'
 import { paperTradingApi } from './paperTradingApi'
-import { liveUpdates, isLive, subscribeLive } from './liveFeed'
+import { liveUpdates, isLive, subscribeLive, applyLiveCandles } from './liveFeed'
 import {
   mockTrending, mockNew, mockSearch, mockTokenDetail, mockOhlcv, mockTrades, mockQuote,
 } from './memecoinMock'
@@ -113,7 +113,7 @@ function withMock(request, mock, key, norm) {
     noteRateLimit(res)
     if (!res.error) {
       const d = key ? unwrap(res.data, key) : res.data
-      return { data: norm ? norm(d) : d }
+      return { data: norm ? norm(d, arg) : d }
     }
     if (USE_MOCK_ON_FAIL && res.error.status !== 429) return { data: tagMock(mock(arg)) }
     return { error: res.error }
@@ -158,6 +158,10 @@ export const memecoinApi = api.injectEndpoints({
         ({ address, tf }) => `/memecoins/${address}/ohlcv?tf=${tf}`,
         ({ address, tf }) => mockOhlcv(address, tf),
         'candles',
+        // Closed buckets come back authoritative, but the bucket still forming is already
+        // being built from the price stream and is ahead of this answer. Put it back, or the
+        // chart rewinds to whatever was indexed when the request was served.
+        (candles, arg) => applyLiveCandles(arg, candles),
       ),
       onCacheEntryAdded: liveUpdates(({ address, tf }) => ({ address, tf })),
     }),

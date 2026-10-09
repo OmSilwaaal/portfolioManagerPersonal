@@ -10,8 +10,10 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
 const MODULE = pathToFileURL(path.join(__dirname, '../../web/src/api/candleMerge.mjs')).href;
+const LIVE_MODULE = pathToFileURL(path.join(__dirname, '../../web/src/api/liveCandle.mjs')).href;
 let M;
-test.before(async () => { M = await import(MODULE); });
+let L;
+test.before(async () => { M = await import(MODULE); L = await import(LIVE_MODULE); });
 
 const c = (time, close, over = {}) => ({ time, open: close, high: close, low: close, close, volume: 1, ...over });
 
@@ -125,4 +127,222 @@ test('every timeframe has a bucket length and they are all exact multiples of a 
     assert.strictEqual(secs % 60, 0, tf);
     assert.strictEqual(M.bucketStart(secs * 3 + 1, tf), secs * 3);
   }
+});
+
+// ── the forming candle, built from the live price stream (web/src/api/liveCandle.mjs) ──────
+//
+// The rules worth holding onto:
+//   - only the bucket still forming is live; a closed bucket is the aggregator's and is never
+//     rewritten or synthesised
+//   - the live close/high/low win while the bucket is open, because they are ahead by definition
+//   - the aggregator's open and volume are folded in, stickily, so nothing flickers
+//   - volume only ever grows inside a bucket
+//   - an unchanged tick still merges to the very same array reference, which is what keeps the
+//     chart on its incremental render path
+const ADDR = 'So11111111111111111111111111111111111111112';
+// A bucket boundary for every timeframe at once (1_699_999_200 % 3600 === 0), so a fixture's
+// arithmetic is readable rather than lucky.
+const BASE = 1_699_999_200;
+
+/** A store with a clock we control. t is in seconds. */
+function live(startSec = BASE) {
+  let nowSec = startSec;
+  const store = L.createFormingCandles({ now: () => nowSec * 1000 });
+  return {
+    store,
+    at: (sec) => { nowSec = sec; },
+    tick(over = {}) {
+      return store.onPrice(ADDR, over.tf || '1m', { ts: nowSec * 1000, ...over });
+    },
+  };
+}
+
+test('the forming bucket opens at the first live price and tracks the latest', () => {
+  const h = live(BASE + 30); // 30s into the 1m bucket at 1_700_000_000
+  assert.strictEqual(h.tick({ price: 10 }), true);
+  let c = h.store.blend(ADDR, '1m', null);
+  assert.strictEqual(c.time, BASE, 'snapped to the bucket, not the tick');
+  assert.deepStrictEqual([c.open, c.high, c.low, c.close], [10, 10, 10, 10]);
+
+  h.at(BASE + 40);
+  h.tick({ price: 12, high: 15, low: 9 });
+  h.at(BASE + 50);
+  h.tick({ price: 11 });
+  c = h.store.blend(ADDR, '1m', null);
+  assert.strictEqual(c.open, 10, 'the open does not move');
+  assert.strictEqual(c.high, 15, 'the extremes include the ones between frames');
+  assert.strictEqual(c.low, 9);
+  assert.strictEqual(c.close, 11, 'the close is the newest price');
+});
+
+test('volume accumulates across the bucket from the ticks\' own sizes', () => {
+  const h = live();
+  h.tick({ price: 1, volumeUsd: 250 });
+  h.tick({ price: 1.1, volumeUsd: 100 });
+  h.tick({ price: 1.1, volumeUsd: 0 });
+  h.tick({ price: 1.1, volumeUsd: -5 }); // nonsense is ignored rather than subtracted
+  assert.strictEqual(h.store.blend(ADDR, '1m', null).volume, 350);
+});
+
+test('crossing into a new bucket opens a new candle and leaves the old one alone', () => {
+  const h = live(BASE + 30);
+  h.tick({ price: 10, volumeUsd: 500 });
+  const closed = h.store.blend(ADDR, '1m', null);
+
+  h.at(BASE + 61); // one second into the next bucket
+  h.tick({ price: 20 });
+  const open = h.store.blend(ADDR, '1m', null);
+  assert.strictEqual(open.time, closed.time + 60);
+  assert.deepStrictEqual([open.open, open.close], [20, 20], 'opened at the current price');
+  assert.strictEqual(open.volume, 0, 'and with its own volume');
+
+  // The bucket that just closed is the aggregator's now: its candle comes back untouched.
+  const auth = { time: closed.time, open: 1, high: 2, low: 0.5, close: 1.5, volume: 9 };
+  assert.strictEqual(h.store.blend(ADDR, '1m', auth), auth);
+});
+
+test('a tick for a bucket older than the one we are on is ignored', () => {
+  const h = live(BASE + 70);
+  h.tick({ price: 20 });
+  assert.strictEqual(h.store.onPrice(ADDR, '1m', { price: 5, ts: (BASE + 10) * 1000 }), false);
+  assert.strictEqual(h.store.blend(ADDR, '1m', null).close, 20);
+});
+
+test('the aggregator\'s open and extremes are folded into the live bucket, and stay', () => {
+  const h = live(BASE + 30);
+  h.tick({ price: 10 });
+  const auth = { time: BASE, open: 7, high: 11, low: 6, close: 9, volume: 400 };
+  let c = h.store.blend(ADDR, '1m', auth);
+  assert.strictEqual(c.open, 7, 'upstream saw the start of the bucket; we did not');
+  assert.strictEqual(c.high, 11);
+  assert.strictEqual(c.low, 6);
+  assert.strictEqual(c.close, 10, 'but the close is ours, because it is newer');
+  assert.strictEqual(c.volume, 400, 'and volume cannot be below what upstream reports');
+
+  // Upstream's view is not carried over to the next tick in any way that could move it back.
+  h.at(BASE + 40);
+  h.tick({ price: 12, volumeUsd: 50 });
+  c = h.store.blend(ADDR, '1m', null);
+  assert.strictEqual(c.open, 7, 'sticky: the body does not flicker between the two sources');
+  assert.strictEqual(c.close, 12);
+  assert.strictEqual(c.volume, 450, 'our own size is added on top of upstream\'s figure');
+});
+
+test('volume inside a bucket only ever grows, whichever source speaks', () => {
+  const h = live(BASE + 30);
+  const auth = (volume) => ({ time: BASE, open: 10, high: 10, low: 10, close: 10, volume });
+  const vol = (v) => h.store.blend(ADDR, '1m', auth(v)).volume;
+  h.tick({ price: 10, volumeUsd: 100 });
+  assert.strictEqual(vol(0), 100, 'ours, while upstream has nothing');
+  assert.strictEqual(vol(900), 900, 'raised to upstream when upstream is further along');
+  assert.strictEqual(vol(0), 900, 'and a smaller figure cannot pull it back');
+  h.tick({ price: 11, volumeUsd: 50 });
+  assert.strictEqual(vol(100), 950, 'our own size is added on top');
+});
+
+test('a forming candle whose bucket has closed hands it back to the aggregator', () => {
+  const h = live(BASE + 30);
+  h.tick({ price: 10 });
+  h.at(BASE + 120); // two buckets on, and no live price since
+  const auth = { time: BASE, open: 1, high: 2, low: 1, close: 2, volume: 5 };
+  assert.strictEqual(h.store.blend(ADDR, '1m', auth), auth, 'authoritative, untouched');
+  assert.strictEqual(h.store.blend(ADDR, '1m', null), null, 'and nothing of our own to say');
+});
+
+test('an unknown timeframe or a worthless price is not a candle', () => {
+  const h = live();
+  assert.strictEqual(h.tick({ price: 10, tf: '7m' }), false);
+  assert.strictEqual(h.tick({ price: 0 }), false);
+  assert.strictEqual(h.tick({ price: -1 }), false);
+  assert.strictEqual(h.tick({ price: NaN }), false);
+  assert.strictEqual(h.store.onPrice(null, '1m', { price: 1 }), false);
+  assert.strictEqual(h.store.blend(ADDR, '1m', null), null);
+});
+
+test('each timeframe forms its own bucket from the same ticks', () => {
+  const h = live(BASE + 1_000)
+  for (const tf of ['1m', '5m', '15m', '1h']) h.tick({ price: 10, tf, volumeUsd: 10 });
+  assert.strictEqual(h.store.blend(ADDR, '1m', null).time, BASE + 960);
+  assert.strictEqual(h.store.blend(ADDR, '5m', null).time, BASE + 900);
+  assert.strictEqual(h.store.blend(ADDR, '15m', null).time, BASE + 900);
+  assert.strictEqual(h.store.blend(ADDR, '1h', null).time, BASE);
+  assert.strictEqual(h.store.size(), 4);
+  h.store.forget(ADDR);
+  assert.strictEqual(h.store.size(), 0, 'and all four are dropped with the token');
+});
+
+test('a live candle merges incrementally: in place, or exactly one appended', () => {
+  const h = live(BASE + 30);
+  // Upstream history, with the forming bucket not yet indexed.
+  const history = [
+    { time: BASE - 120, open: 1, high: 1, low: 1, close: 1, volume: 1 },
+    { time: BASE - 60, open: 1, high: 1, low: 1, close: 1, volume: 1 },
+  ];
+  h.tick({ price: 10, volumeUsd: 5 });
+  const appended = M.mergeCandle(history, h.store.blend(ADDR, '1m', null), '1m');
+  assert.strictEqual(appended.length, 3, 'exactly one bucket appended');
+  assert.strictEqual(appended[0], history[0], 'earlier buckets keep their identity');
+  assert.strictEqual(appended[1], history[1]);
+
+  // An unchanged tick must merge to the very same array, or the chart leaves its fast path.
+  h.at(BASE + 40);
+  h.tick({ price: 10 });
+  const again = M.mergeCandle(appended, h.store.blend(ADDR, '1m', null), '1m');
+  assert.strictEqual(again, appended, 'a no-op merge returns the same reference');
+
+  h.tick({ price: 11 });
+  const moved = M.mergeCandle(appended, h.store.blend(ADDR, '1m', null), '1m');
+  assert.notStrictEqual(moved, appended);
+  assert.strictEqual(moved.length, 3, 'still only the newest bucket changed');
+  assert.strictEqual(moved[0], appended[0]);
+  assert.strictEqual(moved[1], appended[1]);
+  assert.strictEqual(moved[2].close, 11);
+});
+
+test('the store does not grow without bound as tokens come and go', () => {
+  let nowSec = BASE;
+  const store = L.createFormingCandles({ now: () => nowSec * 1000, max: 4 });
+  for (let i = 0; i < 20; i++) store.onPrice(`addr${i}`, '1m', { price: 1, ts: nowSec * 1000 });
+  assert.ok(store.size() <= 4, `size ${store.size()}`);
+});
+
+test('at a rollover our new bucket is appended, not replaced by the last closed one', () => {
+  // The case that matters: upstream has not rolled over yet, so the newest candle in the series
+  // is the bucket that just closed. Handing that back would mean our bucket never appears.
+  const h = live(BASE + 30);
+  h.tick({ price: 10, volumeUsd: 100 });
+  const closed = { time: BASE, open: 9, high: 11, low: 9, close: 10, volume: 300 };
+  const series = [closed];
+
+  h.at(BASE + 61);
+  h.tick({ price: 20, volumeUsd: 7 });
+  const c = h.store.live(ADDR, '1m', series[series.length - 1]);
+  assert.strictEqual(c.time, BASE + 60, 'our bucket, not the closed one');
+  assert.strictEqual(c.open, 20);
+  assert.strictEqual(c.volume, 7, 'and not the closed bucket\'s volume either');
+  const next = M.mergeCandle(series, c, '1m');
+  assert.deepStrictEqual(next.map((x) => x.time), [BASE, BASE + 60]);
+  assert.strictEqual(next[0], closed, 'the closed bucket is untouched, object and all');
+});
+
+test('live folds in the series\' own version of the bucket it is forming', () => {
+  const h = live(BASE + 30);
+  h.tick({ price: 10, volumeUsd: 20 });
+  // What the chart was loaded with: upstream's view of this very bucket, further along on both
+  // open and volume.
+  const auth = { time: BASE, open: 8, high: 9, low: 7, close: 9, volume: 500 };
+  const c = h.store.live(ADDR, '1m', auth);
+  assert.strictEqual(c.open, 8, 'upstream saw the start of the bucket');
+  assert.strictEqual(c.close, 10, 'we have the newest price');
+  assert.strictEqual(c.volume, 500, 'and the volume bar does not drop to ours');
+  h.tick({ price: 11, volumeUsd: 30 });
+  assert.strictEqual(h.store.live(ADDR, '1m', auth).volume, 530, 'then grows from there');
+});
+
+test('live has nothing to say once its bucket has closed', () => {
+  const h = live(BASE + 30);
+  h.tick({ price: 10 });
+  h.at(BASE + 120);
+  assert.strictEqual(h.store.live(ADDR, '1m', null), null);
+  assert.strictEqual(h.store.live(ADDR, '7m', null), null, 'or for a timeframe we do not know');
 });

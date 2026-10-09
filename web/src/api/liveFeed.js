@@ -17,6 +17,7 @@
 import { API_BASE } from './baseApi'
 import { memecoinApi, normToken, normTokens, normTrades } from './memecoinApi'
 import { mergeCandle } from './candleMerge.mjs'
+import { createFormingCandles } from './liveCandle.mjs'
 
 const SUPPORTED = typeof window !== 'undefined' && typeof window.EventSource === 'function'
 
@@ -53,6 +54,10 @@ const state = {
 
 const notify = () => { for (const l of state.listeners) l() }
 
+// The newest bucket of the chart, built from the price stream rather than waited for. See
+// liveCandle.mjs for the precedence rule between this and the aggregator's own candles.
+const candles = createFormingCandles()
+
 /* ─── liveness, as an external store ────────────────────────────────────────
  * These are function DECLARATIONS on purpose. memecoinApi imports this module and this
  * module imports memecoinApi, and memecoinApi calls liveUpdates while it is still being
@@ -65,6 +70,18 @@ export function subscribeLive(l) { state.listeners.add(l); return () => state.li
 export function liveLaunches() { return state.launches }
 export function liveVolatility() { return state.volatility }
 
+/**
+ * A freshly fetched series, with the bucket we are building live put back on the end. Called
+ * from getMemecoinOhlcv's queryFn: upstream answers with whatever it had indexed, and without
+ * this the chart would rewind to it on every poll. Closed buckets are returned untouched.
+ */
+export function applyLiveCandles({ address, tf } = {}, series) {
+  if (!Array.isArray(series) || !address || !tf) return series
+  const last = series[series.length - 1] ?? null
+  const c = candles.live(address, tf, last)
+  return c ? mergeCandle(series, c, tf) : series
+}
+
 function markTraffic() {
   const wasLive = isLive()
   state.lastTraffic = Date.now()
@@ -76,6 +93,7 @@ function markTraffic() {
 }
 
 /* ─── cache writes ────────────────────────────────────────────────────────── */
+
 const patch = (endpoint, arg, recipe) => {
   if (!state.dispatch) return
   try {
@@ -104,11 +122,35 @@ const HANDLERS = {
     patch('getMemecoin', t.address, () => normToken(t))
   },
 
+  // A price read off the chain, arriving between detail ticks. Merged into the record already
+  // in the cache rather than replacing it: everything else in a token row still comes from the
+  // aggregator, and only the price is fresher than it.
+  price(tick = {}) {
+    const { address, price } = tick
+    if (!address || typeof price !== 'number' || !Number.isFinite(price) || price <= 0) return
+    patch('getMemecoin', address, (draft) => {
+      if (!draft || typeof draft !== 'object') return
+      draft.price = price
+    })
+    // The same tick drives the bucket still forming on the chart, for every timeframe this tab
+    // is showing. Closed buckets are left to the aggregator.
+    for (const tf of state.tfs) {
+      if (!candles.onPrice(address, tf, tick)) continue
+      patch('getMemecoinOhlcv', { address, tf }, (draft) => {
+        const last = Array.isArray(draft) ? draft[draft.length - 1] : null
+        const c = candles.live(address, tf, last ?? null)
+        return c ? mergeCandle(draft, c, tf) : draft
+      })
+    }
+  },
+
   candle({ address, tf, candle } = {}) {
     if (!address || !tf || !candle) return
     // mergeCandle does the bucket arithmetic: the in-progress candle is replaced in place and
     // only a new bucket is appended, so the series can never duplicate or go out of order.
-    patch('getMemecoinOhlcv', { address, tf }, (draft) => mergeCandle(draft, candle, tf))
+    // blend keeps the aggregator's version of a bucket we are building live from pulling the
+    // close back to whatever it had indexed; a closed bucket passes straight through.
+    patch('getMemecoinOhlcv', { address, tf }, (draft) => mergeCandle(draft, candles.blend(address, tf, candle), tf))
   },
 
   trades({ address, trades } = {}) {
@@ -258,7 +300,8 @@ export function attachLive({ address, tf, lists, dispatch } = {}) {
     released = true
     if (address) {
       const n = (state.refs.get(address) || 1) - 1
-      if (n > 0) state.refs.set(address, n); else state.refs.delete(address)
+      if (n > 0) state.refs.set(address, n)
+      else { state.refs.delete(address); candles.forget(address) }
     }
     if (lists) state.listRefs = Math.max(0, state.listRefs - 1)
     if (tf) state.tfs = state.tfs.filter((x) => x !== tf)
