@@ -47,6 +47,19 @@ async function requireAuth(req, res, next) {
   }
 }
 
+/**
+ * Attaches req.user when a valid session is presented, and carries on when it
+ * is not. For public endpoints that still want to know who is asking — the
+ * winners board shows everyone the same rows, but only tells a signed-in
+ * caller which of them are theirs.
+ */
+async function optionalAuth(req, res, next) {
+  if (req.user || !req.headers.authorization?.startsWith('Bearer ')) return next()
+  const fakeRes = { status: () => ({ json: () => {} }) }   // swallow the 401 path
+  try { await requireAuth(req, fakeRes, () => {}) } catch { /* anonymous */ }
+  next()
+}
+
 // Validates ticker/symbol path params — only A-Z, 0-9, dash, dot, colon; max 15 chars
 function validateTicker(param = 'ticker') {
   return (req, res, next) => {
@@ -58,4 +71,4 @@ function validateTicker(param = 'ticker') {
   };
 }
 
-module.exports = { sessionMiddleware, requireAuth, validateTicker };
+module.exports = { sessionMiddleware, requireAuth, optionalAuth, validateTicker };
