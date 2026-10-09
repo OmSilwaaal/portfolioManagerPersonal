@@ -267,6 +267,33 @@ function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_signal_snapshot_token_ts ON signal_snapshot(token_id, as_of_ts);
   `);
 
+  // Discovery index: every token the server has ever seen, so search can answer "which coins
+  // exist and what are they called" without an upstream that only returns 30 rows.
+  //
+  // Deliberately not the `token` table above: that one is append-only research data and
+  // market_snapshot/signal_snapshot hold foreign keys into it, so its rows can never be evicted.
+  // This one is capped and pruned by last_seen_ts (see services/tokenIndex).
+  //
+  // The *_lc columns are the lowercased forms the matcher compares against; mcap/liquidity_usd are
+  // last-known values kept for ranking only — nothing serves them as a live price.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS token_index (
+      address       TEXT    PRIMARY KEY,
+      symbol        TEXT    NOT NULL DEFAULT '',
+      name          TEXT    NOT NULL DEFAULT '',
+      symbol_lc     TEXT    NOT NULL DEFAULT '',
+      name_lc       TEXT    NOT NULL DEFAULT '',
+      mcap          REAL,
+      liquidity_usd REAL,
+      source        TEXT,
+      first_seen_ts INTEGER NOT NULL,
+      last_seen_ts  INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_token_index_symbol ON token_index(symbol_lc);
+    CREATE INDEX IF NOT EXISTS idx_token_index_name ON token_index(name_lc);
+    CREATE INDEX IF NOT EXISTS idx_token_index_seen ON token_index(last_seen_ts);
+  `);
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS sms_settings (
       user_id      TEXT    PRIMARY KEY,

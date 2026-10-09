@@ -2,6 +2,7 @@
 // Every exported function resolves (never throws) unless noted; errors are surfaced as
 // MemecoinDataError so routes can map them to a clean 4xx/5xx.
 const axios = require('axios');
+const geckoBudget = require('./geckoBudget');
 
 const DEXSCREENER = 'https://api.dexscreener.com';
 const GECKO = 'https://api.geckoterminal.com/api/v2';
@@ -50,7 +51,17 @@ async function cached(key, ttlMs, loader) {
   return p;
 }
 
+// Is there a live entry? Lets a caller skip spending a request budget on something it already has.
+const isFresh = (key) => { const h = cache.get(key); return Boolean(h && h.exp > Date.now()); };
+// The last value for a key, fresh or not. Only for callers that choose to skip the loader entirely.
+const peek = (key) => cache.get(key)?.val;
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 async function getJson(url, params) {
+  // Every GeckoTerminal request this process makes goes through here, so this is the one place
+  // that can keep an honest count of what the shared free-tier budget has spent.
+  if (url.startsWith(GECKO)) geckoBudget.record();
   try {
     const r = await axios.get(url, {
       params,
@@ -203,6 +214,47 @@ async function geckoPools(path, page = 1) {
   return dedupe((data.data || []).map((p) => fromGeckoPool(p, data.included)));
 }
 
+// Discovery-index writes are best-effort and lazily required so a DB problem never breaks a response.
+function indexed(list, source) {
+  try { require('./tokenIndex').recordTokens(list, source); } catch (err) { console.error('[tokenIndex]', err.message); }
+  return list;
+}
+
+// GeckoTerminal serves exactly 20 pools per page, so one page is not "the market". Page 1 is the
+// part that actually moves and keeps the short TTL below; pages 2..N are kept warm on a long TTL
+// inside the opportunistic half of the request budget, and a page that fails is simply left out —
+// a short list beats a 503.
+//
+// The long TTL is not an optimisation, it is the only thing that works: measured from one IP, the
+// keyless tier refuses roughly three deep-page requests in four no matter how far apart they are
+// spaced, so a page has to be kept once it is finally obtained or the list visibly oscillates
+// between 20 rows and 100. That makes deep pages a dependable source of *which* pools exist and a
+// poor source of what they are worth, so their numbers are refreshed separately (repriceFromDex).
+const GECKO_DEEP_PAGES = 5;        // page 1 plus four deep pages ≈ 100 pools per list
+const DEEP_PAGE_TTL = 10 * 60_000;
+const DEEP_WARM_BUDGET_MS = 2_000; // most we will ever spend spacing deep-page calls apart in one load
+
+async function geckoDeepPools(path) {
+  const out = [];
+  let waited = 0;
+  for (let page = 2; page <= GECKO_DEEP_PAGES; page++) {
+    const key = `gkpage:${path}:${page}`;
+    if (!isFresh(key)) {
+      const wait = geckoBudget.waitFor();
+      if (wait > 0 && waited + wait <= DEEP_WARM_BUDGET_MS) { await sleep(wait); waited += wait; }
+      if (!geckoBudget.tryTake(1)) {
+        const last = peek(key);          // out of budget: whatever this page last held, or nothing
+        if (last) out.push(...last);
+        continue;
+      }
+    }
+    // cached() serves the stale page when a refresh fails, so a deep page can only ever add rows
+    const rows = await cached(key, DEEP_PAGE_TTL, () => geckoPools(path, page)).catch(() => null);
+    if (rows) out.push(...rows);
+  }
+  return out;
+}
+
 // Fallback for trending: DexScreener boosted tokens, hydrated via /tokens/v1
 async function dexBoosted() {
   const boosts = await getJson(`${DEXSCREENER}/token-boosts/top/v1`);
@@ -224,12 +276,44 @@ function bestPairsByToken(pairs) {
   return [...best.values()];
 }
 
+// Deep-page rows, repriced. DexScreener prices 30 tokens per request and allows ~300 requests a
+// minute, so the numbers past page 1 cost four cheap calls rather than four contested ones.
+// A token DexScreener has nothing for keeps its GeckoTerminal row: a stale row beats a missing one.
+const DEX_BATCH = 30;
+const REPRICE_BATCHES = 4;         // up to 120 addresses, which covers every deep page
+
+async function repriceFromDex(tokens) {
+  const batches = [];
+  for (let i = 0; i < tokens.length && batches.length < REPRICE_BATCHES; i += DEX_BATCH) {
+    batches.push(tokens.slice(i, i + DEX_BATCH).map((t) => t.address));
+  }
+  const rows = (await Promise.all(batches.map((b) => hydrateTokens(b).catch(() => [])))).flat();
+  const fresh = new Map(rows.map((t) => [t.address, t]));
+  return tokens.map((t) => {
+    const f = fresh.get(t.address);
+    if (!f) return t;
+    // The pool's creation time is the /new list's age column, and GeckoTerminal always has it
+    // where DexScreener sometimes does not; keep whichever we actually know.
+    return { ...f, image: f.image || t.image, pair: { ...f.pair, created_at: f.pair?.created_at ?? t.pair?.created_at ?? null } };
+  });
+}
+
+// Page 1 straight from GeckoTerminal, then the warm deep pages with their numbers refreshed.
+// Only page 1 can throw; everything after it degrades to whatever was obtainable.
+async function geckoList(path) {
+  ingestLaunches();   // every 30s, so launches land in the index even when nobody searches
+  const first = await geckoPools(path, 1);
+  const seen = new Set(first.map((t) => t.address));
+  const deep = dedupe(await geckoDeepPools(path)).filter((t) => !seen.has(t.address));
+  return [...first, ...await repriceFromDex(deep)];
+}
+
 async function getTrending() {
   return cached('trending', 30_000, async () => {
     try {
-      return await geckoPools('trending_pools');
+      return indexed(await geckoList('trending_pools'), 'trending');
     } catch (e) {
-      return dexBoosted();
+      return indexed(await dexBoosted(), 'trending');
     }
   });
 }
@@ -237,7 +321,7 @@ async function getTrending() {
 async function getNew() {
   return cached('new', 30_000, async () => {
     try {
-      return await geckoPools('new_pools');
+      return indexed(await geckoList('new_pools'), 'new');
     } catch (e) {
       // Fallback: latest token profiles from DexScreener
       const prof = await getJson(`${DEXSCREENER}/token-profiles/latest/v1`);
@@ -245,9 +329,82 @@ async function getNew() {
         .filter((b) => b.chainId === 'solana').map((b) => b.tokenAddress))].slice(0, 30);
       if (!addrs.length) throw e;
       const pairs = await getJson(`${DEXSCREENER}/tokens/v1/solana/${addrs.join(',')}`);
-      return dedupe(bestPairsByToken(pairs).map(fromDexPair));
+      return indexed(dedupe(bestPairsByToken(pairs).map(fromDexPair)), 'new');
     }
   });
+}
+
+// ── search ──────────────────────────────────────────────────────────────────
+// DexScreener's search is narrow — at most 30 pairs, which for "pump" measured two Solana tokens —
+// so it is a supplement, not the source. The local discovery index (services/tokenIndex) answers
+// first with every token this server has ever seen, and the index's hits get their numbers from the
+// live path rather than from the index, which knows identity only.
+const SEARCH_RESULTS = 50;
+const HYDRATE_MAX = DEX_BATCH;   // the best index hits get live numbers, in one request
+
+// The same tiers tokenIndex ranks by, so DexScreener rows and index rows can be ordered together.
+function matchTier(symbol, name, q) {
+  const s = String(symbol || '').toLowerCase();
+  const n = String(name || '').toLowerCase();
+  if (s === q) return 0;
+  if (s.startsWith(q)) return 1;
+  if (n === q) return 2;
+  if (n.startsWith(q)) return 3;
+  if (s.includes(q)) return 4;
+  return 5;
+}
+
+async function dexSearch(query) {
+  const data = await getJson(`${DEXSCREENER}/latest/dex/search`, { q: query });
+  const pairs = (data.pairs || []).filter((p) => p.chainId === 'solana');
+  return bestPairsByToken(pairs).map(fromDexPair);
+}
+
+/** Live rows for up to HYDRATE_MAX addresses in one DexScreener request. */
+async function hydrateTokens(addresses) {
+  if (!addresses.length) return [];
+  const pairs = await getJson(`${DEXSCREENER}/tokens/v1/solana/${addresses.join(',')}`);
+  const want = new Set(addresses);
+  // A returned pair may hold one of ours as the quote side; only base-token matches are our tokens.
+  return bestPairsByToken((Array.isArray(pairs) ? pairs : []).filter((p) => want.has(p.baseToken?.address)))
+    .map(fromDexPair);
+}
+
+/**
+ * An index hit no DEX can price yet (a pump.fun coin with no pair). Identity only: price, mcap and
+ * liquidity are null, never the remembered figures, so nothing downstream can read a stale number
+ * as a live quote. The last-known values travel under their own names for display that wants them.
+ */
+function fromIndexRow(r) {
+  const symbol = cleanSymbol(r.symbol, r.address);
+  return {
+    address: r.address,
+    symbol,
+    name: cleanName(r.name, r.address, symbol),
+    price: null,
+    mcap: null,
+    fdv: null,
+    liquidity_usd: null,
+    volume_5m: null, volume_1h: null, volume_6h: null, volume_24h: null,
+    change_5m: null, change_1h: null, change_6h: null, change_24h: null,
+    buy_count: null, sell_count: null, buys_5m: null, sells_5m: null, holders: null,
+    pair: null,
+    image: null,
+    source: 'index',
+    last_seen: r.last_seen_ts ? r.last_seen_ts * 1000 : null,
+    last_mcap: num(r.mcap),
+    last_liquidity_usd: num(r.liquidity_usd),
+  };
+}
+
+function searchIndex(query, limit) {
+  try { return require('./tokenIndex').searchIndex(query, limit); } catch (err) { console.error('[tokenIndex]', err.message); return []; }
+}
+
+// Fold in whatever the Helius watcher has seen since we last looked. A no-op when that feature is
+// off, which is why it needs no flag check here.
+function ingestLaunches() {
+  try { require('./tokenIndex').ingestLaunches(); } catch (err) { console.error('[tokenIndex]', err.message); }
 }
 
 async function search(q) {
@@ -258,12 +415,30 @@ async function search(q) {
       const t = await getToken(query).catch(() => null);
       return t ? [t] : [];
     }
-    const data = await getJson(`${DEXSCREENER}/latest/dex/search`, { q: query });
-    const pairs = (data.pairs || []).filter((p) => p.chainId === 'solana');
-    return bestPairsByToken(pairs)
-      .sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))
-      .slice(0, 25)
-      .map(fromDexPair);
+    const lower = query.toLowerCase();
+    let live = [];
+    let liveFailed = false;
+    try { live = await dexSearch(query); } catch (_) { liveFailed = true; }
+    indexed(live, 'search');
+
+    ingestLaunches();   // a coin launched seconds ago should be findable by the time it is searched
+    const known = new Set(live.map((t) => t.address));
+    const extra = searchIndex(query, SEARCH_RESULTS).filter((r) => !known.has(r.address));
+    const hydrated = await hydrateTokens(extra.slice(0, HYDRATE_MAX).map((r) => r.address)).catch(() => []);
+    const byAddress = new Map(hydrated.map((t) => [t.address, t]));
+
+    const merged = dedupe([...live, ...extra.map((r) => byAddress.get(r.address) || fromIndexRow(r))]);
+    // DexScreener down and nothing of our own to show: still an error, as it was before the index.
+    // With index hits we can answer anyway, which is the whole point of keeping one.
+    if (liveFailed && !merged.length) throw new MemecoinDataError('Upstream search failed', 502);
+    // Rank by how well the text matches, then by depth; priceless index rows sink inside their tier.
+    return merged
+      .map((t) => ({ t, tier: matchTier(t.symbol, t.name, lower) }))
+      .sort((a, b) => a.tier - b.tier
+        || (b.t.liquidity_usd || 0) - (a.t.liquidity_usd || 0)
+        || (b.t.mcap || 0) - (a.t.mcap || 0))
+      .slice(0, SEARCH_RESULTS)
+      .map((x) => x.t);
   });
 }
 
@@ -288,7 +463,9 @@ async function getToken(address) {
     const best = bestPairsByToken((Array.isArray(pairs) ? pairs : [])
       .filter((p) => p.baseToken?.address === address))[0];
     if (!best) throw new MemecoinDataError('Token not found', 404);
-    return fromDexPair(best);
+    const tok = fromDexPair(best);
+    indexed([tok], 'token');     // inside the loader, so a hot token is not re-indexed on every call
+    return tok;
   });
   const info = await getTokenInfo(address);
   return { ...base, holders: info.holders, decimals: info.decimals, image: base.image || info.image };
@@ -447,4 +624,11 @@ module.exports = {
   MemecoinDataError, isValidAddress, getTrending, getNew, search, getToken,
   getOhlcv, getTrades, getSolPrice, getQuote, SOL_MINT,
   sanitizeText, cleanSymbol, cleanName, cleanUrl, shortMint, fromDexPair, fromGeckoPool,
+  matchTier, fromIndexRow, GECKO_DEEP_PAGES, SEARCH_RESULTS,
+  // test helpers: drop entries, or age them out while keeping the value cached() falls back to
+  _resetCache: (pred) => {
+    for (const k of [...cache.keys()]) if (!pred || pred(k)) cache.delete(k);
+    inflight.clear();
+  },
+  _expireCache: (pred) => { for (const [k, v] of cache) if (!pred || pred(k)) v.exp = 0; },
 };

@@ -9,7 +9,8 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "test": "node --test test/*.test.js",
+    "pretest": "rm -f \"${TMPDIR:-/tmp}\"/travauxus-test-*.sqlite*",
+    "test": "DB_PATH=\"${TMPDIR:-/tmp}/travauxus-test-$$.sqlite\" node --test test/*.test.js",
     "postinstall": "rm -rf node_modules/rpc-websockets/node_modules/uuid || true",
     "db:check": "node scripts/db-check.js",
     "db:migrate": "node scripts/db-check.js --migrate",
