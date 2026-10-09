@@ -33,8 +33,8 @@ export const GLOSSARY = {
 }
 
 const popupStyle = {
-  background: '#1a1a1a',
-  border: '1px solid #2a2a2a',
+  background: 'var(--ink-800)',
+  border: '1px solid var(--on-ink-3)',
 }
 
 export default function JargonTooltip({ children, term }) {

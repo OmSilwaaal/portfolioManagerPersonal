@@ -38,7 +38,7 @@ function Backdrop() {
     />
   )
   return (
-    <div aria-hidden style={{ position: 'absolute', inset: 0, overflow: 'hidden', background: '#080808' }}>
+    <div aria-hidden style={{ position: 'absolute', inset: 0, overflow: 'hidden', background: 'var(--ink-950)' }}>
       {orb('radial-gradient(circle, #c9a86a 0%, transparent 70%)', 520, { top: '-14%', left: '-8%' }, [60, 40], 14)}
       {orb('radial-gradient(circle, #566838 0%, transparent 70%)', 600, { bottom: '-22%', right: '-10%' }, [-70, -30], 17)}
       {orb('radial-gradient(circle, #803e26 0%, transparent 70%)', 420, { top: '38%', left: '46%' }, [-40, 50], 19)}

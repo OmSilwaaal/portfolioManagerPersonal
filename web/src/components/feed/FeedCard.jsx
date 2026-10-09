@@ -68,7 +68,7 @@ function ThreeDotMenu({ url, onShare }) {
       {open && (
         <div
           className="absolute right-0 bottom-9 z-30 flex flex-col rounded-xl overflow-hidden"
-          style={{ background: '#1c1c1e', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', minWidth: 160 }}
+          style={{ background: 'var(--ink-800)', border: '1px solid var(--on-ink-3)', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', minWidth: 160 }}
         >
           <button
             onClick={() => { onShare(); setOpen(false) }}

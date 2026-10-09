@@ -255,7 +255,7 @@ function TickerSearch({ onAdd }) {
       {open && shouldSearch && (
         <div
           className="absolute left-0 right-0 top-full mt-1.5 z-40 rounded-xl overflow-hidden"
-          style={{ background: '#141414', border: '1px solid rgba(255,255,255,0.10)', boxShadow: '0 8px 32px rgba(0,0,0,0.6)' }}
+          style={{ background: 'var(--ink-800)', border: '1px solid var(--on-ink-border)', boxShadow: '0 8px 32px rgba(0,0,0,0.6)' }}
         >
           {isFetching && (
             <div className="px-4 py-3 flex items-center gap-2">

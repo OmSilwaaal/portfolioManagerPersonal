@@ -355,7 +355,7 @@ function WinModal({ win, onClose }) {
           </dl>
 
           <div className="relative flex items-center gap-3 pt-4 border-t border-white/10">
-            <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold overflow-hidden flex-shrink-0" style={{ background: '#26282c', color: '#f0ebe0' }}>
+            <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold overflow-hidden flex-shrink-0" style={{ background: 'var(--ink-700)', color: 'var(--paper)' }}>
               {profile?.avatar_url
                 ? <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                 : initialsOf(identity.name)}
