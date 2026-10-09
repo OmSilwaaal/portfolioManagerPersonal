@@ -123,6 +123,7 @@ app.use(cors({
 // Raw body for webhook signature verification — MUST come before express.json()
 app.use('/api/paper-trading/webhook', express.raw({ type: 'application/json' }))
 app.use('/api/stripe/pro-webhook', express.raw({ type: 'application/json' }))
+app.use('/api/billing/webhook', express.raw({ type: 'application/json' }))
 app.use(express.json({ limit: '60kb' })); // cap request body size (profile avatars are ~45KB max)
 app.use(sessionMiddleware);
 
@@ -166,7 +167,10 @@ const referralLimiter = makeLimiter(60 * 60 * 1000, 10, 'Too many attempts. Plea
 const recoveryCreateLimiter = makeLimiter(60 * 60 * 1000, 6, 'Too many requests. Please try again later.');
 const smsVerifyLimiter = makeLimiter(15 * 60 * 1000, 10, 'Too many attempts. Please try again later.');
 
-app.use('/api', globalLimiter);
+// Stripe retries a failed delivery in bursts, so holding the webhook inside the 60 req/min
+// per-IP budget would turn one slow response into a retry storm that 429s itself. It carries
+// no session and authenticates by signature, so the budget buys nothing here.
+app.use('/api', (req, res, next) => (req.path === '/billing/webhook' ? next() : globalLimiter(req, res, next)));
 app.use('/api/clans/:id/join', joinLimiter);
 app.use('/api/stripe/redeem-code', promoLimiter);
 app.use('/api/user', destructiveLimiter);
@@ -216,6 +220,10 @@ app.use('/api/profiles', requireAuth, profilesRouter);
 app.use('/api/notifications', notificationsRouter);
 app.use('/api/explain', aiLimiter, explainRouter);
 app.use('/api/stripe', stripeRouter);
+// Deposits, Pro and the admin grant log. No route-level requireAuth: the webhook authenticates
+// by signature, and every other endpoint in there carries its own. Inert until its rails are
+// configured — no keys means no payment UI and no money paths.
+app.use('/api/billing', require('./routes/billing').router);
 app.use('/api/snaptrade', requireAuth, snaptradeRouter);
 app.use('/api/portfolio-import', requireAuth, portfolioImportRouter);
 app.use('/api/user', requireAuth, userRouter);
