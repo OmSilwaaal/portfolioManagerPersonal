@@ -1,5 +1,4 @@
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { useSelector } from 'react-redux'
 import { useAuth } from '../contexts/AuthContext'
 import { useGetProfileQuery, useGetProfileByUsernameQuery } from '../api/profilesApi'
 import {
@@ -7,20 +6,15 @@ import {
 } from '../api/socialApi'
 import CallingCard from '../ascii/CallingCard'
 import AsciiIcon from '../ascii/icons'
-import { AsciiAura } from '../ascii/effects'
 import useCosmetics from '../ascii/useCosmetics'
 import { ACHIEVEMENTS, GROUPS, evaluate, statsFromProfile } from '../ascii/achievements'
-import { ClanTag, EloBadge } from '../components/PlayerName'
+import ProfileHero from '../components/profile/ProfileHero'
 import { tierById, formatElo, pct } from '../utils/elo'
 
 const BORDER = 'var(--on-ink-border)'
 const MONO = { fontFamily: 'var(--font-sans)' }
 const LABEL = { ...MONO, fontSize: 10, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--on-ink-text-3)' }
 const usd = (n) => `$${Math.round(n).toLocaleString('en-US')}`
-
-function initials(name) {
-  return (name ?? '?').split(' ').slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('') || '?'
-}
 
 function Stat({ label, value, tone }) {
   return (
@@ -88,7 +82,9 @@ function FriendAction({ userId, username }) {
 export default function Profile() {
   const { userId: paramId, username } = useParams()
   const { user } = useAuth()
-  const { banner: myBanner, equipBanner } = useCosmetics()
+  // Every hook stays above the loading/error returns below: reading Pro status after them rendered a different number
+  // of hooks once the profile arrived, which is React #310. useCosmetics already exposes it, so there is one read.
+  const { banner: myBanner, equipBanner, isPro: viewerPro } = useCosmetics()
 
   const byName = useGetProfileByUsernameQuery(username, { skip: !username })
   const userId = paramId ?? byName.data?.user_id
@@ -111,11 +107,7 @@ export default function Profile() {
   }
 
   const isOwn = user?.id === profile.user_id
-  const realName = profile.display_name ?? profile.username ?? null
-  const handle = profile.username ? `@${profile.username}` : (realName ?? 'Member')
-  const joinedDate = profile.joined_at ? new Date(profile.joined_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : null
   const stats = statsFromProfile(profile)
-  const viewerPro = useSelector((st) => st.preferences.isPro)
   const equippedScene = isOwn ? (viewerPro ? myBanner : null) : profile.banner
   const states = ACHIEVEMENTS.map((a) => [a, evaluate(a, stats)])
   // calling cards are a Pro perk: free profiles get a plain header in their tier colour
@@ -130,39 +122,14 @@ export default function Profile() {
     <div className="flex-1 flex flex-col min-h-0">
       <main className="flex-1 overflow-y-auto" style={{ padding: 'clamp(14px, 3vw, 32px)' }}>
         <div style={{ maxWidth: 880, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
-          <div style={{ position: 'relative' }}>
-            {heroScene ? (
-              <CallingCard scene={heroScene} cols={150} rows={20} fps={6} progress={eloProgress} label={`${handle}'s calling card`} />
+          <ProfileHero
+            profile={profile} scene={heroScene} eloProgress={eloProgress}
+            actions={isOwn ? (
+              <Link to="/settings" className="t-btn px-4 py-2" style={{ ...MONO, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.1em', textDecoration: 'none' }}>Edit profile</Link>
             ) : (
-              <div role="img" aria-label="Plain header" style={{ height: 150, border: '1px solid var(--on-ink-border)', background: `linear-gradient(110deg, ${tier.color}26, #07070a 70%)` }} />
+              <FriendAction userId={profile.user_id} username={profile.username} />
             )}
-            <div style={{ position: 'absolute', left: 18, bottom: -34, display: 'flex', alignItems: 'flex-end', gap: 14 }}>
-              <div style={{ position: 'relative', width: 88, height: 88 }}>
-                {profile.is_pro && profile.effect && profile.effect !== 'none' && <AsciiAura effect={profile.effect} bleed={{ top: 22, side: 14, bottom: 10 }} />}
-                <div style={{ position: 'relative', width: 88, height: 88, borderRadius: '50%', overflow: 'hidden', border: '3px solid var(--ink-900)', outline: '2px solid var(--paper)', background: 'var(--ink-800)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 30, color: 'var(--paper)' }}>
-                  {profile.avatar_url ? <img src={profile.avatar_url} alt="" referrerPolicy="no-referrer" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : initials(realName ?? 'M')}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <header style={{ marginTop: 34, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-            <div style={{ minWidth: 0 }}>
-              <h1 style={{ fontFamily: 'var(--font-display)', fontStretch: '125%', fontWeight: 800, fontSize: 28, margin: 0, textTransform: 'uppercase', color: profile.name_color || 'var(--paper)', overflowWrap: 'anywhere', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>{profile.clan && <Link to={`/clans/${profile.clan.id}`} style={{ textDecoration: 'none' }}><ClanTag tag={profile.clan.tag} color={profile.clan.color} /></Link>}{handle}{e && <EloBadge elo={e.elo} tier={e.tier} size="lg" />}</h1>
-              <p style={{ ...MONO, fontSize: 13, color: 'var(--on-ink-text-3)', margin: '4px 0 0', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-                {profile.username && realName && realName !== profile.username && <span>{realName}</span>}
-                {joinedDate && <span>Joined {joinedDate}</span>}
-                {profile.is_pro && <span className="t-chip" style={{ color: '#fde047', borderColor: '#fde047' }}>Pro</span>}
-              </p>
-            </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {isOwn ? (
-                <Link to="/settings" className="t-btn px-4 py-2" style={{ ...MONO, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.1em', textDecoration: 'none' }}>Edit profile</Link>
-              ) : (
-                <FriendAction userId={profile.user_id} username={profile.username} />
-              )}
-            </div>
-          </header>
+          />
 
           <section aria-label="About">
             {profile.bio ? (

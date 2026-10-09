@@ -136,6 +136,7 @@ function ProfileView({ onBack }) {
   const [updateProfile, { isLoading: saving }] = useUpdateProfileMutation()
 
   const [username, setUsername] = useState('')
+  const [name, setName] = useState('')
   const [bio, setBio] = useState('')
   const [avatarUrl, setAvatarUrl] = useState('')
   const [usernameError, setUsernameError] = useState('')
@@ -147,6 +148,7 @@ function ProfileView({ onBack }) {
   useEffect(() => {
     if (profile) {
       setUsername(profile.username ?? '')
+      setName(profile.display_name ?? '')
       setBio(profile.bio ?? '')
       setAvatarUrl(profile.avatar_url ?? '')
     }
@@ -162,7 +164,7 @@ function ProfileView({ onBack }) {
       return
     }
     try {
-      await updateProfile({ username: clean, bio: bio.trim(), avatar_url: avatarUrl.trim() }).unwrap()
+      await updateProfile({ username: clean, display_name: name.trim(), bio: bio.trim(), avatar_url: avatarUrl.trim() }).unwrap()
       onBack()
     } catch (err) {
       const message = err?.data?.message ?? `Failed to save (${err?.status ?? 'network error'}).`
@@ -196,7 +198,7 @@ function ProfileView({ onBack }) {
   const handleDragLeave = () => setDragOver(false)
   const handleFileInput = (e) => processFile(e.target.files[0])
 
-  const avatarInitials = (username || profile?.display_name || '?').charAt(0).toUpperCase()
+  const avatarInitials = (name || username || '?').charAt(0).toUpperCase()
 
   return (
     <>
@@ -261,6 +263,22 @@ function ProfileView({ onBack }) {
             </div>
           </div>
 
+          {/* The name people signed up with is derived from their email or OAuth profile, which is not always a name
+              they want next to their trades. This is the override, and clearing it leaves only the @handle on show. */}
+          <div>
+            <label htmlFor="settings-display-name" className="block text-xs uppercase tracking-widest text-[#6b7280] mb-2">Display name</label>
+            <input
+              id="settings-display-name"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value.slice(0, 40))}
+              placeholder="Leave empty to show only your @handle"
+              maxLength={40}
+              className="w-full bg-[#141414] border border-[#2a2a2a] text-white placeholder-[#6b7280] text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-[#3b82f6] transition-colors"
+            />
+            <p className="text-[#4b5563] text-xs mt-1.5">What other people see next to your handle. Clear it and only <span className="font-mono">@{username || 'handle'}</span> shows.</p>
+          </div>
+
           <div>
             <label className="block text-xs uppercase tracking-widest text-[#6b7280] mb-2">Username *</label>
             <input
@@ -272,7 +290,7 @@ function ProfileView({ onBack }) {
               className="w-full bg-[#141414] border border-[#2a2a2a] text-white placeholder-[#6b7280] text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-[#3b82f6] transition-colors font-mono"
             />
             {usernameError && <p className="text-red-400 text-xs mt-1.5">{usernameError}</p>}
-            <p className="text-[#4b5563] text-xs mt-1.5">Required to join groups. Letters, numbers, underscores, 3–20 chars.</p>
+            <p className="text-[#4b5563] text-xs mt-1.5">Required to join groups. Letters, numbers, underscores, 3–20 chars. Changing it updates your name everywhere at once; the old one is held for 30 days so nobody can take it, and you can change it 3 times a day.</p>
           </div>
 
           <div>

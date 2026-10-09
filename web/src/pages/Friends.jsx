@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { useAuth } from '../contexts/AuthContext'
 import {
@@ -10,6 +10,9 @@ import { setSelectedTicker } from '../store/watchlistSlice'
 import StockLogo from '../components/StockLogo'
 import { FriendsPanel } from '../components/welcome/panels'
 import PlayerName from '../components/PlayerName'
+import FriendProfile from '../components/friends/FriendProfile'
+import CoinPreview from '../components/friends/CoinPreview'
+import Callouts from '../components/friends/Callouts'
 import { useGetLeaderboardQuery } from '../api/eloApi'
 
 const BORDER = 'var(--on-ink-border)'
@@ -90,27 +93,45 @@ function Avatar({ user, size = 36 }) {
 function previewOf(m, meId) {
   if (!m) return 'Say hello'
   const mine = m.from === meId ? 'You: ' : ''
-  if (m.attachment) return `${mine}shared $${m.attachment.symbol || m.attachment.ticker.slice(0, 6)}`
-  return mine + m.body
+  if (m.attachment) {
+    const label = m.attachment.symbol || m.attachment.ticker?.slice(0, 6)
+    return label ? `${mine}shared $${label}` : `${mine}shared a token`
+  }
+  return mine + (m.body ?? '')
 }
 
-/* ── ticker card inside a message ───────────────────────────────────────── */
+/* ── ticker card inside a message ─────────────────────────────────────────────
+ * A share is only as good as the row it was written from: an older client, a hand-edited row or a coin that has since
+ * died can all leave a field missing. Every branch below renders something; none of them reads through a field it has
+ * not checked, because a bad attachment used to take the whole thread down with it.
+ */
 function TickerCard({ a, mine }) {
   const dispatch = useDispatch()
   const navigate = useNavigate()
-  const label = a.symbol || (a.kind === 'meme' ? `${a.ticker.slice(0, 4)}…${a.ticker.slice(-4)}` : a.ticker)
-  const open = () => {
-    if (a.kind === 'meme') navigate(`/terminal?token=${a.ticker}`)
-    else { dispatch(setSelectedTicker(a.ticker)); navigate('/stocks') }
+  const ticker = typeof a?.ticker === 'string' ? a.ticker.trim() : ''
+  const note = mine ? 'you shared this' : 'shared with you'
+
+  // Solana mints get the same coin card as a callout: logo, live price, copyable address, and a click into the terminal.
+  if (a?.kind === 'meme' || MINT_RE.test(ticker)) {
+    return <div style={{ minWidth: 'min(280px, 100%)' }}><CoinPreview address={ticker} symbol={a?.symbol} note={note} /></div>
   }
+
+  if (!ticker) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', background: 'var(--ink-900)', border: `1px dashed ${BORDER}`, borderRadius: 2, minWidth: 220 }}>
+        <span aria-hidden="true" style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${BORDER}`, fontWeight: 700, color: 'var(--on-ink-text-4)' }}>?</span>
+        <div style={{ ...MONO, fontSize: 11, color: 'var(--on-ink-text-3)' }}>This share no longer points at anything.</div>
+      </div>
+    )
+  }
+
+  const open = () => { dispatch(setSelectedTicker(ticker)); navigate('/stocks') }
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', background: 'var(--ink-900)', color: 'var(--paper)', border: `1px solid ${BORDER}`, borderRadius: 2, minWidth: 220 }}>
-      {a.kind === 'meme' ? (
-        <span aria-hidden="true" style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${BORDER}`, fontWeight: 700 }}>$</span>
-      ) : <StockLogo ticker={a.ticker} size={36} />}
+      <StockLogo ticker={ticker} size={36} />
       <div style={{ minWidth: 0, flex: 1 }}>
-        <div style={{ fontFamily: 'var(--font-display)', fontStretch: '125%', fontWeight: 800, fontSize: 16, textTransform: 'uppercase' }}>${label}</div>
-        <div style={{ ...MONO, fontSize: 11, color: 'var(--on-ink-text-3)' }}>{a.kind === 'meme' ? 'Solana token' : 'Stock / crypto'}{mine ? ' · you shared' : ''}</div>
+        <div style={{ fontFamily: 'var(--font-display)', fontStretch: '125%', fontWeight: 800, fontSize: 16, textTransform: 'uppercase' }}>${a?.symbol || ticker}</div>
+        <div style={{ ...MONO, fontSize: 11, color: 'var(--on-ink-text-3)' }}>Stock / crypto · {note}</div>
       </div>
       <button onClick={open} className="t-btn px-3 py-1.5" style={{ ...MONO, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Open</button>
     </div>
@@ -119,7 +140,7 @@ function TickerCard({ a, mine }) {
 
 function Bubble({ m, mine }) {
   return (
-    <div style={{ display: 'flex', justifyContent: mine ? 'flex-end' : 'flex-start' }}>
+    <div style={{ display: 'flex', justifyContent: mine ? 'flex-end' : 'flex-start', opacity: m.pending ? 0.55 : 1 }}>
       <div style={{ maxWidth: 'min(78%, 460px)', display: 'flex', flexDirection: 'column', gap: 6, alignItems: mine ? 'flex-end' : 'flex-start' }}>
         {m.attachment && <TickerCard a={m.attachment} mine={mine} />}
         {m.body && (
@@ -127,7 +148,7 @@ function Bubble({ m, mine }) {
             {m.body}
           </div>
         )}
-        <span style={{ ...MONO, fontSize: 10, color: 'var(--on-ink-text-4)' }}>{clock(m.at)}</span>
+        <span style={{ ...MONO, fontSize: 10, color: 'var(--on-ink-text-4)' }}>{m.pending ? 'sending' : clock(m.at)}</span>
       </div>
     </div>
   )
@@ -165,7 +186,7 @@ function Composer({ onSend, sending, error }) {
               placeholder="NVDA, BTC, or a Solana contract address" className="t-input" style={{ flex: 1 }}
               onKeyDown={(e) => { if (e.key === 'Enter' && parsed) { e.preventDefault(); send(parsed) } }}
             />
-            <button className="t-btn t-btn-primary px-4" disabled={!parsed || sending} onClick={() => send(parsed)} style={{ ...MONO, fontSize: 12, textTransform: 'uppercase' }}>Send</button>
+            <button className={`t-btn px-4 ${parsed && !sending ? 't-btn-primary' : ''}`} disabled={!parsed || sending} onClick={() => send(parsed)} style={{ ...MONO, fontSize: 12, textTransform: 'uppercase' }}>Send</button>
           </div>
           {watch.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
@@ -183,7 +204,7 @@ function Composer({ onSend, sending, error }) {
           placeholder="Message" className="t-input" style={{ flex: 1, resize: 'none', maxHeight: 120, minHeight: 38 }}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(null) } }}
         />
-        <button className="t-btn t-btn-primary px-4 py-2" disabled={!text.trim() || sending} onClick={() => send(null)} style={{ ...MONO, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Send</button>
+        <button className={`t-btn px-4 py-2 ${text.trim() && !sending ? 't-btn-primary' : ''}`} disabled={!text.trim() || sending} onClick={() => send(null)} style={{ ...MONO, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Send</button>
       </div>
       {error && <p role="alert" style={{ ...MONO, fontSize: 12, color: 'var(--negative)', margin: '8px 0 0' }}>{error}</p>}
     </div>
@@ -191,7 +212,7 @@ function Composer({ onSend, sending, error }) {
 }
 
 /* ── thread ─────────────────────────────────────────────────────────────── */
-function Thread({ friend, meId, onBack }) {
+function Thread({ friend, meId }) {
   const q = useGetThreadQuery(friend.userId, { pollingInterval: 6000, skipPollingIfUnfocused: true, refetchOnMountOrArgChange: true })
   const [send, { isLoading: sending }] = useSendMessageMutation()
   const [markRead] = useMarkThreadReadMutation()
@@ -206,24 +227,14 @@ function Thread({ friend, meId, onBack }) {
 
   const onSend = async (payload) => {
     setError('')
-    const res = await send({ userId: friend.userId, ...payload })
+    // meId rides along for the local echo only; the request body is just { body, ticker }.
+    const res = await send({ userId: friend.userId, meId, ...payload })
     if (res.error) { setError(res.error?.data?.message ?? 'Message failed to send.'); return false }
     return true
   }
 
   return (
     <section aria-label={`Conversation with ${nameOf(friend)}`} style={{ display: 'flex', flexDirection: 'column', minHeight: 0, height: '100%' }}>
-      <header style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderBottom: `1px solid ${BORDER}`, background: 'var(--ink-800)' }}>
-        <button onClick={onBack} className="md:hidden t-btn px-2 py-1" aria-label="Back to conversations" style={MONO}>{'<-'}</button>
-        <Link to={friend.username ? `/u/${friend.username}` : `/profile/${friend.userId}`} style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', minWidth: 0 }}>
-          <Avatar user={friend} />
-          <div style={{ minWidth: 0 }}>
-            <PlayerName user={friend} size="md" link={false} aura={false} />
-            {friend.displayName && friend.username && <div style={{ ...MONO, fontSize: 11, color: 'var(--on-ink-text-3)' }}>{friend.displayName}</div>}
-          </div>
-        </Link>
-        <Link to={friend.username ? `/u/${friend.username}` : `/profile/${friend.userId}`} className="t-btn px-3 py-1.5" style={{ ...MONO, marginLeft: 'auto', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.1em', textDecoration: 'none' }}>Profile</Link>
-      </header>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
         {q.isLoading && <p style={{ ...MONO, fontSize: 12, color: 'var(--on-ink-text-3)' }}>Loading…</p>}
         {q.isError && <p role="alert" style={{ ...MONO, fontSize: 12, color: 'var(--negative)' }}>Could not load this conversation. <button className="t-btn px-2 py-0.5" onClick={q.refetch}>Retry</button></p>}
@@ -236,6 +247,46 @@ function Thread({ friend, meId, onBack }) {
         <div ref={endRef} />
       </div>
       <Composer onSend={onSend} sending={sending} error={error} />
+    </section>
+  )
+}
+
+/* ── one friend, two views ──────────────────────────────────────────────────
+ * Visiting a friend lands on their profile — their calling card, their name, then their numbers, their live book and
+ * their best closes, in the same order your own profile states them. The conversation is one tab away and keeps its
+ * unread count, so nothing that used to be here has moved out of reach.
+ */
+function FriendPane({ friend, meId, unread, onBack }) {
+  const [params, setParams] = useSearchParams()
+  const view = params.get('view') === 'chat' ? 'chat' : 'profile'
+  const show = (next) => {
+    const p = new URLSearchParams(params)
+    if (next === 'profile') p.delete('view'); else p.set('view', next)
+    setParams(p, { replace: true })
+  }
+  const tab = { ...MONO, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.1em' }
+
+  return (
+    <section aria-label={nameOf(friend)} style={{ display: 'flex', flexDirection: 'column', minHeight: 0, height: '100%' }}>
+      <header style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderBottom: `1px solid ${BORDER}`, background: 'var(--ink-800)' }}>
+        <button onClick={onBack} className="md:hidden t-btn px-2 py-1" aria-label="Back to conversations" style={MONO}>{'<-'}</button>
+        <button onClick={() => show('profile')} style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, background: 'transparent', border: 0, padding: 0, cursor: 'pointer', textAlign: 'left' }} title={`View ${nameOf(friend)}`}>
+          <Avatar user={friend} />
+          <span style={{ minWidth: 0 }}>
+            <PlayerName user={friend} size="md" link={false} aura={false} />
+            {friend.displayName && friend.username && <span style={{ ...MONO, display: 'block', fontSize: 11, color: 'var(--on-ink-text-3)' }}>{friend.displayName}</span>}
+          </span>
+        </button>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, flexShrink: 0 }}>
+          <button className={`t-btn px-3 py-1.5 ${view === 'profile' ? 't-on' : ''}`} aria-pressed={view === 'profile'} onClick={() => show('profile')} style={tab}>Profile</button>
+          <button className={`t-btn px-3 py-1.5 ${view === 'chat' ? 't-on' : ''}`} aria-pressed={view === 'chat'} onClick={() => show('chat')} style={tab}>
+            Chat{unread > 0 && <span style={{ marginLeft: 6, fontWeight: 800 }}>{unread}</span>}
+          </button>
+        </div>
+      </header>
+      {view === 'chat'
+        ? <Thread key={friend.userId} friend={friend} meId={meId} />
+        : <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}><FriendProfile userId={friend.userId} onMessage={() => show('chat')} /></div>}
     </section>
   )
 }
@@ -253,7 +304,9 @@ export default function Friends() {
   const list = convos.data?.conversations ?? []
   const incoming = lists.data?.incoming ?? []
   const outgoing = lists.data?.outgoing ?? []
-  const active = list.find((c) => c.user.userId === userId)?.user
+  const activeConvo = list.find((c) => c.user.userId === userId)
+  const active = activeConvo?.user
+  const activeUnread = activeConvo?.unread ?? 0
 
   return (
     <main className="flex flex-1 min-h-0" style={{ height: 'calc(100vh)', minHeight: 520 }}>
@@ -325,15 +378,21 @@ export default function Friends() {
 
       <div className={userId ? 'flex flex-1 min-w-0' : 'hidden md:flex flex-1 min-w-0'} style={{ flexDirection: 'column' }}>
         {active ? (
-          <Thread key={active.userId} friend={active} meId={user?.id} onBack={() => navigate('/friends')} />
+          <FriendPane key={active.userId} friend={active} meId={user?.id} unread={activeUnread} onBack={() => navigate('/friends')} />
         ) : userId && !convos.isLoading ? (
           <div style={{ ...MONO, margin: 'auto', textAlign: 'center', padding: 24, color: 'var(--on-ink-text-3)', fontSize: 13 }}>
-            You can only message friends.<br />
+            You are not friends yet.<br />
             <Link to={`/profile/${userId}`} style={{ color: 'var(--paper)' }}>View their profile</Link> to send a request.
           </div>
         ) : (
-          <div style={{ ...MONO, margin: 'auto', textAlign: 'center', padding: 24, color: 'var(--on-ink-text-3)', fontSize: 13 }}>
-            Pick a conversation, or share a ticker with a friend.
+          /* The dead space: with no conversation open, the pane carries the circle's callouts instead of a shrug. */
+          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 'clamp(14px, 2.5vw, 24px)' }}>
+            <div style={{ maxWidth: 560, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <p style={{ ...MONO, fontSize: 12.5, color: 'var(--on-ink-text-3)', margin: 0 }}>
+                Pick a friend to see what they are holding, or share a ticker with them.
+              </p>
+              <Callouts meId={user?.id} />
+            </div>
           </div>
         )}
       </div>

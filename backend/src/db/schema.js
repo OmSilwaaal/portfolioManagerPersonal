@@ -429,6 +429,41 @@ function initSchema() {
              WHERE NOT EXISTS (SELECT 1 FROM trade_results)`);
   } catch (_) {}
 
+  // Vacated @handles. A rename releases the old name here rather than back into the pool: for HOLD_DAYS
+  // (see routes/profiles.js) only its previous owner may take it again, so nobody can adopt a handle the moment
+  // its owner renames away from it and trade on the reputation still attached to it. Doubles as the rename
+  // audit log the per-day cooldown is counted from, which is why it must survive a restart.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS username_history (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id     TEXT NOT NULL,
+      username    TEXT NOT NULL COLLATE NOCASE,
+      released_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_username_history_name ON username_history(username, released_at);
+    CREATE INDEX IF NOT EXISTS idx_username_history_user ON username_history(user_id, released_at);
+  `);
+
+  // Callouts: a short public shout about a token the author actually traded. The position itself is proved in
+  // routes/friends.js against Supabase (paper_positions / paper_transactions) before a row is ever written, so
+  // `address`/`stance`/`entry` here are server-verified, while `symbol` is only a display snapshot — it keeps the
+  // preview readable after the token stops resolving upstream.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS trade_callouts (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id    TEXT NOT NULL,
+      address    TEXT NOT NULL,
+      symbol     TEXT NOT NULL DEFAULT '',
+      stance     TEXT NOT NULL DEFAULT 'open' CHECK(stance IN ('open','closed')),
+      body       TEXT NOT NULL DEFAULT '',
+      entry      REAL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    -- the feed reads "newest callouts by this set of users"; the pruner reads by age
+    CREATE INDEX IF NOT EXISTS idx_callouts_user ON trade_callouts(user_id, id DESC);
+    CREATE INDEX IF NOT EXISTS idx_callouts_time ON trade_callouts(created_at);
+  `);
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS memecoin_alert_prefs (
       user_id        TEXT PRIMARY KEY,
@@ -461,6 +496,112 @@ function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_meme_alert_user_ts ON memecoin_alert_events(user_id, created_ts DESC);
     -- the cooldown lookup: most recent event for a (user, token, kind)
     CREATE INDEX IF NOT EXISTS idx_meme_alert_cooldown ON memecoin_alert_events(user_id, address, kind, created_ts DESC);
+  `);
+
+  // ── Billing: money that actually exists ───────────────────────────────────
+  // Everything here is an INTEGER number of minor units (USD cents, SOL lamports). No REAL
+  // column may ever hold a balance: SQLite REAL is a double, and a double cannot hold 0.07
+  // exactly. See services/money.js for the arithmetic and the fee split.
+  db.exec(`
+    -- One row per money movement. Append-only in practice: a correction is a new row, never
+    -- an UPDATE, so the books can always be re-derived from scratch.
+    --
+    -- The three amounts are recorded together on every single row (gross, fee, net) and the
+    -- CHECK makes the identity structural rather than a thing the application remembers to
+    -- do. A reconciliation can therefore sum fee_minor to get revenue and net_minor to get
+    -- liability without ever re-deriving a percentage.
+    CREATE TABLE IF NOT EXISTS billing_ledger (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id     TEXT    NOT NULL,
+      currency    TEXT    NOT NULL CHECK(currency IN ('usd','sol')),
+      rail        TEXT    NOT NULL CHECK(rail IN ('stripe','solana','manual')),
+      kind        TEXT    NOT NULL CHECK(kind IN ('deposit','pro','refund','adjustment')),
+      gross_minor INTEGER NOT NULL CHECK(gross_minor >= 0),
+      fee_minor   INTEGER NOT NULL CHECK(fee_minor   >= 0),
+      net_minor   INTEGER NOT NULL,
+      fee_bps     INTEGER NOT NULL CHECK(fee_bps BETWEEN 0 AND 10000),
+      -- Stripe event id, or the Solana transaction signature. Never client-supplied text.
+      external_id TEXT    NOT NULL,
+      -- rail-specific evidence as JSON (payer address, slot, payment_intent). Audit only;
+      -- nothing reads a number back out of here.
+      ref         TEXT,
+      created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+      CHECK (gross_minor = fee_minor + net_minor)
+    );
+    -- THE idempotency guarantee. A replayed Stripe event, a double-clicked button and a
+    -- re-observed on-chain transfer all collide here and the second INSERT fails. The
+    -- database enforces "credit exactly once"; the application only has to not catch the
+    -- wrong error. Application logic alone cannot win this race.
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_billing_ledger_once ON billing_ledger(rail, external_id);
+    CREATE INDEX IF NOT EXISTS idx_billing_ledger_user ON billing_ledger(user_id, currency, id);
+
+    -- Every webhook delivery we have already acted on, including the ones that move no money
+    -- (subscription.deleted). Inserted the instant after the signature verifies and before
+    -- any side effect, so a retry is recognised even if the first attempt half-finished.
+    CREATE TABLE IF NOT EXISTS billing_webhook_events (
+      rail        TEXT NOT NULL,
+      event_id    TEXT NOT NULL,
+      event_type  TEXT NOT NULL,
+      received_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (rail, event_id)
+    );
+
+    -- Public wallet addresses only. A private key or seed phrase must never reach this
+    -- server, so there is deliberately no column one could be put in. Privy MPC-shards the
+    -- key material and we store the address the way we would store an email.
+    CREATE TABLE IF NOT EXISTS user_wallets (
+      user_id    TEXT NOT NULL,
+      chain      TEXT NOT NULL DEFAULT 'solana' CHECK(chain IN ('solana')),
+      address    TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (user_id, chain, address)
+    );
+    -- A SOL deposit is attributed by matching the transaction's payer to a registered
+    -- address, so this lookup runs on the hot path of every claim.
+    CREATE INDEX IF NOT EXISTS idx_user_wallets_addr ON user_wallets(chain, address);
+
+    -- Pro entitlement, as a grant log rather than a boolean. "Is this user Pro" is a question
+    -- about rows, so revoking is auditable and a referral month cannot clobber a paid
+    -- subscription (or the reverse) the way a single shared flag could.
+    CREATE TABLE IF NOT EXISTS pro_grants (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id     TEXT NOT NULL,
+      source      TEXT NOT NULL CHECK(source IN ('admin','referral','stripe','solana')),
+      starts_at   TEXT NOT NULL,
+      ends_at     TEXT,            -- NULL = open-ended, i.e. a live Stripe subscription
+      revoked_at  TEXT,
+      granted_by  TEXT,            -- the acting admin's user id when source='admin'
+      reason      TEXT,
+      external_id TEXT,            -- stripe subscription id / solana signature
+      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_pro_grants_user ON pro_grants(user_id, id DESC);
+    -- Partial unique index: one grant per external object, but many admin grants (which have
+    -- no external id) are allowed. NULLs are not distinct enough in SQLite to rely on here.
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_pro_grants_once
+      ON pro_grants(source, external_id) WHERE external_id IS NOT NULL;
+
+    -- Who is allowed to hand out Pro. A row per user, not a shared password: see
+    -- services/entitlements.js for why that distinction is the whole point.
+    CREATE TABLE IF NOT EXISTS user_roles (
+      user_id    TEXT NOT NULL,
+      role       TEXT NOT NULL CHECK(role IN ('admin')),
+      granted_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (user_id, role)
+    );
+
+    -- Append-only record of every privileged action. An admin who grants themselves Pro
+    -- leaves a row here with their own user id on it.
+    CREATE TABLE IF NOT EXISTS admin_audit (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      actor_id   TEXT NOT NULL,
+      action     TEXT NOT NULL,
+      target_id  TEXT,
+      detail     TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_admin_audit_time ON admin_audit(created_at);
   `);
 
   // Migrations — add columns if they don't exist (SQLite lacks ADD COLUMN IF NOT EXISTS)

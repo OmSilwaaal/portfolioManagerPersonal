@@ -10,12 +10,51 @@ const elo = require('../services/elo')
 
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/
 
-// Public-facing name: never fall back to the full email address — that would publish it to every user.
+/* ── renaming, as a privacy control ──────────────────────────────────────────
+ * Nothing in this codebase stores a username in a second table — every name shown anywhere (friends list, search,
+ * DMs, callouts, clan rosters, the winners board, the Elo ladder) is read back through `profiles` by user id at
+ * request time. So a rename propagates everywhere by itself, and the work here is making sure the rename cannot be
+ * abused rather than making it spread.
+ *
+ * The vacated handle is HELD, not released: for HOLD_DAYS only its previous owner may take it back. Immediate release
+ * would let anyone adopt a handle seconds after its owner renamed away from it and inherit the reputation still
+ * attached to it — which matters more now that an account can hold real money.
+ */
+const HOLD_DAYS = 30
+const RENAMES_PER_DAY = 3
+const NAME_MAX = 40
+
+// Handles nobody may claim: the seeded demo traders (the Elo ladder and the winners board attribute a seed row to
+// whoever holds its handle, so claiming one hands you a fabricated win and rating), plus the usual impersonation bait.
+const RESERVED = new Set([
+  ...elo.SEED_TRADERS.map((t) => t.username),
+  'admin', 'administrator', 'support', 'help', 'staff', 'team', 'mod', 'moderator', 'official',
+  'travauxus', 'system', 'root', 'security', 'billing', 'everyone', 'here', 'me', 'null', 'undefined',
+])
+
+// Control, bidi-override and zero-width characters are stripped so a name cannot spoof another; '@' is removed so a
+// display name can never read as an email or a handle (the public card builder already drops names containing one).
+const UNSAFE_NAME = /[\u0000-\u001F\u007F­​-‏‪-‮⁠-⁤⁦-⁩﻿]/g
+const cleanDisplayName = (v) =>
+  String(v ?? '').replace(UNSAFE_NAME, '').normalize('NFKC').replace(/@/g, '').replace(/\s+/g, ' ').trim().slice(0, NAME_MAX)
+
+// The name a member signed up with. Used only until they set one of their own; never the full email address.
 function publicDisplayName(user) {
   const meta = user?.user_metadata ?? {}
   const name = meta.full_name ?? meta.name
-  if (name) return String(name).slice(0, 80)
-  return user?.email ? user.email.split('@')[0] : null
+  if (name) return cleanDisplayName(name) || null
+  return user?.email ? cleanDisplayName(user.email.split('@')[0]) || null : null
+}
+
+/**
+ * The name other people see. A name the member set themselves always wins. An empty string means they deliberately
+ * cleared it, and that is honoured — the sign-up name does not come back, so the profile shows the @handle instead.
+ * Only a column that was never set at all falls back to the sign-up name.
+ */
+function shownName(profileRow, signupName) {
+  const stored = typeof profileRow?.display_name === 'string' ? cleanDisplayName(profileRow.display_name) : null
+  if (stored) return stored
+  return profileRow?.display_name == null ? signupName ?? null : null
 }
 
 // Cosmetics plus the numbers behind each calling card, computed here so one user's page can show another's progress.
@@ -52,8 +91,9 @@ function publicExtras(userId, authUser) {
 async function upsertProfile(userId, displayName = null) {
   const { data } = await supabase.from('profiles').select('*').eq('user_id', userId).maybeSingle()
   if (data) {
-    // Backfill display_name if it was missing
-    if (!data.display_name && displayName) {
+    // Backfill display_name only when it was never set. An empty string is a member who cleared it on purpose, and
+    // writing the sign-up name back over that would undo the privacy choice on their next page load.
+    if (data.display_name == null && displayName) {
       const { data: updated } = await supabase
         .from('profiles')
         .update({ display_name: displayName })
@@ -86,8 +126,18 @@ router.get('/me', requireAuth, async (req, res) => {
 // PATCH /profiles/me
 router.patch('/me', requireAuth, async (req, res) => {
   try {
-    const { username, bio, avatar_url } = req.body ?? {}
+    const { username, bio, avatar_url, display_name } = req.body ?? {}
     const updates = { updated_at: new Date().toISOString() }
+    const db = getDb()
+    let renamedFrom = null
+
+    if (display_name !== undefined) {
+      if (typeof display_name !== 'string') {
+        return res.status(400).json({ error: true, message: 'Name must be a string.' })
+      }
+      // '' is allowed and meaningful: it clears the name, leaving only the @handle on show.
+      updates.display_name = cleanDisplayName(display_name)
+    }
 
     if (username !== undefined) {
       if (typeof username !== 'string') {
@@ -97,14 +147,41 @@ router.patch('/me', requireAuth, async (req, res) => {
       if (clean && !USERNAME_RE.test(clean)) {
         return res.status(400).json({ error: true, message: 'Username must be 3–20 characters: letters, numbers, underscores only.' })
       }
-      if (clean) {
-        const { data: taken } = await supabase
-          .from('profiles')
-          .select('user_id')
-          .eq('username', clean)
-          .neq('user_id', req.user.id)
-          .maybeSingle()
-        if (taken) return res.status(400).json({ error: true, message: 'Username is already taken.' })
+      const { data: mine } = await supabase.from('profiles').select('username').eq('user_id', req.user.id).maybeSingle()
+      const current = mine?.username ?? null
+
+      // Saving the form without touching the handle must stay free: only a real change pays the rename rules.
+      if (clean !== (current ?? '')) {
+        if (current) renamedFrom = current
+
+        if (clean) {
+          if (RESERVED.has(clean)) {
+            return res.status(400).json({ error: true, message: 'That username is reserved. Please pick another.' })
+          }
+          // Usernames are always stored lower-cased, so an exact match here is a case-insensitive collision check.
+          const { data: taken } = await supabase
+            .from('profiles')
+            .select('user_id')
+            .eq('username', clean)
+            .neq('user_id', req.user.id)
+            .maybeSingle()
+          if (taken) return res.status(400).json({ error: true, message: 'Username is already taken.' })
+
+          const held = db.prepare(
+            "SELECT user_id FROM username_history WHERE username = ? AND released_at > datetime('now', ?) ORDER BY id DESC LIMIT 1"
+          ).get(clean, `-${HOLD_DAYS} days`)
+          if (held && held.user_id !== req.user.id) {
+            return res.status(409).json({ error: true, message: `That username was recently in use. It is held for ${HOLD_DAYS} days.` })
+          }
+        }
+
+        // Counted from the audit log rather than memory, so restarting the server does not hand out free renames.
+        const recent = db.prepare(
+          "SELECT COUNT(*) AS n FROM username_history WHERE user_id = ? AND released_at > datetime('now', '-1 day')"
+        ).get(req.user.id).n
+        if (recent >= RENAMES_PER_DAY) {
+          return res.status(429).json({ error: true, message: `You can change your username ${RENAMES_PER_DAY} times a day. Try again tomorrow.` })
+        }
       }
       updates.username = clean || null
     }
@@ -142,6 +219,11 @@ router.patch('/me', requireAuth, async (req, res) => {
         return res.status(400).json({ error: true, message: 'Username is already taken.' })
       }
       throw error
+    }
+
+    // Only after the handle has actually moved: the old one goes into the hold, which is also the rename log.
+    if (renamedFrom) {
+      db.prepare('INSERT INTO username_history (user_id, username) VALUES (?, ?)').run(req.user.id, renamedFrom)
     }
 
     res.json(data)
@@ -214,8 +296,7 @@ router.get('/:userId', requireAuth, async (req, res) => {
       username: profile?.username ?? null,
       bio: profile?.bio ?? '',
       avatar_url: profile?.avatar_url ?? '',
-      // Stored display_name may predate the email-leak fix, so prefer the freshly derived name
-      display_name: displayName ?? profile?.display_name ?? null,
+      display_name: shownName(profile, displayName),
       updated_at: profile?.updated_at ?? null,
       joined_at,
       ...publicExtras(userId, authUser),
