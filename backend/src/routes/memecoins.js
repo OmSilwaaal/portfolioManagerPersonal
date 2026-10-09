@@ -405,14 +405,27 @@ router.get('/signals', h(async (req, res) => {
   res.json({ list, asOf: now, modelVersion: MODEL_VERSION, signals: out });
 }));
 
-router.get('/:address/signal', h(async (req, res) => {
-  const address = needAddress(req);
+// The same work /:address/signal does, callable without a request. The SSE hub pushes
+// signals and the alert poller reads them; sharing this keeps one signalCache and one
+// GeckoTerminal budget rather than three competing copies.
+async function signalFor(address) {
+  if (!data.isValidAddress(address)) return null;
   const hit = signalCache.get(address);
   const token = await data.getToken(address);
   const rs = radarLookup([address]).get(address);
-  if (rs) return res.json(shape(token, radarShape(token, rs, computeSignal({ token, now: Date.now() }))));
-  if (hit && hit.exp > Date.now() && hit.sig.mode === 'full') return res.json(shape(token, hit.sig));
-  res.json(shape(token, await fullSignal(token)));
+  if (rs) return shape(token, radarShape(token, rs, computeSignal({ token, now: Date.now() })));
+  if (hit && hit.exp > Date.now() && hit.sig.mode === 'full') return shape(token, hit.sig);
+  return shape(token, await fullSignal(token));
+}
+
+/** A full-mode cached signal, or null. Never touches the network. */
+function cachedFullSignal(address) {
+  const hit = signalCache.get(address);
+  return hit && hit.sig.mode === 'full' && Date.now() - hit.at < SIGNAL_STALE_MAX ? hit.sig : null;
+}
+
+router.get('/:address/signal', h(async (req, res) => {
+  res.json(await signalFor(needAddress(req)));
 }));
 
 // Param routes last so they don't shadow the fixed paths above
@@ -421,5 +434,8 @@ router.get('/:address/ohlcv', h(async (req, res) => {
 }));
 router.get('/:address/trades', h(async (req, res) => res.json(await data.getTrades(needAddress(req)))));
 router.get('/:address', h(async (req, res) => res.json(await data.getToken(needAddress(req)))));
+
+router.signalFor = signalFor;
+router.cachedFullSignal = cachedFullSignal;
 
 module.exports = router;

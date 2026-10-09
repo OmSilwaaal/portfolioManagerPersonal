@@ -59,6 +59,14 @@ if (process.env.ENABLE_SOLANA_PIPELINE === 'true') {
   watchRedisForAlpha();
 }
 
+// New pump.fun launches from Helius into the live stream. Opt-in via ENABLE_HELIUS_LAUNCHES=true
+// (and a key); without both, the server behaves exactly as it did. Only polls while someone
+// is actually holding the stream open.
+require('./services/heliusLaunches').startHeliusLaunches({
+  onLaunch: (launch) => require('./services/memecoinStream').pushLaunch(launch),
+  hasListeners: () => require('./services/memecoinStream').stats().clients > 0,
+});
+
 // Memecoin radar collector (Solana new pools → snapshots). Opt-in via ENABLE_RADAR=true.
 require('./radar').startRadar();
 // Enable the optional smart-money / social radar feature groups when their collectors are on (RADAR_EXTRA_FEATURES=off disables)
@@ -111,6 +119,15 @@ app.use('/api/paper-trading/webhook', express.raw({ type: 'application/json' }))
 app.use('/api/stripe/pro-webhook', express.raw({ type: 'application/json' }))
 app.use(express.json({ limit: '60kb' })); // cap request body size (profile avatars are ~45KB max)
 app.use(sessionMiddleware);
+
+// ── LIVE STREAM ───────────────────────────────────────────────────────────────
+// Mounted ahead of the limiters on purpose: a connection the browser holds open for
+// minutes must not spend the 60 req/min budget that the rest of the terminal needs.
+// It carries public market data only (the same trending/new/token/candle/trade payloads
+// the public-ish REST routes return), so it needs no session, and it enforces its own
+// per-IP connection cap instead — see services/memecoinStream.
+const memecoinStream = require('./services/memecoinStream');
+app.get('/api/memecoins/stream', memecoinStream.handler);
 
 // ── RATE LIMITERS ─────────────────────────────────────────────────────────────
 function makeLimiter(windowMs, max, message) {

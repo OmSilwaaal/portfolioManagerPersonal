@@ -242,26 +242,26 @@ function computeSignal(input = {}) {
   const R = CONFIG.risk;
   const riskFlags = [];
   if (isNum(token.liquidity_usd) && token.liquidity_usd < R.lowLiquidityUsd) {
-    riskFlags.push({ code: 'LOW_LIQUIDITY', label: 'Low liquidity', detail: `Liquidity under $${R.lowLiquidityUsd / 1000}k` });
+    riskFlags.push({ code: 'LOW_LIQUIDITY', severity: 'warn', label: 'Low liquidity', detail: `Liquidity under $${R.lowLiquidityUsd / 1000}k` });
   }
   const created = token.pair?.created_at;
   if (isNum(created) && created > 0) {
     const ageMin = (now - created) / 60000;
     if (ageMin >= 0 && ageMin < R.veryNewMinutes) {
-      riskFlags.push({ code: 'VERY_NEW', label: 'Very new', detail: `Pool is ${Math.max(1, Math.round(ageMin))}m old` });
+      riskFlags.push({ code: 'VERY_NEW', severity: 'warn', label: 'Very new', detail: `Pool is ${Math.max(1, Math.round(ageMin))}m old` });
     }
   }
   const spike = (ret !== null && Math.exp(ret) - 1 >= R.spikeReturn)
     || (isNum(token.change_1h) && token.change_1h / 100 >= R.spikeReturn1h);
   const imbForFlag = features.imbalance;
   if (spike && imbForFlag !== null && imbForFlag <= R.spikeSellImbalance) {
-    riskFlags.push({ code: 'SPIKE_SELL_HEAVY', label: 'Spike with heavy selling', detail: 'Sharp price rise while sells dominate flow' });
+    riskFlags.push({ code: 'SPIKE_SELL_HEAVY', severity: 'warn', label: 'Spike with heavy selling', detail: 'Sharp price rise while sells dominate flow' });
   }
   if (isNum(token.liquidity_usd) && token.liquidity_usd > 0) {
     const r1 = isNum(token.volume_1h) ? token.volume_1h / token.liquidity_usd : 0;
     const r5 = curVol !== null ? curVol / token.liquidity_usd : 0;
     if (r1 > R.washVol1hToLiq || r5 > R.washVol5mToLiq) {
-      riskFlags.push({ code: 'WASH_TRADE_HINT', label: 'Volume far above liquidity', detail: 'Volume is very large relative to liquidity; can indicate wash trading' });
+      riskFlags.push({ code: 'WASH_TRADE_HINT', severity: 'warn', label: 'Volume far above liquidity', detail: 'Volume is very large relative to liquidity; can indicate wash trading' });
     }
   }
 

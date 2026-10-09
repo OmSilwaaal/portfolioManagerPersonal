@@ -106,3 +106,55 @@ test('a list fetch failure degrades to no alerts rather than throwing', async ()
   const r = await runOnce(NOW + 30 * 60 * 60_000);
   assert.strictEqual(r.alerts, 0);
 });
+
+// ── deliverAlerts: the stream's market-wide candidates reaching per-user feeds ──
+// The volatility rule runs once for everyone (the hub sees one price series, not one per
+// user); what stays per user is consent, the liquidity floor and the cooldown.
+const { deliverAlerts } = require('../src/services/memecoinAlertPoller');
+
+const vol = (over = {}) => ({
+  kind: 'volatility', address: 'VOLTOK', symbol: 'VOL', direction: 'up', changePct: 140,
+  window: '45s', score: null, confidence: null, liquidityUsd: 100_000,
+  message: 'VOL spiking +140.0% in 45s', ...over,
+});
+
+test('a market-wide candidate lands in every opted-in feed and nowhere else', () => {
+  const t = NOW + 40 * 60 * 60_000;
+  enable('watcher');
+  enable('bystander', { enabled: 0 });
+  assert.ok(deliverAlerts([vol()], t) >= 1);
+  const e = q.listMemeAlertEvents('watcher').find((x) => x.kind === 'volatility');
+  assert.ok(e);
+  assert.strictEqual(e.symbol, 'VOL');
+  assert.strictEqual(e.change_pct, 140);
+  assert.strictEqual(e.window, '45s');
+  assert.strictEqual(q.listMemeAlertEvents('bystander').length, 0);
+});
+
+test('each user keeps their own liquidity floor', () => {
+  const t = NOW + 41 * 60 * 60_000;
+  enable('deep', { min_liquidity: 50_000 });
+  enable('shallow', { min_liquidity: 1_000 });
+  deliverAlerts([vol({ address: 'THIN', symbol: 'THIN', liquidityUsd: 10_000 })], t);
+  assert.strictEqual(q.listMemeAlertEvents('deep', 200).filter((e) => e.symbol === 'THIN').length, 0);
+  assert.strictEqual(q.listMemeAlertEvents('shallow', 200).filter((e) => e.symbol === 'THIN').length, 1);
+});
+
+test('the cooldown applies to streamed alerts too', () => {
+  const t = NOW + 42 * 60 * 60_000;
+  enable('once', { cooldown_min: 60 });
+  const mine = () => q.listMemeAlertEvents('once', 200).filter((e) => e.symbol === 'TWICE').length;
+  const alert = () => vol({ address: 'TWICE', symbol: 'TWICE' });
+  deliverAlerts([alert()], t);
+  assert.strictEqual(mine(), 1);
+  deliverAlerts([alert()], t + 60_000);
+  assert.strictEqual(mine(), 1, 'still inside the cooldown');
+  deliverAlerts([alert()], t + 61 * 60_000);
+  assert.strictEqual(mine(), 2, 'released once the cooldown has passed');
+});
+
+test('nothing to deliver is not an error', () => {
+  assert.strictEqual(deliverAlerts([], NOW), 0);
+  assert.strictEqual(deliverAlerts(null, NOW), 0);
+  assert.strictEqual(deliverAlerts(undefined, NOW), 0);
+});

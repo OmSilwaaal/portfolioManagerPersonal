@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Bell, BellOff, BellRing, X, Check, Settings2, ArrowUpRight, ArrowDownRight, Zap } from 'lucide-react'
 import {
   useGetMemecoinAlertPrefsQuery,
@@ -8,8 +8,15 @@ import {
 } from '../../api/memecoinAlertsApi'
 import { useNotificationPermission, notify } from './useDesktopNotifications'
 import { usePoll } from '../../api/memecoinApi'
+import { subscribeLive, liveVolatility } from '../../api/liveFeed'
 
 const POLL_MS = 60_000
+// A volatility alert is broadcast on the live stream the moment the server sees it, but the
+// feed itself is per user and lives server-side, so the stream is the cue to go and read it
+// rather than the payload. Throttled, because the broadcast is market-wide: several tokens
+// can move inside the same second and that is still one refetch.
+const LIVE_REFETCH_MS = 15_000
+const NO_EVENTS = []
 // Remembering this per browser keeps the "turn alerts on" nudge from reappearing
 // forever for someone who has already said no.
 const DISMISS_KEY = 'travauxus.memeAlerts.nudgeDismissed'
@@ -52,12 +59,26 @@ export default function MemecoinAlerts({ onSelectToken }) {
   // usePoll pauses while the tab is hidden or the API is rate-limiting, matching
   // every other poll in the terminal.
   const pollMs = usePoll(POLL_MS)
-  const { data: eventsData } = useGetMemecoinAlertEventsQuery(50, {
+  const { data: eventsData, refetch } = useGetMemecoinAlertEventsQuery(50, {
     pollingInterval: enabled ? pollMs : 0,
     skip: !enabled,
   })
   const events = useMemo(() => eventsData?.events ?? [], [eventsData])
   const unread = eventsData?.unread ?? 0
+
+  // Live volatility broadcasts: read the feed now instead of waiting out the poll, which is
+  // what makes an alert show up seconds after the move rather than a minute later.
+  const volatility = useSyncExternalStore(subscribeLive, liveVolatility, () => NO_EVENTS)
+  const lastRefetch = useRef(0)
+  useEffect(() => {
+    if (!enabled || !volatility.length) return undefined
+    const wait = Math.max(0, lastRefetch.current + LIVE_REFETCH_MS - Date.now())
+    const t = setTimeout(() => {
+      lastRefetch.current = Date.now()
+      refetch()
+    }, wait)
+    return () => clearTimeout(t)
+  }, [volatility, enabled, refetch])
 
   const [open, setOpen] = useState(false)
   const [showSettings, setShowSettings] = useState(false)

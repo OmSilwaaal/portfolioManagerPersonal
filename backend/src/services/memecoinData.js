@@ -446,5 +446,5 @@ async function getQuote({ address, side, amountSol, amountTokens, slippageBps })
 module.exports = {
   MemecoinDataError, isValidAddress, getTrending, getNew, search, getToken,
   getOhlcv, getTrades, getSolPrice, getQuote, SOL_MINT,
-  sanitizeText, cleanSymbol, cleanName, shortMint, fromDexPair, fromGeckoPool,
+  sanitizeText, cleanSymbol, cleanName, cleanUrl, shortMint, fromDexPair, fromGeckoPool,
 };

@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { baseApi } from './baseApi'
 import { paperTradingApi } from './paperTradingApi'
+import { liveUpdates, isLive, subscribeLive } from './liveFeed'
 import {
   mockTrending, mockNew, mockSearch, mockTokenDetail, mockOhlcv, mockTrades, mockQuote,
 } from './memecoinMock'
@@ -39,7 +40,7 @@ export function normToken(t) {
     bondingProgress: pick(t.bondingProgress),
   }
 }
-const normTokens = (list) => (Array.isArray(list) ? list.map(normToken) : list)
+export const normTokens = (list) => (Array.isArray(list) ? list.map(normToken) : list)
 
 function normTrade(t, i) {
   if (!t || typeof t !== 'object') return t
@@ -52,7 +53,7 @@ function normTrade(t, i) {
     maker: pick(t.maker, t.wallet),
   }
 }
-const normTrades = (list) => (Array.isArray(list) ? list.map(normTrade) : list)
+export const normTrades = (list) => (Array.isArray(list) ? list.map(normTrade) : list)
 
 /* ─── Rate-limit awareness (global /api limiter: 60 req/min per IP) ──────────
  * A 429 from any terminal request opens a backoff window (doubling on repeats, 15s..120s, honouring Retry-After).
@@ -87,11 +88,22 @@ const visSubscribe = (l) => {
   document.addEventListener('visibilitychange', l)
   return () => document.removeEventListener('visibilitychange', l)
 }
+/* While the SSE stream is healthy, polling stops being the source of freshness and becomes a
+ * safety net: it only has to catch what the stream missed. Stretching every interval by this
+ * factor is what turns push into a saving rather than one extra request on top — ~26 req/min
+ * becomes ~10, well clear of the 60/min limiter, while updates arrive in 5-10s instead of
+ * 10-120s. The moment the stream goes stale (see liveFeed's STALE_MS) every interval snaps
+ * back to the value the terminal asked for, so a dead stream costs nothing but its own
+ * reconnect attempts. */
+const LIVE_FACTOR = 3
+
 /** Poll interval that is 0 (paused) while the tab is hidden or the API is rate limiting us. */
 export function usePoll(ms) {
   const visible = useSyncExternalStore(visSubscribe, () => !document.hidden, () => true)
   const limited = useRateLimited()
-  return visible && !limited ? ms : 0
+  const live = useSyncExternalStore(subscribeLive, isLive, () => false)
+  if (!visible || limited) return 0
+  return live ? ms * LIVE_FACTOR : ms
 }
 
 /** queryFn builder: real endpoint first; in dev a failure falls back to the mock; prod surfaces the error. */
@@ -125,16 +137,21 @@ export const memecoinApi = api.injectEndpoints({
     getTrendingMemecoins: builder.query({
       queryFn: withMock(() => '/memecoins/trending', mockTrending, 'tokens', normTokens),
       providesTags: ['Memecoins'],
+      onCacheEntryAdded: liveUpdates(() => ({ lists: true })),
     }),
     getNewMemecoins: builder.query({
       queryFn: withMock(() => '/memecoins/new', mockNew, 'tokens', normTokens),
       providesTags: ['Memecoins'],
+      onCacheEntryAdded: liveUpdates(() => ({ lists: true })),
     }),
     searchMemecoins: builder.query({
       queryFn: withMock((q) => `/memecoins/search?q=${encodeURIComponent(q)}`, mockSearch, 'tokens', normTokens),
     }),
     getMemecoin: builder.query({
       queryFn: withMock((address) => `/memecoins/${address}`, mockTokenDetail, undefined, normToken),
+      // The cache entry's lifetime is the subscription: the stream is told which token the
+      // terminal is showing without the terminal having to say so.
+      onCacheEntryAdded: liveUpdates((address) => ({ address })),
     }),
     getMemecoinOhlcv: builder.query({
       queryFn: withMock(
@@ -142,9 +159,11 @@ export const memecoinApi = api.injectEndpoints({
         ({ address, tf }) => mockOhlcv(address, tf),
         'candles',
       ),
+      onCacheEntryAdded: liveUpdates(({ address, tf }) => ({ address, tf })),
     }),
     getMemecoinTrades: builder.query({
       queryFn: withMock((address) => `/memecoins/${address}/trades`, mockTrades, 'trades', normTrades),
+      onCacheEntryAdded: liveUpdates((address) => ({ address })),
     }),
     // Unusual-activity score (market-data only; not a prediction). No mock fallback: UI degrades gracefully.
     getMemecoinSignals: builder.query({
@@ -152,6 +171,7 @@ export const memecoinApi = api.injectEndpoints({
     }),
     getMemecoinSignal: builder.query({
       queryFn: plain((address) => `/memecoins/${address}/signal`),
+      onCacheEntryAdded: liveUpdates((address) => ({ address })),
     }),
     // Radar discovery feed (PumpPortal launches + model score + security flags). Answers {enabled:false, reason} when off.
     getRadarSignals: builder.query({
