@@ -12,7 +12,8 @@
     "test": "node --test test/*.test.js",
     "postinstall": "rm -rf node_modules/rpc-websockets/node_modules/uuid || true",
     "db:check": "node scripts/db-check.js",
-    "db:migrate": "node scripts/db-check.js --migrate"
+    "db:migrate": "node scripts/db-check.js --migrate",
+    "db:backup": "node scripts/db-backup.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.0",
