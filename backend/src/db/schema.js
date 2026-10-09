@@ -1,10 +1,18 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 
-// On Railway, mount a Volume at /data to persist across deploys.
-// Locally falls back to the project root.
-const DB_PATH = process.env.DB_PATH ||
-  path.join(process.env.RAILWAY_VOLUME_MOUNT_PATH || __dirname, '../../market_intelligence.sqlite');
+// On Railway, mount a Volume and the database lives on it, surviving deploys.
+// Locally it sits in the backend directory.
+//
+// The volume path is absolute, so it must NOT be joined with the '../..' the
+// local fallback needs: path.join('/data', '../../x') resolves to '/x', which
+// is the container's ephemeral filesystem, and everything written there is lost
+// on the next deploy.
+const DB_PATH = process.env.DB_PATH || (
+  process.env.RAILWAY_VOLUME_MOUNT_PATH
+    ? path.join(process.env.RAILWAY_VOLUME_MOUNT_PATH, 'market_intelligence.sqlite')
+    : path.join(__dirname, '../../market_intelligence.sqlite')
+);
 
 let db;
 
@@ -385,4 +393,4 @@ function initSchema() {
   try { db.exec('UPDATE paper_portfolios SET cashBalance = 500 WHERE cashBalance = 0') } catch (_) {}
 }
 
-module.exports = { getDb };
+module.exports = { getDb, DB_PATH };
