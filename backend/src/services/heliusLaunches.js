@@ -23,6 +23,11 @@ const PAGE = 50;          // launches run at a few per second; 50 covers a 6s ga
 const HYDRATE_MAX = 12;   // names per tick, in ONE getAssetBatch call
 const COLD_START_AGE_S = 120; // on the first tick, ignore anything older than this rather than flooding the UI
 const SEEN_MAX = 2000;
+// A launch is only pushed to live stream listeners, so anything that was not
+// connected at that instant never learns the coin exists. Discovery (search,
+// the new-pairs list) needs to ask after the fact, so the hydrated objects are
+// also kept here. Bounded: these are the newest launches, not a history.
+const RECENT_MAX = 500;
 
 /** Never let a URL (which carries the key) reach a log line. */
 const redact = (s) => String(s || '').replace(/api-key=[^&\s]+/gi, 'api-key=***');
@@ -90,6 +95,8 @@ function createWatcher(env = process.env, opts = {}) {
     return out;
   }
 
+  const recent = [];
+
   async function pollOnce() {
     // Nobody is listening: do not spend Helius credits producing events with no reader.
     if (!hasListeners()) return [];
@@ -121,7 +128,15 @@ function createWatcher(env = process.env, opts = {}) {
       image: meta.get(l.address)?.image ?? null,
     }));
     for (const l of out) onLaunch(l);
+    recent.push(...out);
+    if (recent.length > RECENT_MAX) recent.splice(0, recent.length - RECENT_MAX);
     return out;
+  }
+
+  /** The newest launches this process has seen, newest first. Read-only. */
+  function recentLaunches(limit = 100) {
+    const n = Math.min(Math.max(parseInt(limit, 10) || 0, 0), RECENT_MAX);
+    return recent.slice(-n).reverse().map((l) => ({ ...l }));
   }
 
   function start() {
@@ -137,12 +152,15 @@ function createWatcher(env = process.env, opts = {}) {
     timer = null;
   }
 
-  return { name: 'helius-launches', enabled: true, pollOnce, start, stop, PUMP_FUN_PROGRAM };
+  return { name: 'helius-launches', enabled: true, pollOnce, start, stop, recentLaunches, PUMP_FUN_PROGRAM };
 }
 
 /** Wiring for index.js: starts the watcher when configured, logs which way it went. */
+let live = null; // the watcher index.js started, so discovery code can read launches without owning it
+
 function startHeliusLaunches(opts = {}, env = process.env, log = console) {
   const w = createWatcher(env, opts);
+  live = w;
   if (!w.enabled) {
     log.log(`[helius-launches] disabled (${w.reason})`);
     return w;
@@ -152,4 +170,13 @@ function startHeliusLaunches(opts = {}, env = process.env, log = console) {
   return w;
 }
 
-module.exports = { createWatcher, startHeliusLaunches, isEnabled, launchMint, redact, PUMP_FUN_PROGRAM };
+/**
+ * Recent launches from whichever watcher index.js started, or [] when the
+ * feature is off. Safe to call unconditionally: callers get an empty list
+ * rather than having to know whether Helius is configured.
+ */
+function recentLaunches(limit = 100) {
+  try { return live && live.enabled ? live.recentLaunches(limit) : [] } catch { return [] }
+}
+
+module.exports = { createWatcher, startHeliusLaunches, recentLaunches, isEnabled, launchMint, redact, PUMP_FUN_PROGRAM };

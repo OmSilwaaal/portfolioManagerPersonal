@@ -141,3 +141,29 @@ test('a garbage response is not an error', async () => {
   const w = createWatcher(ON, { fetchImpl: fakeFetch({ error: 'nope' }), queue, now: () => NOW });
   assert.deepStrictEqual(await w.pollOnce(), []);
 });
+
+// Launches are pushed to live stream listeners, so anything not connected at that
+// instant never learns the coin exists. Discovery has to be able to ask afterwards.
+test('recent launches can be read back, newest first', async () => {
+  const w = createWatcher(ON, {
+    fetchImpl: fakeFetch([createTx(MINT, nowSec - 20), createTx(MINT2, nowSec - 5)]),
+    queue,
+    now: () => NOW,
+  });
+  assert.deepStrictEqual(w.recentLaunches(), [], 'nothing has been polled yet');
+
+  await w.pollOnce();
+  const recent = w.recentLaunches();
+  assert.deepStrictEqual(recent.map((l) => l.address), [MINT2, MINT], 'newest first');
+  assert.ok(recent[0].symbol && recent[0].name, 'carries the hydrated metadata, not just the mint');
+
+  assert.strictEqual(w.recentLaunches(1).length, 1, 'honours the limit');
+  // A caller must not be able to corrupt the buffer by editing what it was handed.
+  recent[0].symbol = 'MUTATED'
+  assert.notStrictEqual(w.recentLaunches()[0].symbol, 'MUTATED');
+});
+
+test('reading launches is safe when the feature is off', () => {
+  const { recentLaunches } = require('../src/services/heliusLaunches');
+  assert.deepStrictEqual(recentLaunches(), [], 'no watcher started: an empty list, not a throw');
+});
