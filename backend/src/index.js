@@ -41,8 +41,8 @@ const memecoinsRouter = require('./routes/memecoins');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const { sessionMiddleware, requireAuth } = require('./middleware/auth');
 
-// Initialize DB on startup
-require('./db/schema').getDb();
+// Initialize DB on startup, then keep rotating backups of it beside it on the volume
+require('./db/backup').startBackups(require('./db/schema').getDb());
 const { warmCoinList } = require('./services/search');
 warmCoinList();
 const { startAlertPoller } = require('./services/alertPoller');

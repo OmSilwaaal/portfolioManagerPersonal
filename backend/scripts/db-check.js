@@ -13,8 +13,13 @@
 require('dotenv').config();
 const path = require('path');
 const fs = require('fs');
+const { tableRowCounts, summarise } = require('../src/db/stats');
+const { listBackups, backupDir } = require('../src/db/backup');
 
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'market_intelligence.sqlite');
+// Resolved by the schema module, never recomputed here: on Railway the database
+// lives on the mounted volume, and a check that looked somewhere else would
+// cheerfully report on a file the server never opens.
+const { DB_PATH } = require('../src/db/schema');
 const MIGRATE = process.argv.includes('--migrate');
 
 function openRaw() {
@@ -35,7 +40,21 @@ function main() {
   );
   console.log('  integrity :', Object.values(before.prepare('PRAGMA integrity_check').get())[0]);
   console.log('  tables    :', have.size);
+  // Rows, not tables, are what says whether this database holds anything: a
+  // freshly created one has the full set of tables and nothing in them, which
+  // is indistinguishable from a database that has been lost.
+  const counts = summarise(tableRowCounts(before));
+  console.log('  rows      :', counts.total || '0  <-- this database is empty');
+  if (counts.social.length) console.log('  social    :', counts.social.join(' '));
+  else if (counts.total) console.log('  social    : no friends, clans or wins stored');
+  if (counts.populated.length) console.log('  populated :', counts.populated.slice(0, 12).join(' ') + (counts.populated.length > 12 ? ` (+${counts.populated.length - 12} more)` : ''));
   before.close();
+
+  const backups = listBackups();
+  const dir = backupDir();
+  if (!dir) console.log('  backups   : off (no volume and no DB_BACKUP_DIR)');
+  else if (!backups.length) console.log(`  backups   : none yet in ${dir}`);
+  else console.log(`  backups   : ${backups.length} in ${dir}, newest ${backups[0].at.toISOString()} (${(backups[0].size / 1024).toFixed(0)} KB)`);
 
   // Build the expected set from the schema module itself, against a throwaway file,
   // so this never drifts from the real definition.

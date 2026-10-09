@@ -13,7 +13,10 @@
     "postinstall": "rm -rf node_modules/rpc-websockets/node_modules/uuid || true",
     "db:check": "node scripts/db-check.js",
     "db:migrate": "node scripts/db-check.js --migrate",
-    "db:backup": "node scripts/db-backup.js"
+    "db:backup": "node scripts/db-backup.js",
+    "db:restore": "node scripts/db-restore.js",
+    "db:backups": "node scripts/db-restore.js --list",
+    "db:restore-social": "node scripts/restore-social.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.0",
