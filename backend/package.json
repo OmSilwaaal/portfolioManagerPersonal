@@ -10,7 +10,9 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "test": "node --test test/*.test.js",
-    "postinstall": "rm -rf node_modules/rpc-websockets/node_modules/uuid || true"
+    "postinstall": "rm -rf node_modules/rpc-websockets/node_modules/uuid || true",
+    "db:check": "node scripts/db-check.js",
+    "db:migrate": "node scripts/db-check.js --migrate"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.0",
