@@ -21,8 +21,36 @@ function manualChunks(id) {
   return undefined
 }
 
+/* Every route is a dynamic import, so the browser only learns about its chunk once the entry has
+   downloaded and run — a round trip after everything else. The landing page is where first-time
+   visitors always arrive, so its chunk is announced in the HTML instead. Only this one: each extra
+   page listed here competes for bandwidth on the routes that do not need it. */
+const ENTRY_PAGES = ['src/pages/Landing.jsx']
+
+function preloadEntryPages() {
+  return {
+    name: 'tvx-preload-entry-pages',
+    apply: 'build',
+    enforce: 'post',
+    transformIndexHtml(html, ctx) {
+      if (!ctx.bundle) return html
+      const files = new Set()
+      for (const [file, chunk] of Object.entries(ctx.bundle)) {
+        if (chunk.type !== 'chunk' || !chunk.facadeModuleId) continue
+        if (!ENTRY_PAGES.some((page) => chunk.facadeModuleId.endsWith(page))) continue
+        files.add(file)
+        for (const imported of chunk.imports) files.add(imported)
+      }
+      const tags = [...files]
+        .filter((file) => !html.includes(file)) // Vite already preloads the entry's own graph
+        .map((file) => ({ tag: 'link', attrs: { rel: 'modulepreload', crossorigin: true, href: `/${file}` }, injectTo: 'head' }))
+      return { html, tags }
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), preloadEntryPages()],
   build: {
     rollupOptions: { output: { manualChunks } },
   },

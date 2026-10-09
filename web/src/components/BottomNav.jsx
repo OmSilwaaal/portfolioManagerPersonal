@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { UserAvatar } from './Sidebar'
 import { Glyph } from '../ascii/glyphs'
+import { prefetchRoute } from '../routePrefetch'
 
 const tabs = [
   { path: '/feed', label: 'Feed', glyph: 'feed' },
@@ -23,6 +24,9 @@ export default function BottomNav() {
             key={tab.path}
             to={tab.path}
             end
+            onPointerEnter={() => prefetchRoute(tab.path)}
+            onFocus={() => prefetchRoute(tab.path)}
+            onTouchStart={() => prefetchRoute(tab.path)}
             className="flex flex-col items-center gap-1 px-2 py-1.5"
             style={({ isActive }) => ({ color: isActive ? 'var(--paper)' : 'var(--on-ink-text-3)', textDecoration: 'none', minWidth: 52 })}
           >

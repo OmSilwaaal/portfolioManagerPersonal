@@ -12,6 +12,7 @@ import { getIdentity, initialsOf } from '../utils/identity'
 import { Glyph } from '../ascii/glyphs'
 import { AsciiAura } from '../ascii/effects'
 import { ClanTag, EloBadge } from './PlayerName'
+import { prefetchRoute } from '../routePrefetch'
 
 const BORDER = 'var(--on-ink-border)'
 
@@ -82,6 +83,9 @@ function NavRow({ to, glyph, label, onClick, badge, children, end = true, tour }
       to={to}
       end={end}
       onClick={onClick}
+      onPointerEnter={() => prefetchRoute(to)}
+      onFocus={() => prefetchRoute(to)}
+      onTouchStart={() => prefetchRoute(to)}
       className="tvx-navrow"
       data-tour={tour}
       style={({ isActive }) => ({
@@ -232,6 +236,8 @@ export default function Sidebar() {
         ) : (
           <Link
             to="/pricing"
+            onPointerEnter={() => prefetchRoute('/pricing')}
+            onFocus={() => prefetchRoute('/pricing')}
             className="tvx-navrow"
             style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px', borderRadius: 2, border: `1px dashed ${BORDER}`, textDecoration: 'none' }}
           >
@@ -241,7 +247,7 @@ export default function Sidebar() {
         )}
 
         {user && (
-          <Link to={`/profile/${user.id}`} title="View your profile" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', textDecoration: 'none' }}>
+          <Link to={`/profile/${user.id}`} title="View your profile" onPointerEnter={() => prefetchRoute(`/profile/${user.id}`)} onFocus={() => prefetchRoute(`/profile/${user.id}`)} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', textDecoration: 'none' }}>
             {showAura && <AsciiAura effect={effect} bleed={{ top: 18, side: 12, bottom: 10 }} style={{ zIndex: 0 }} />}
             <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
               {avatarUrl ? (

@@ -13,6 +13,8 @@ import { CelebrationProvider } from './components/ProfitCelebration'
 import PageFallback from './components/PageFallback'
 import GuidedTour from './components/GuidedTour'
 import DataLossNotice from './components/DataLossNotice'
+import RouteProgress from './components/RouteProgress'
+import { registerRoute, warmRoutesWhenIdle } from './routePrefetch'
 
 // Import API modules to register endpoints
 import './api/stocksApi'
@@ -24,39 +26,45 @@ import './api/notificationsApi'
 import './api/explainerApi'
 import './api/snaptradeApi'
 
-// Route-level code splitting: pages load on demand
-const Stocks = lazy(() => import('./pages/Stocks'))
-const Crypto = lazy(() => import('./pages/Crypto'))
-const CopyTrading = lazy(() => import('./pages/CopyTrading'))
-const Alerts = lazy(() => import('./pages/Alerts'))
-const Onboarding = lazy(() => import('./pages/Onboarding'))
-const Welcome = lazy(() => import('./pages/Welcome'))
-const Feed = lazy(() => import('./pages/Feed'))
-const GovTrades = lazy(() => import('./pages/GovTrades'))
-const Commodities = lazy(() => import('./pages/Commodities'))
-const Settings = lazy(() => import('./pages/Settings'))
-const PaperTrading = lazy(() => import('./pages/PaperTrading'))
-const Clans = lazy(() => import('./pages/Clans'))
-const ClanDetail = lazy(() => import('./pages/ClanDetail'))
-const Elos = lazy(() => import('./pages/Elos'))
-const Profile = lazy(() => import('./pages/Profile'))
-const Friends = lazy(() => import('./pages/Friends'))
-const Leaderboard = lazy(() => import('./pages/Leaderboard'))
-const Landing = lazy(() => import('./pages/Landing'))
-const Pricing = lazy(() => import('./pages/Pricing'))
-const Portfolio = lazy(() => import('./pages/Portfolio'))
-const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'))
-const Terms = lazy(() => import('./pages/Terms'))
-const Disclaimer = lazy(() => import('./pages/Disclaimer'))
-const ResearchDashboard = lazy(() => import('./pages/ResearchDashboard'))
+// Route-level code splitting: pages load on demand, and routePrefetch warms them before the click
+const lazyRoute = (path, importer) => lazy(registerRoute(path, importer))
+
+const Stocks = lazyRoute('/stocks', () => import('./pages/Stocks'))
+const Crypto = lazyRoute('/crypto', () => import('./pages/Crypto'))
+const CopyTrading = lazyRoute('/copy-trading', () => import('./pages/CopyTrading'))
+const Alerts = lazyRoute('/alerts', () => import('./pages/Alerts'))
+const Onboarding = lazyRoute('/onboarding', () => import('./pages/Onboarding'))
+const Welcome = lazyRoute('/welcome', () => import('./pages/Welcome'))
+const Feed = lazyRoute('/feed', () => import('./pages/Feed'))
+const GovTrades = lazyRoute('/gov-trades', () => import('./pages/GovTrades'))
+const Commodities = lazyRoute('/commodities', () => import('./pages/Commodities'))
+const Settings = lazyRoute('/settings', () => import('./pages/Settings'))
+const PaperTrading = lazyRoute('/paper-trading', () => import('./pages/PaperTrading'))
+const Clans = lazyRoute('/clans', () => import('./pages/Clans'))
+const ClanDetail = lazyRoute('/clans/:id', () => import('./pages/ClanDetail'))
+const Elos = lazyRoute('/elos', () => import('./pages/Elos'))
+const Profile = lazyRoute('/profile/:userId', () => import('./pages/Profile'))
+const Friends = lazyRoute('/friends', () => import('./pages/Friends'))
+const Leaderboard = lazyRoute('/leaderboard', () => import('./pages/Leaderboard'))
+const Landing = lazyRoute('/', () => import('./pages/Landing'))
+const Pricing = lazyRoute('/pricing', () => import('./pages/Pricing'))
+const Portfolio = lazyRoute('/portfolio', () => import('./pages/Portfolio'))
+const PrivacyPolicy = lazyRoute('/privacy', () => import('./pages/PrivacyPolicy'))
+const Terms = lazyRoute('/terms', () => import('./pages/Terms'))
+const Disclaimer = lazyRoute('/disclaimer', () => import('./pages/Disclaimer'))
+const ResearchDashboard = lazyRoute('/research', () => import('./pages/ResearchDashboard'))
 // Privy (and its wallet stack) is only needed by the terminal, so it loads with that route
-const TradingTerminal = lazy(async () => {
+const TradingTerminal = lazyRoute('/terminal', async () => {
   const [{ default: Page }, { default: PrivyProviderWrapper }] = await Promise.all([
     import('./pages/TradingTerminal'),
     import('./providers/PrivyProviderWrapper'),
   ])
   return { default: () => <PrivyProviderWrapper><Page /></PrivyProviderWrapper> }
 })
+
+// Second paths onto pages already registered above, so their links prefetch too
+registerRoute('/u/:username', () => import('./pages/Profile'))
+registerRoute('/friends/:userId', () => import('./pages/Friends'))
 
 function Spinner() {
   return (
@@ -70,6 +78,10 @@ function ProtectedLayout() {
   const { user, loading } = useAuth()
   const onboardingComplete = useSelector((state) => state.preferences.onboardingComplete)
   const watchlistTickers = useSelector((state) => state.watchlist.stocks).join(',')
+
+  // Once the signed-in shell is up, spend idle time pulling down the pages reachable from it
+  const inShell = Boolean(user) && onboardingComplete
+  useEffect(() => { if (inShell) warmRoutesWhenIdle() }, [inShell])
 
   if (loading) return <Spinner />
   if (!user) return <Navigate to="/" replace />
@@ -164,6 +176,8 @@ function AppInner() {
   }, [user, dispatch])
 
   return (
+    <>
+    <RouteProgress />
     <Suspense fallback={<PageFallback fullScreen />}>
     <Routes>
       {/* Public */}
@@ -208,12 +222,13 @@ function AppInner() {
       </Route>
     </Routes>
     </Suspense>
+    </>
   )
 }
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter future={{ v7_startTransition: true }}>
       <AuthProvider>
         <CelebrationProvider>
           <AppInner />
