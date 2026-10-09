@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef } from 'react'
 import AsciiCanvas from '../../ascii/AsciiCanvas'
+import { useAsciiGrid, useThemeTokens } from './asciiSurface'
 
 /**
  * The Travauxus mark turning slowly behind the terminal panels, as ASCII.
@@ -18,13 +19,12 @@ import AsciiCanvas from '../../ascii/AsciiCanvas'
 const CELL_PX = 30          // glyph size; the cell is this wide, the ink much smaller
 const FPS = 8               // ambient, so a third of the panel refresh rate is plenty
 const MAX_CELLS = 3000      // ceiling on per-frame work however large the display
-const RESIZE_QUIET_MS = 120 // reallocating the canvas mid-resize is a known jank source
 
 const OUTER = [[0, -1], [1, 0], [0, 1], [-1, 0]]
 const INNER = OUTER.map(([x, y]) => [x * 0.5, y * 0.5])
 const DEPTH = 0.22
 
-const FALLBACK = { texture: '#1d1b12', canvas: '#0d0c08' }
+const FALLBACK = { '--terminal-texture': '#1d1b12', '--terminal-canvas': '#0d0c08' }
 
 /**
  * Mark geometry, monochrome. SpinLogo reads its depth from a blue gradient,
@@ -96,66 +96,12 @@ function makePainter(colour) {
   }
 }
 
-/** The two tokens, re-read whenever the theme flips. */
-function useThemeColours(ref) {
-  const [colours, setColours] = useState(FALLBACK)
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return undefined
-    const read = () => {
-      const cs = getComputedStyle(el)
-      const texture = cs.getPropertyValue('--terminal-texture').trim()
-      const canvas = cs.getPropertyValue('--terminal-canvas').trim()
-      setColours((prev) => {
-        const next = { texture: texture || FALLBACK.texture, canvas: canvas || FALLBACK.canvas }
-        return next.texture === prev.texture && next.canvas === prev.canvas ? prev : next
-      })
-    }
-    read()
-    // The app toggles `dark` on <html>, so the class attribute is the signal.
-    const mo = new MutationObserver(read)
-    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
-    return () => mo.disconnect()
-  }, [ref])
-  return colours
-}
-
-/** Grid that covers the host box at CELL_PX, capped so a huge display cannot run away. */
-function useGrid(ref) {
-  const [grid, setGrid] = useState({ cols: 0, rows: 0 })
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return undefined
-    let quiet = 0
-    const measure = () => {
-      const { width, height } = el.getBoundingClientRect()
-      if (width < 2 || height < 2) return // first layout pass can report ~0; wait for a real one
-      const cw = CELL_PX * 0.6           // monospace advance is about 0.6em
-      const ch = CELL_PX * 1.18
-      let cols = Math.max(12, Math.ceil(width / cw))
-      let rows = Math.max(6, Math.ceil(height / ch))
-      if (cols * rows > MAX_CELLS) {
-        const k = Math.sqrt(MAX_CELLS / (cols * rows))
-        cols = Math.max(12, Math.floor(cols * k))
-        rows = Math.max(6, Math.floor(rows * k))
-      }
-      setGrid((prev) => (prev.cols === cols && prev.rows === rows ? prev : { cols, rows }))
-    }
-    measure()
-    const ro = new ResizeObserver(() => {
-      clearTimeout(quiet)
-      quiet = setTimeout(measure, RESIZE_QUIET_MS)
-    })
-    ro.observe(el)
-    return () => { clearTimeout(quiet); ro.disconnect() }
-  }, [ref])
-  return grid
-}
-
 export default function LogoBackdrop({ className, style }) {
   const hostRef = useRef(null)
-  const { texture, canvas } = useThemeColours(hostRef)
-  const { cols, rows } = useGrid(hostRef)
+  const tokens = useThemeTokens(hostRef, FALLBACK)
+  const texture = tokens['--terminal-texture']
+  const canvas = tokens['--terminal-canvas']
+  const { cols, rows } = useAsciiGrid(hostRef, { cellPx: CELL_PX, maxCells: MAX_CELLS, minRows: 6 })
   const painter = useMemo(() => makePainter(texture), [texture])
 
   return (

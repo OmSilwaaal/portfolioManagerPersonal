@@ -75,6 +75,13 @@
 .t-btn.t-on, .t-btn-primary { background: var(--paper); color: var(--ink-950); border-color: var(--paper); }
 .t-btn.t-on:hover, .t-btn-primary:hover { background: var(--paper); color: var(--ink-950); filter: brightness(1.08); }
 .t-btn:disabled { cursor: not-allowed; color: var(--on-ink-text-4); border-color: var(--on-ink-border); }
+/* `.t-btn:disabled` outranks `.t-btn-primary` on colour but sets no background, so a disabled
+   primary kept its paper fill and lost its label into it. A disabled control has to be a real
+   dead state, which is the same shape as `.t-submit:disabled` below. Selected (`t-on`) buttons
+   had it too — the ticket's percentage chips can be both selected and disabled at once. */
+.t-btn-primary:disabled, .t-btn.t-on:disabled {
+  background: var(--ink-700); color: var(--on-ink-text-4); border-color: var(--on-ink-border);
+}
 .t-input { padding-block: 7px; padding-inline: 10px; width: 100%; }
 .t-input.pl-9 { padding-left: 2.25rem; }
 .t-input::placeholder { color: var(--on-ink-text-3); }
@@ -213,3 +220,241 @@
 @media (min-width: 900px) {
   .t-scroll-x { mask-image: none; -webkit-mask-image: none; }
 }
+
+/* ── density ──────────────────────────────────────────────────────────────
+   The terminal read as barebones mostly because it was small, not because it was empty: the
+   middle column's numbers were the same size as the labels around them. The value tiers go up a
+   notch and the list rows get more room, which costs a little scroll and buys a lot of presence. */
+.t-value { font-size: 15px; }
+.t-row { padding: 9px 12px 9px 14px; }
+.t-stat { padding: 6px 11px; }
+
+/* The token header is the subject of the whole screen; let it behave like one. */
+.t-price { font-size: 30px; font-weight: 900; line-height: 1; letter-spacing: -0.02em; color: var(--paper); }
+@media (min-width: 1536px) { .t-price { font-size: 34px; } }
+
+/* A second, smaller tab for panel-local switches that must not compete with the real tab rows. */
+.t-tab.t-tab-sm { padding: 3px 7px; font-size: 10px; letter-spacing: 0.04em; }
+
+/* ── sparkline ────────────────────────────────────────────────────────────
+   The median rule is deliberately neutral: it is a reference, not a reading, so it must not be
+   mistaken for a second price series. --on-ink-text-3 sits between the surface and the line in
+   both themes. */
+.t-spark { display: block; overflow: visible; }
+.t-spark-median {
+  stroke: var(--on-ink-text-3);
+  stroke-width: 1;
+  stroke-dasharray: 3 2.5;
+  vector-effect: non-scaling-stroke;
+}
+.t-spark-empty { display: block; border-bottom: 1px dashed var(--on-ink-3); }
+
+/* ── hot tokens rail ──────────────────────────────────────────────────────
+   Three lines per row, each a left/right pair, so every column lines up down the rail and the
+   eye can run straight down the market caps without reading anything else. */
+.t-hot-row {
+  display: block; width: 100%; text-align: left; cursor: pointer; color: inherit;
+  position: relative; border: 0; border-bottom: 1px solid var(--on-ink-border);
+  background: transparent; padding: 8px 12px 9px 13px; transition: background 100ms;
+}
+.t-hot-row:hover { background: var(--ink-700); }
+.t-hot-row[aria-current="true"] { background: var(--ink-600); }
+.t-hot-row[aria-current="true"]::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--paper);
+}
+.t-hot-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.t-hot-sym {
+  font-size: 13px; font-weight: 900; letter-spacing: 0.04em; color: var(--paper);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.t-hot-cap { font-size: 13px; font-weight: 800; color: var(--paper); white-space: nowrap; }
+.t-hot-sub { margin-top: 1px; font-size: 11px; color: var(--on-ink-text-2); }
+.t-hot-foot { margin-top: 4px; gap: 6px; }
+.t-hot-spark { flex: 1 1 auto; min-width: 40px; max-width: 140px; height: 20px; }
+.t-hot-deltas {
+  display: flex; gap: 7px; flex: 0 0 auto; white-space: nowrap;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.01em;
+}
+
+/* ── live alert rail (top bar) ────────────────────────────────────────────
+   A recessed well cut into the top bar: --terminal-canvas is darker than the bar's --ink-800, so
+   the alert sits in a slot rather than floating on it, and the ASCII grain behind it has somewhere
+   to live. Fixed height, clipped, because the transition slides a second row through it. */
+.t-alert-rail {
+  position: relative; display: flex; align-items: center; gap: 8px;
+  min-width: 0; height: 40px; padding: 0 9px 0 8px; overflow: hidden;
+  border: 1px solid var(--on-ink-3); border-radius: 2px; background: var(--terminal-canvas);
+}
+/* Inline in the top bar, the rail has to claim a floor for itself: flex-1 alone loses every
+   fight with the search box and the wallet cluster and collapses to the width of its LIVE tag. */
+@media (min-width: 768px) { .t-alert-rail { min-width: 200px; } }
+.t-alert-tag {
+  position: relative; z-index: 1; flex: 0 0 auto;
+  font-size: 9px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase;
+  padding: 2px 5px; border-radius: 2px; background: var(--ochre-300); color: var(--ink-950);
+}
+/* The stage is the clip: both the arriving and the departing alert are absolutely positioned in
+   it, so neither can push the top bar's height around mid-transition. */
+.t-alert-stage { position: relative; z-index: 1; flex: 1 1 auto; min-width: 0; height: 30px; }
+.t-alert-slot { position: absolute; inset: 0; display: flex; align-items: center; }
+.t-alert-in  { animation: t-alert-in  420ms cubic-bezier(0.22, 0.9, 0.3, 1) both; }
+.t-alert-out { animation: t-alert-out 420ms cubic-bezier(0.22, 0.9, 0.3, 1) both; }
+/* The new alert comes down from above and the one it replaces is pushed out of the bottom. */
+@keyframes t-alert-in  { from { transform: translateY(-115%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes t-alert-out { from { transform: translateY(0); opacity: 1; } to { transform: translateY(115%); opacity: 0; } }
+
+.t-alert-line {
+  display: flex; align-items: center; gap: 7px; width: 100%; min-width: 0;
+  padding: 2px 0; background: none; border: 0; cursor: pointer; text-align: left;
+}
+.t-alert-sym {
+  flex: 0 0 auto; font-size: 11px; font-weight: 900; letter-spacing: 0.06em;
+  color: var(--paper); text-transform: uppercase;
+}
+/* The one thing in this box that has to be readable: full-strength text, and the grain behind it
+   is drawn at its quietest right here (see AlertBackdrop). */
+.t-alert-msg {
+  flex: 1 1 auto; min-width: 0; font-size: 12px; font-weight: 600; color: var(--on-ink-text-1);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.t-alert-age { flex: 0 0 auto; font-size: 10px; font-weight: 700; color: var(--on-ink-text-3); }
+.t-alert-more {
+  position: relative; z-index: 1; flex: 0 0 auto;
+  font-size: 10px; font-weight: 800; padding: 2px 5px; border-radius: 2px;
+  background: var(--on-ink-3); color: var(--on-ink-text-1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-alert-in, .t-alert-out { animation: none; }
+}
+
+/* ── live trade feed ──────────────────────────────────────────────────────
+   Two colours of text on one dark surface was not enough separation to read a scrolling feed at a
+   glance. Each row now carries its side as a tinted band plus a solid edge, so buys and sells read
+   as two interleaved streams before any number is read; the side itself is a filled chip, which is
+   the highest-contrast pair the palette has (--buy on --buy-ink). The zebra striping is dropped
+   here on purpose: it fought the tint and made every other row ambiguous. */
+.t-table[data-feed="trades"] tbody tr,
+.t-table[data-feed="trades"] tbody tr:nth-child(odd) { background: transparent; }
+.t-table[data-feed="trades"] tbody tr > td:first-child { border-left: 3px solid transparent; }
+.t-table[data-feed="trades"] tbody tr[data-side="buy"] { background: color-mix(in srgb, var(--buy) 14%, transparent); }
+.t-table[data-feed="trades"] tbody tr[data-side="sell"] { background: color-mix(in srgb, var(--sell) 14%, transparent); }
+.t-table[data-feed="trades"] tbody tr[data-side="buy"] > td:first-child { border-left-color: var(--buy); }
+.t-table[data-feed="trades"] tbody tr[data-side="sell"] > td:first-child { border-left-color: var(--sell); }
+.t-table[data-feed="trades"] tbody tr[data-side="buy"]:hover { background: color-mix(in srgb, var(--buy) 26%, transparent); }
+.t-table[data-feed="trades"] tbody tr[data-side="sell"]:hover { background: color-mix(in srgb, var(--sell) 26%, transparent); }
+/* Size and price are what you are actually reading off the feed; they get the full text tier. */
+.t-table[data-feed="trades"] td { font-size: 12px; padding-block: 4px; color: var(--on-ink-text-1); }
+
+.t-sidetag {
+  display: inline-block; min-width: 42px; text-align: center;
+  font-size: 10px; font-weight: 900; letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 2px 6px; border-radius: 2px;
+}
+.t-sidetag[data-side="buy"] { background: var(--buy); color: var(--buy-ink); }
+.t-sidetag[data-side="sell"] { background: var(--sell); color: var(--sell-ink); }
+
+/* ── middle column density ────────────────────────────────────────────────
+   Header, signal and chart share one panel, and the first two were spending height the chart
+   needed: at 1440x900 the plot had fallen to about 150px. Tightening the two blocks above it is
+   worth more to the chart than anything that can be done to the chart itself. */
+.t-score-n { font-size: 38px; }
+@media (min-width: 1536px) { .t-score-n { font-size: 46px; } }
+
+/* A token's picture is a third-party URL. Fixed box, cropped, never allowed to size anything. */
+.t-avatar {
+  display: block; flex: 0 0 auto; overflow: hidden; border-radius: 50%;
+  background: var(--on-ink-2); border: 1px solid var(--on-ink-border); color: var(--paper);
+  font-weight: 800; text-align: center;
+}
+.t-avatar > img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.t-avatar > span { display: flex; width: 100%; height: 100%; align-items: center; justify-content: center; }
+
+/* Copy-the-address affordance: present but quiet until the row is hovered or the button is
+   tabbed to, so the address line does not read as a toolbar. */
+.t-copy {
+  display: inline-flex; align-items: center; gap: 3px; vertical-align: -2px;
+  padding: 1px 4px; margin-left: 2px; border: 1px solid transparent; border-radius: 2px;
+  color: var(--on-ink-text-3); cursor: pointer; opacity: 0; transition: opacity 120ms, color 120ms, border-color 120ms;
+}
+.t-copy:focus-visible, .t-copy[data-done="true"] { opacity: 1; }
+.t-copyhost:hover .t-copy { opacity: 1; }
+.t-copy:hover { color: var(--paper); border-color: var(--on-ink-3); }
+.t-copy[data-done="true"] { color: var(--positive); }
+/* Touch has no hover, so on a coarse pointer the button is simply always there. */
+@media (hover: none) { .t-copy { opacity: 1; } }
+
+/* ── buy/sell pressure ────────────────────────────────────────────────────
+   One bar, split at the buy share. It is drawn from the activity signal's own components, which
+   the panel has already fetched — a dedicated trades request per token would not fit the budget. */
+.t-pressure { display: flex; height: 8px; width: 100%; min-width: 90px; border: 1px solid var(--on-ink-border); overflow: hidden; }
+.t-pressure > i { display: block; height: 100%; }
+.t-pressure > i:first-child { background: var(--buy); }
+.t-pressure > i:last-child { background: var(--sell); }
+
+/* Symbol with its logo; the pair has to stay on one line and ellipsise as a unit. */
+.t-hot-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.t-hot-vol { color: var(--on-ink-text-3); white-space: nowrap; }
+
+/* ── amount field ─────────────────────────────────────────────────────────
+   The biggest control in the ticket after the two side buttons, because typing the amount is
+   now the primary way in. The unit is rendered inside the field rather than above it so there is
+   no scroll position or glance at which the number is on screen without its unit. */
+.t-amount {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--ink-950); border: 2px solid var(--on-ink-3); border-radius: 2px;
+  padding: 0 10px; transition: border-color 120ms;
+}
+.t-amount:focus-within { border-color: var(--on-ink-text-3); }
+.t-amount[data-side="buy"]:focus-within { border-color: var(--buy); }
+.t-amount[data-side="sell"]:focus-within { border-color: var(--sell); }
+.t-amount > input {
+  flex: 1 1 auto; min-width: 0; width: 100%;
+  background: none; border: 0; outline: none; color: var(--paper);
+  font-family: inherit; font-variant-numeric: tabular-nums;
+  font-size: 22px; font-weight: 800; letter-spacing: -0.01em; padding: 9px 0;
+}
+.t-amount > input::placeholder { color: var(--on-ink-text-4); font-weight: 700; }
+.t-amount > input[aria-invalid="true"] { color: var(--negative); }
+.t-amount-unit {
+  flex: 0 0 auto; font-size: 11px; font-weight: 800; letter-spacing: 0.12em;
+  color: var(--on-ink-text-3); text-transform: uppercase;
+}
+
+/* ── order warning ────────────────────────────────────────────────────────
+   pointer-events: none on the whole thing, including the scrim. It is seen and never touched:
+   the click that dismisses it is the same click that reaches whatever is underneath, which is
+   what makes it safe to put over a submit button in a fast market. */
+.t-warn {
+  position: absolute; inset: 0; z-index: 40; pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2px; padding: 16px; text-align: center;
+  background: color-mix(in srgb, var(--ink-950) 88%, transparent);
+  animation: t-warn-in 140ms ease-out both;
+}
+@keyframes t-warn-in { from { opacity: 0; } to { opacity: 1; } }
+.t-warn-head {
+  margin: 6px 0 0; font-size: 17px; font-weight: 900; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--negative);
+}
+.t-warn-sub { margin: 4px 0 0; max-width: 30ch; font-size: 11px; font-weight: 700; color: var(--on-ink-text-1); }
+.t-warn-hint {
+  margin: 10px 0 0; font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--on-ink-text-3);
+}
+@media (prefers-reduced-motion: reduce) { .t-warn { animation: none; } }
+
+/* Label and field on one line: two stacked label/input pairs were costing the ticket a row it
+   could not spare once the percentage buttons arrived. */
+.t-field {
+  display: flex; align-items: center; gap: 7px; padding: 0 8px;
+  background: var(--ink-950); border: 1px solid var(--on-ink-3); border-radius: 2px;
+}
+.t-field > .t-label { flex: 0 0 auto; }
+.t-field > input {
+  flex: 1 1 auto; min-width: 0; width: 100%; padding: 7px 0; text-align: right;
+  background: none; border: 0; outline: none; color: var(--on-ink-text-1);
+  font-family: inherit; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.t-field:focus-within { border-color: var(--on-ink-text-3); }
+.t-field > input[aria-invalid="true"] { color: var(--negative); }
