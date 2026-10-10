@@ -170,12 +170,32 @@ test('the deposit amount cannot be chosen by the client', async () => {
   assert.strictEqual((await post('/deposit/card', {})).body.code, 'bad_tier');
 });
 
-test('a wallet address is validated and a secret key is refused', async () => {
-  assert.strictEqual((await post('/wallet', { address: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU' })).status, 200);
+test('a wallet is registered only on proof of control, and key material is refused', async () => {
+  // The address alone is not enough: it is public, and accepting it on the caller's word let
+  // an attacker claim other people's deposits.
+  assert.strictEqual((await post('/wallet', { address: WALLET.address })).body.code, 'unverified_wallet');
+
+  assert.strictEqual((await registerWalletViaRoute()).status, 200);
+
   for (const bad of ['', 'nope', '4'.repeat(88), null, 42]) {
-    assert.strictEqual((await post('/wallet', { address: bad })).body.code, 'bad_address', `${bad} must be refused`);
+    assert.strictEqual((await post('/wallet/challenge', { address: bad })).body.code, 'bad_address', `${bad} must be refused`);
   }
 });
+
+// Registering a wallet now requires proving control of it, so the route tests need a real
+// keypair and the two-step challenge/signature flow a client performs.
+const nodeCrypto = require('node:crypto');
+const { PublicKey: SolPublicKey } = require('@solana/web3.js');
+const WALLET = (() => {
+  const { publicKey, privateKey } = nodeCrypto.generateKeyPairSync('ed25519');
+  const raw = publicKey.export({ type: 'spki', format: 'der' }).subarray(12);
+  return { address: new SolPublicKey(raw).toBase58(), privateKey };
+})();
+async function registerWalletViaRoute() {
+  const ch = await post('/wallet/challenge', { address: WALLET.address });
+  const signature = nodeCrypto.sign(null, Buffer.from(ch.body.message, 'utf8'), WALLET.privateKey).toString('base64');
+  return post('/wallet', { address: WALLET.address, nonce: ch.body.nonce, signature });
+}
 
 // ── webhook ───────────────────────────────────────────────────────────────────
 
@@ -193,7 +213,7 @@ test('a webhook with no signature, a bad signature or the wrong secret is reject
 });
 
 test('a correctly signed deposit webhook credits once, and a replay credits nothing', async () => {
-  const session = { id: 'cs_ok', mode: 'payment', payment_status: 'paid', amount_total: 10000, currency: 'usd', client_reference_id: USER, payment_intent: 'pi_ok', metadata: { tierId: 'usd_10000' } };
+  const session = { id: 'cs_ok', mode: 'payment', payment_status: 'paid', amount_total: 10000, currency: 'usd', client_reference_id: USER, payment_intent: 'pi_ok', metadata: { purpose: 'deposit', tierId: 'usd_10000' } };
   const first = await postWebhook(evt('evt_ok_1', 'checkout.session.completed', session));
   assert.strictEqual(first.status, 200);
   assert.strictEqual(ledger.balances(USER).usd.netMinor, 9500, '10000 minus the 5% fee');
@@ -209,7 +229,7 @@ test('a correctly signed deposit webhook credits once, and a replay credits noth
 });
 
 test('the amount credited comes from Stripe, never from metadata the client could set', async () => {
-  const session = { id: 'cs_lie', mode: 'payment', payment_status: 'paid', amount_total: 2500, currency: 'usd', client_reference_id: USER, payment_intent: 'pi_lie', metadata: { tierId: 'usd_50000', netMinor: 999999, amount: 999999 } };
+  const session = { id: 'cs_lie', mode: 'payment', payment_status: 'paid', amount_total: 2500, currency: 'usd', client_reference_id: USER, payment_intent: 'pi_lie', metadata: { purpose: 'deposit', tierId: 'usd_50000', netMinor: 999999, amount: 999999 } };
   const before = ledger.balances(USER).usd.netMinor;
   await postWebhook(evt('evt_lie', 'checkout.session.completed', session));
   assert.strictEqual(ledger.balances(USER).usd.netMinor, before + 2375, 'credited 2500 less 5%, ignoring the metadata');
@@ -217,7 +237,7 @@ test('the amount credited comes from Stripe, never from metadata the client coul
 
 test('a subscription checkout grants Pro, and deleting it revokes only that grant', async () => {
   const sub = { id: 'sub_abc' };
-  await postWebhook(evt('evt_sub_1', 'checkout.session.completed', { id: 'cs_sub', mode: 'subscription', payment_status: 'paid', client_reference_id: USER, subscription: 'sub_abc' }));
+  await postWebhook(evt('evt_sub_1', 'checkout.session.completed', { id: 'cs_sub', mode: 'subscription', payment_status: 'paid', client_reference_id: USER, subscription: 'sub_abc', metadata: { purpose: 'pro' } }));
   assert.strictEqual(entitlements.proStatus(USER).isPro, true);
 
   // An unrelated referral month must survive the cancellation below.
@@ -265,7 +285,7 @@ test('the webhook refuses to run against a parsed body instead of verifying noth
 // ── SOL rail through the route ────────────────────────────────────────────────
 
 test('a SOL deposit claimed twice through the route credits once', async () => {
-  const MINE = '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU';
+  const MINE = WALLET.address;
   // base58 has no 'l', so the label is picked from the alphabet rather than scrubbed later
   const signature = ('sorouteDeposit' + '2'.repeat(88)).slice(0, 88);
   deposits.__setConnectionFactory(() => ({
@@ -275,7 +295,7 @@ test('a SOL deposit claimed twice through the route credits once', async () => {
       transaction: { message: { accountKeys: [MINE, TREASURY] } },
     }),
   }));
-  await post('/wallet', { address: MINE });
+  await registerWalletViaRoute();
 
   const first = await post('/deposit/solana', { signature });
   assert.strictEqual(first.status, 200);
@@ -289,7 +309,7 @@ test('a SOL deposit claimed twice through the route credits once', async () => {
 });
 
 test('paying for Pro in SOL requires the full price', async () => {
-  const MINE = '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU';
+  const MINE = WALLET.address;
   const short = ('underpaid' + '2'.repeat(88)).slice(0, 88);
   deposits.__setConnectionFactory(() => ({
     getTransaction: async () => ({
@@ -298,6 +318,7 @@ test('paying for Pro in SOL requires the full price', async () => {
       transaction: { message: { accountKeys: [MINE, TREASURY] } },
     }),
   }));
+  await registerWalletViaRoute();
   const r = await post('/pro/solana', { signature: short });
   assert.strictEqual(r.status, 400);
   assert.strictEqual(r.body.code, 'underpaid');

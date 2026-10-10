@@ -17,7 +17,22 @@ const deposits = require('../src/services/solanaDeposits');
 const ledger = require('../src/services/ledger');
 
 const TREASURY = 'TrEaSuRy1111111111111111111111111111111111';
-const MINE = '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU';
+// A real ed25519 keypair: registering a wallet now requires signing a server-issued nonce,
+// so a hardcoded address cannot stand in for one the test controls.
+const crypto = require('node:crypto');
+const { PublicKey } = require('@solana/web3.js');
+const KP = (() => {
+  const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
+  const raw = publicKey.export({ type: 'spki', format: 'der' }).subarray(12);
+  return { address: new PublicKey(raw).toBase58(), privateKey };
+})();
+const MINE = KP.address;
+/** Prove control of MINE the way the client does: ask for a challenge, sign it, register. */
+function registerMine(user = 'user-sol') {
+  const ch = deposits.issueWalletChallenge(user, MINE);
+  const signature = crypto.sign(null, Buffer.from(ch.message, 'utf8'), KP.privateKey).toString('base64');
+  return deposits.registerWallet(user, MINE, { nonce: ch.nonce, signature });
+}
 const THEIRS = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 const U = 'user-sol';
 const ENV = { ENABLE_BILLING_SOLANA: 'true', BILLING_TREASURY_ADDRESS: TREASURY };
@@ -48,16 +63,16 @@ test.beforeEach(() => { deposits.__setConnectionFactory(null); });
 test.after(() => { deposits.__setConnectionFactory(null); });
 
 test('a public address can be registered; key material cannot', () => {
-  assert.strictEqual(deposits.registerWallet(U, MINE), MINE);
+  assert.strictEqual(registerMine(U), MINE);
   assert.deepStrictEqual(deposits.walletsFor(U), [MINE]);
-  deposits.registerWallet(U, MINE); // registering twice is a no-op, not an error
+  registerMine(U); // registering twice is a no-op, not an error
   assert.deepStrictEqual(deposits.walletsFor(U), [MINE]);
 
   // A 64-byte base58 blob is a secret key. It must be refused, and nothing like it stored.
   const secretish = '4'.repeat(88);
-  assert.throws(() => deposits.registerWallet(U, secretish), /Not a Solana address/);
+  assert.throws(() => deposits.issueWalletChallenge(U, secretish), /Not a Solana address/);
   for (const bad of ['', 'not an address', '0OIl'.repeat(10), null, undefined, 'x'.repeat(200)]) {
-    assert.throws(() => deposits.registerWallet(U, bad), /Not a Solana address/);
+    assert.throws(() => deposits.issueWalletChallenge(U, bad), /Not a Solana address/);
   }
   assert.deepStrictEqual(deposits.walletsFor(U), [MINE], 'nothing extra was written');
 });

@@ -111,8 +111,18 @@ router.get('/config', requireAuth, h(async (_req, res) => {
 // and no column behind it, for a private key or a seed phrase: Privy MPC-shards the key
 // material and it never leaves the user's session. If a client ever posts one, it is rejected
 // by the length check in registerWallet and is never written or logged.
+// Step 1: ask for something to sign. The nonce is bound to this account and this address.
+router.post('/wallet/challenge', requireAuth, writeLimiter, h(async (req, res) => {
+  res.json(deposits.issueWalletChallenge(req.user.id, req.body?.address));
+}));
+
+// Step 2: prove control. An address used to be accepted on the caller's word alone, which let
+// anyone claim an address they did not own — and since the treasury is public, an attacker
+// could watch it, register each incoming payer and be credited for other people's deposits.
 router.post('/wallet', requireAuth, writeLimiter, h(async (req, res) => {
-  const address = deposits.registerWallet(req.user.id, req.body?.address);
+  const address = deposits.registerWallet(req.user.id, req.body?.address, {
+    nonce: req.body?.nonce, signature: req.body?.signature,
+  });
   res.json({ address, addresses: deposits.walletsFor(req.user.id) });
 }));
 
@@ -378,7 +388,16 @@ router.post('/webhook', h(async (req, res) => {
 async function handleStripeEvent(event) {
   if (event.type === 'checkout.session.completed') {
     const s = event.data.object;
-    if (s.payment_status !== 'paid' && s.mode !== 'subscription') return;
+    // A Stripe webhook endpoint receives every event of its subscribed types for the whole
+    // ACCOUNT, not just the sessions this code created. Three unrelated flows sell through
+    // this one Stripe account — paper-cash top-ups, the legacy Pro checkout and these — so
+    // without claiming ownership here a $5 paper-cash purchase was credited as a real-money
+    // deposit. Every session we create stamps `purpose`; anything else is not ours.
+    const purpose = s.metadata?.purpose;
+    if (purpose !== 'deposit' && purpose !== 'pro') return;
+    // A subscription session is only worth acting on once it is actually paid. The previous
+    // condition let any unpaid subscription session through and granted open-ended Pro.
+    if (s.payment_status !== 'paid') return;
     const userId = s.client_reference_id || s.metadata?.userId;
     if (!isUuid(userId)) { console.error('[billing] session without a usable userId:', s.id); return; }
 

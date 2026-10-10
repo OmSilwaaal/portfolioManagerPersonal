@@ -294,6 +294,40 @@ function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_token_index_seen ON token_index(last_seen_ts);
   `);
 
+  // The market-wide pump.fun bonding-curve state, written by services/pumpCurveIndex off a
+  // single programSubscribe and read by lists and lookups so they need no aggregator call.
+  //
+  // Separate from token_index above rather than extra columns on it, for one reason: token_index
+  // is the IDENTITY index (what coins exist and what they are called) and is ranked and evicted
+  // on that basis. This is live market state for one venue, it churns many times a minute per
+  // row, and most of its rows have no name yet. Joining the two beats letting curve churn evict
+  // names we worked to learn. services/tokenIndex owns both and does the join.
+  //
+  // `curve` is the bonding-curve PDA. It is stored, and uniquely indexed, because a curve
+  // notification names only that account: keeping the mapping is what lets a restart resolve
+  // thousands of curves back to mints with no network calls at all.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS token_curve (
+      address       TEXT    PRIMARY KEY,
+      curve         TEXT    NOT NULL,
+      decimals      INTEGER,
+      price_sol     REAL,
+      price_usd     REAL,
+      mcap          REAL,
+      v_sol         REAL,
+      v_token       REAL,
+      progress      REAL,
+      complete      INTEGER NOT NULL DEFAULT 0,
+      slot          INTEGER,
+      hits          INTEGER NOT NULL DEFAULT 0,
+      first_seen_ts INTEGER NOT NULL,
+      updated_ts    INTEGER NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_token_curve_curve ON token_curve(curve);
+    CREATE INDEX IF NOT EXISTS idx_token_curve_updated ON token_curve(updated_ts);
+    CREATE INDEX IF NOT EXISTS idx_token_curve_live ON token_curve(complete, updated_ts DESC);
+  `);
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS sms_settings (
       user_id      TEXT    PRIMARY KEY,
@@ -559,6 +593,24 @@ function initSchema() {
     -- A SOL deposit is attributed by matching the transaction's payer to a registered
     -- address, so this lookup runs on the hot path of every claim.
     CREATE INDEX IF NOT EXISTS idx_user_wallets_addr ON user_wallets(chain, address);
+    -- One address belongs to ONE account, ever. Without this the primary key allowed two
+    -- accounts to register the same address, and whoever claimed a transfer first was
+    -- credited for it — an attacker could watch the public treasury, register each incoming
+    -- payer as their own and sweep every deposit. Earliest registrant wins any existing clash.
+    DELETE FROM user_wallets WHERE rowid NOT IN (SELECT MIN(rowid) FROM user_wallets GROUP BY chain, address);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_user_wallets_one_owner ON user_wallets(chain, address);
+
+    -- Proof-of-control challenges. A wallet may only be registered by someone who can sign
+    -- with it, so the server hands out a short-lived nonce bound to one account and one
+    -- address, and verifies the signature before writing anything.
+    CREATE TABLE IF NOT EXISTS wallet_challenges (
+      nonce      TEXT PRIMARY KEY,
+      user_id    TEXT NOT NULL,
+      address    TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      used_at    TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_wallet_challenges_exp ON wallet_challenges(expires_at);
 
     -- Pro entitlement, as a grant log rather than a boolean. "Is this user Pro" is a question
     -- about rows, so revoking is auditable and a referral month cannot clobber a paid

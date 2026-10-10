@@ -51,16 +51,101 @@ function walletsFor(userId) {
   return getDb().prepare("SELECT address FROM user_wallets WHERE user_id = ? AND chain = 'solana'").all(userId).map((r) => r.address);
 }
 
-/** Register a public Solana address. There is no code path here that accepts key material. */
-function registerWallet(userId, address) {
+const MAX_WALLETS_PER_USER = 5;
+const CHALLENGE_TTL_MS = 5 * 60_000;
+// SPKI DER prefix for a raw ed25519 public key, so node's crypto can verify without a
+// dependency. The 32 key bytes are appended to it.
+const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
+
+function assertAddress(address) {
   const addr = String(address || '').trim();
   if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(addr)) throw new DepositError('Not a Solana address.', 400, 'bad_address');
   // A 64-byte base58 string is a secret key, not an address. Refuse it without logging it.
   if (addr.length > 44) throw new DepositError('Not a Solana address.', 400, 'bad_address');
+  return addr;
+}
+
+/** Exactly what the wallet must sign. Bound to the account AND the address, so a signature
+ *  collected for one cannot register the other. */
+function challengeMessage({ nonce, userId, address, expiresAt }) {
+  return [
+    'Travauxus wallet verification',
+    `account: ${userId}`,
+    `address: ${address}`,
+    `nonce: ${nonce}`,
+    `expires: ${new Date(expiresAt).toISOString()}`,
+  ].join('\n');
+}
+
+/**
+ * Hand out a nonce to sign. Registering a wallet used to require nothing but the address,
+ * which meant anyone could claim an address they did not control — and because the treasury
+ * is public, an attacker could watch it, register each incoming payer and be credited for
+ * other people's deposits. Proving control is the fix.
+ */
+function issueWalletChallenge(userId, address) {
+  const addr = assertAddress(address);
+  const db = getDb();
+  db.prepare('DELETE FROM wallet_challenges WHERE expires_at < ?').run(Date.now());
+  const nonce = require('crypto').randomBytes(24).toString('hex');
+  const expiresAt = Date.now() + CHALLENGE_TTL_MS;
+  db.prepare('INSERT INTO wallet_challenges (nonce, user_id, address, expires_at) VALUES (?, ?, ?, ?)')
+    .run(nonce, userId, addr, expiresAt);
+  return { nonce, address: addr, expiresAt, message: challengeMessage({ nonce, userId, address: addr, expiresAt }) };
+}
+
+/** True when `signature` (base64) is a valid ed25519 signature of `message` by `address`. */
+function verifySignature(address, message, signatureB64) {
+  let sig;
+  try { sig = Buffer.from(String(signatureB64 || ''), 'base64') } catch { return false }
+  if (sig.length !== 64) return false;
+  let keyBytes;
+  try { keyBytes = Buffer.from(new (require('@solana/web3.js').PublicKey)(address).toBytes()) } catch { return false }
+  if (keyBytes.length !== 32) return false;
   try {
-    getDb().prepare("INSERT INTO user_wallets (user_id, chain, address) VALUES (?, 'solana', ?)").run(userId, addr);
+    const key = require('crypto').createPublicKey({
+      key: Buffer.concat([ED25519_SPKI_PREFIX, keyBytes]), format: 'der', type: 'spki',
+    });
+    return require('crypto').verify(null, Buffer.from(message, 'utf8'), key, sig);
+  } catch { return false }
+}
+
+/**
+ * Register a public Solana address, but only on proof that the caller controls it.
+ * There is no code path here that accepts key material — only a signature over a nonce
+ * this server issued.
+ */
+function registerWallet(userId, address, { nonce, signature } = {}) {
+  const addr = assertAddress(address);
+  const db = getDb();
+
+  const row = db.prepare('SELECT * FROM wallet_challenges WHERE nonce = ?').get(String(nonce || ''));
+  // Every failure answers the same way: a probe must not learn whether a nonce exists,
+  // belongs to someone else, or simply expired.
+  const bad = () => { throw new DepositError('Could not verify control of that wallet.', 400, 'unverified_wallet') };
+  if (!row || row.used_at || row.user_id !== userId || row.address !== addr || row.expires_at < Date.now()) bad();
+
+  const msg = challengeMessage({ nonce: row.nonce, userId, address: addr, expiresAt: row.expires_at });
+  if (!verifySignature(addr, msg, signature)) bad();
+
+  // One use only, whatever happens next.
+  db.prepare("UPDATE wallet_challenges SET used_at = datetime('now') WHERE nonce = ?").run(row.nonce);
+
+  const held = db.prepare("SELECT COUNT(*) AS n FROM user_wallets WHERE user_id = ? AND chain = 'solana'").get(userId).n;
+  if (held >= MAX_WALLETS_PER_USER) {
+    throw new DepositError(`At most ${MAX_WALLETS_PER_USER} wallets per account.`, 400, 'too_many_wallets');
+  }
+
+  try {
+    db.prepare("INSERT INTO user_wallets (user_id, chain, address) VALUES (?, 'solana', ?)").run(userId, addr);
   } catch (err) {
-    if (!ledger.isUniqueViolation(err)) throw err; // already registered: nothing to do
+    if (!ledger.isUniqueViolation(err)) throw err;
+    // The unique index spans (chain, address), so a clash is either this user re-registering
+    // (fine) or someone else already owning it (not fine, and not something to explain).
+    const owner = db.prepare("SELECT user_id FROM user_wallets WHERE chain = 'solana' AND address = ?").get(addr);
+    if (owner && owner.user_id !== userId) {
+      throw new DepositError('That wallet is already registered to another account.', 409, 'wallet_taken');
+    }
   }
   return addr;
 }
@@ -146,6 +231,7 @@ async function claimDeposit(userId, signature, opts = {}) {
 }
 
 module.exports = {
+  issueWalletChallenge, verifySignature, MAX_WALLETS_PER_USER,
   SIG_RE, DepositError, verifyTransfer, claimDeposit, registerWallet, walletsFor,
   accountKeys, __setConnectionFactory,
 };
