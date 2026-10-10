@@ -86,11 +86,6 @@ require('./radar').startRadar();
 try { require('./radar').configureExtraFeatures(); } catch (err) { console.error('[radar] extra features not configured:', err.message); }
 require('./services/snapshotCollector').startSnapshotCollector();
 
-// Refreshes the trending/new lists and the watched tokens' rows and bars just before their cache
-// entries expire, so an arriving request finds a fresh value rather than a stale one. Strictly
-// inside the opportunistic half of the GeckoTerminal budget, and it stops ticking when nothing is
-// watched and nothing has been asked for — see services/memecoinWarmer.
-require('./services/memecoinWarmer').startMemecoinWarmer();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -147,12 +142,7 @@ app.use(sessionMiddleware);
 // the public-ish REST routes return), so it needs no session, and it enforces its own
 // per-IP connection cap instead — see services/memecoinStream.
 const memecoinStream = require('./services/memecoinStream');
-app.get('/api/memecoins/stream', (req, res) => {
-  // A connect is the strongest demand signal there is; the hub's own client count keeps the warmer
-  // awake from here on, but something has to wake it if it had gone idle.
-  try { require('./services/memecoinWarmer').noteDemand(); } catch (_) { /* warming is optional */ }
-  return memecoinStream.handler(req, res);
-});
+app.get('/api/memecoins/stream', memecoinStream.handler);
 
 // ── RATE LIMITERS ─────────────────────────────────────────────────────────────
 function makeLimiter(windowMs, max, message) {
