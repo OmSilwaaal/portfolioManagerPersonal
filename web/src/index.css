@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Anybody:wdth,wght@50..150,100..900&family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=Fraunces:opsz,wght@9..144,400..900&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Anybody:wdth,wght@50..150,100..900&family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=Fraunces:opsz,wght@9..144,400..900&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -100,11 +100,20 @@
   --on-paper-text-4: rgba(11,11,11,0.20);
 
   /* Typography */
-  --font-sans:         'Courier Prime', 'Courier New', ui-monospace, monospace;
-  --font-display:      'Anybody', 'Arial Narrow', sans-serif;
-  --font-mono:         'Courier Prime', 'Courier New', ui-monospace, monospace;
-  --font-data:         'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  /* Body text was Courier Prime — a typewriter face. It reads as deliberate for a line or two
+     and as hard work for a screen full of them, which is what "too robotic" meant. Inter is
+     built for dense interface text and carries proper tabular figures, so a price column still
+     aligns without needing a monospace. The terminal sets font-variant-numeric: tabular-nums,
+     which is what actually keeps digits in columns — the typeface does not have to.
+     The ASCII renderer keeps its own GRID_FONT (see ascii/raster.js): a proportional font would
+     destroy the grid, so the drawings are unaffected by anything here. */
+  --font-sans:         'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display:      'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono:         'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-data:         'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-art:          'Fraunces', 'Times New Roman', serif;
+  /* The pre-Inter stack, so the settings page can opt out as asked. */
+  --font-legacy:       'Courier Prime', 'Courier New', ui-monospace, monospace;
 
   /* Radii — brutalist: sharp by default */
   --r-0:   0;
@@ -224,7 +233,7 @@ html:not(.dark) {
     font-family: var(--font-sans);
   }
 
-  h1, h2, h3 { font-family: var(--font-display); font-stretch: 120%; letter-spacing: -0.01em; }
+  h1, h2, h3 { font-family: var(--font-display); font-weight: 800; letter-spacing: -0.02em; }
 
   /* square, brutalist corners everywhere except circles */
   .rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl, .rounded-3xl { border-radius: 2px !important; }
@@ -386,3 +395,8 @@ html.dark .divide-\[\#2a2a2a\] > :not([hidden]) ~ :not([hidden]) { border-color:
 html.dark .hover\:bg-\[\#141414\]:hover { background-color: var(--ink-800); }
 html.dark .hover\:bg-\[\#1f1f1f\]:hover, html.dark .hover\:bg-\[\#252525\]:hover { background-color: var(--ink-700); }
 html.dark .hover\:border-\[\#2a2a2a\]:hover, html.dark .hover\:border-\[\#3a3a3a\]:hover { border-color: var(--on-ink-3); }
+
+
+/* The settings page keeps the old typewriter face, as asked. Scoped by a wrapper class so it is
+   opt-in and cannot leak: nothing else in the app should be reaching for --font-legacy. */
+.tvx-legacy-type, .tvx-legacy-type :not(canvas) { font-family: var(--font-legacy); }

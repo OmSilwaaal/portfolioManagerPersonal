@@ -907,13 +907,13 @@ export default function Settings() {
     cards: <CardsView onBack={back} />,
   }
   if (view && VIEWS[view]) {
-    return <main className="flex-1 p-5 md:p-8 max-w-3xl mx-auto w-full">{VIEWS[view]}</main>
+    return <main className="tvx-legacy-type flex-1 p-5 md:p-8 max-w-3xl mx-auto w-full">{VIEWS[view]}</main>
   }
 
   const effectLabel = effect && effect !== 'none' ? effect[0].toUpperCase() + effect.slice(1) : 'None'
 
   return (
-    <main className="flex-1 p-5 md:p-8 max-w-3xl mx-auto w-full">
+    <main className="tvx-legacy-type flex-1 p-5 md:p-8 max-w-3xl mx-auto w-full">
       <EquippedBanner fps={6} style={{ marginBottom: 18 }} />
       <div className="flex items-center gap-4 mb-8">
         <UserAvatar user={user} size={64} src={profile?.avatar_url} />
