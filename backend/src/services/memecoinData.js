@@ -42,28 +42,105 @@ class MemecoinDataError extends Error {
   }
 }
 
-// ── tiny TTL cache with in-flight de-dupe ───────────────────────────────────
+// ── TTL cache with in-flight de-dupe and stale-while-revalidate ─────────────
+// A plain TTL couples the user's latency to the upstream's: the instant an entry expires, the next
+// arrival pays the whole round trip. Measured against GeckoTerminal's keyless tier at a human pace
+// that was a p95 of 13.4s on the trending list, a 23.6s worst case on /new, and half of all chart
+// loads failing outright. So an expired entry is served *immediately* and refreshed behind the
+// response. The single-flight below is what keeps that from becoming a stampede.
+//
+// Staleness has to be bounded, or serving the cache turns into a claim about a market that has
+// moved on. Every call site that wants stale-while-revalidate therefore declares how old its own
+// data may get (maxAgeMs, from MAX_AGE below). Past that ceiling the caller waits, and gets the
+// upstream's error if the upstream is still refusing — a number that old is not an answer.
+//
+// No ceiling declared means no stale serving, which is exactly the old behaviour. Two call sites
+// want that deliberately: the deep-page warmer, which does its own staleness accounting against
+// the request budget, and the Jupiter quote, which is a price somebody is about to trade on.
 const cache = new Map();
 const inflight = new Map();
 const MAX_ENTRIES = 2000;
 
-async function cached(key, ttlMs, loader) {
-  const hit = cache.get(key);
-  const now = Date.now();
-  if (hit && hit.exp > now) return hit.val;
-  if (inflight.has(key)) return inflight.get(key);
+// How stale each kind of value may get before a caller waits for a fresh one. These are ceilings
+// for a *failing* upstream, not refresh intervals: the TTLs at the call sites are unchanged and a
+// healthy upstream still refreshes on them. Each is chosen by what the number is used for.
+const MAX_AGE = {
+  // A discovery list is about which pools exist and roughly how they rank. That composition drifts
+  // over minutes rather than seconds; past five, "trending" would be a statement about the past.
+  list: 5 * 60_000,
+  // A price shown as current. A minute is the most we will put in front of somebody; the trade
+  // path refuses stale prices outright rather than relying on this (see getQuote).
+  token: 60_000,
+  // One-minute bars: a chart a bar and a half behind reads as lagging, three bars reads as broken.
+  ohlcv1m: 90_000,
+  // 5m/15m/1h bars move proportionally slower, so the same "about a bar and a half" is minutes.
+  ohlcv: 5 * 60_000,
+  // A trade tape older than a minute looks like a dead market, which is its own kind of wrong.
+  trades: 60_000,
+  // SOL is orders of magnitude deeper than anything else here, and it is only ever a denominator.
+  sol: 2 * 60_000,
+  // holders/decimals. Decimals never change and the holder count is decoration — and this is the
+  // GeckoTerminal call that a cold chart click used to wait on before it could even ask for bars.
+  info: 6 * 60 * 60_000,
+  // A result set for one query: long enough to survive a reload, short enough that a launch shows.
+  search: 2 * 60_000,
+};
+
+// A background refresh that keeps failing must not be retried by every arriving request, or a dead
+// upstream turns into a request flood against a limit that is already refusing us.
+const REFRESH_BACKOFF_MS = 2_000;
+const REFRESH_BACKOFF_MAX_MS = 60_000;
+
+// When the value was fetched, carried on the value itself so a caller can tell "live" from "a few
+// seconds behind". Non-enumerable and a Symbol, so it cannot reach JSON, a spread or a deepEqual.
+const CACHED_AT = Symbol('cachedAt');
+
+function stamp(val, at) {
+  if (val === null || typeof val !== 'object') return val;
+  try {
+    Object.defineProperty(val, CACHED_AT, { value: at, enumerable: false, configurable: true, writable: true });
+  } catch (_) { /* frozen or exotic: the age is simply unavailable, never a failure */ }
+  return val;
+}
+
+/** ms since this value was fetched upstream, or null when it did not come from the cache. */
+function ageOf(val) {
+  const at = val === null || typeof val !== 'object' ? null : val[CACHED_AT];
+  return typeof at === 'number' ? Math.max(0, Date.now() - at) : null;
+}
+
+function evict(now) {
+  if (cache.size < MAX_ENTRIES) return;
+  for (const [k, v] of cache) if (v.exp <= now) cache.delete(k);
+  if (cache.size >= MAX_ENTRIES) cache.delete(cache.keys().next().value);
+}
+
+/**
+ * Run the loader and store the result, de-duped by key. Always rejects on failure — whether a
+ * stale value is an acceptable substitute is the caller's decision, not this function's, because
+ * two callers can join the same in-flight refresh with different staleness ceilings.
+ */
+function load(key, ttlMs, loader) {
   const p = (async () => {
+    const was = cache.get(key);
     try {
       const val = await loader();
-      if (cache.size >= MAX_ENTRIES) {
-        for (const [k, v] of cache) if (v.exp <= now) cache.delete(k);
-        if (cache.size >= MAX_ENTRIES) cache.delete(cache.keys().next().value);
-      }
-      cache.set(key, { val, exp: Date.now() + ttlMs });
+      const at = Date.now();
+      evict(at);
+      cache.set(key, { val: stamp(val, at), exp: at + ttlMs, at, fails: 0, nextTry: 0 });
+      // Serving stale data makes an outage invisible, so a recovery is worth a line too: otherwise
+      // the only trace of a long failure is the burst of errors that started it.
+      if (was?.fails > 0) console.log(`[memecoinData] ${key}: upstream recovered after ${was.fails} failed refresh(es)`);
       return val;
     } catch (err) {
-      // serve stale data on upstream failure
-      if (hit) return hit.val;
+      if (was && cache.get(key) === was) {
+        // A refresh that fails is news about the upstream, not about the data: keep the last good
+        // value and come back later. The backoff is what makes "later" bounded, so a dead upstream
+        // is asked once a minute rather than by every request that arrives.
+        was.fails = (was.fails || 0) + 1;
+        was.nextTry = Date.now() + Math.min(REFRESH_BACKOFF_MS * 2 ** (was.fails - 1), REFRESH_BACKOFF_MAX_MS);
+        console.error(`[memecoinData] ${key}: refresh failed ${was.fails}x (${err.message}); last good value is ${Date.now() - was.at}ms old`);
+      }
       throw err;
     } finally {
       inflight.delete(key);
@@ -73,20 +150,56 @@ async function cached(key, ttlMs, loader) {
   return p;
 }
 
+/**
+ * maxAgeMs — how old this key's value may get while still being served instantly, with the refresh
+ * happening behind the answer. 0 (the default) opts out of stale-while-revalidate: the caller waits
+ * for the loader, and falls back to the last value only if the loader fails.
+ */
+async function cached(key, ttlMs, loader, maxAgeMs = 0) {
+  const now = Date.now();
+  const hit = cache.get(key);
+  if (hit && hit.exp > now) return hit.val;
+  if (hit && maxAgeMs > 0 && now - hit.at < maxAgeMs) {
+    // Expired but inside its ceiling: answer from cache and refresh behind the answer. The
+    // in-flight check stops every arrival starting its own refresh; nextTry stops a failing
+    // upstream being asked by every arrival.
+    if (!inflight.has(key) && now >= (hit.nextTry || 0)) {
+      load(key, ttlMs, loader).catch(() => { /* load() logged it; the stale value stands */ });
+    }
+    return hit.val;
+  }
+  const p = inflight.get(key) || load(key, ttlMs, loader);
+  if (maxAgeMs > 0) {
+    // Past the ceiling (or nothing cached at all). This caller waits, and if the upstream is still
+    // refusing it gets the error: a value this old is not an answer, and pretending otherwise is
+    // how an outage becomes invisible.
+    if (hit) console.error(`[memecoinData] ${key}: value is ${now - hit.at}ms old, past its ${maxAgeMs}ms ceiling; refusing to serve it`);
+    return p;
+  }
+  // No ceiling declared keeps the original contract: an unbounded stale value beats an error.
+  return p.catch((err) => {
+    const prev = cache.get(key);
+    if (prev) return prev.val;
+    throw err;
+  });
+}
+
 // A value we were handed rather than fetched (see notePools). Same eviction rule as cached().
 function remember(key, ttlMs, val) {
   const now = Date.now();
-  if (cache.size >= MAX_ENTRIES) {
-    for (const [k, v] of cache) if (v.exp <= now) cache.delete(k);
-    if (cache.size >= MAX_ENTRIES) cache.delete(cache.keys().next().value);
-  }
-  cache.set(key, { val, exp: now + ttlMs });
+  evict(now);
+  cache.set(key, { val: stamp(val, now), exp: now + ttlMs, at: now, fails: 0, nextTry: 0 });
 }
 
 // Is there a live entry? Lets a caller skip spending a request budget on something it already has.
 const isFresh = (key) => { const h = cache.get(key); return Boolean(h && h.exp > Date.now()); };
 // The last value for a key, fresh or not. Only for callers that choose to skip the loader entirely.
 const peek = (key) => cache.get(key)?.val;
+// ms until a key expires; <= 0 means expired, null means nothing is cached. The warmer reads this
+// to refresh a key just before a request would have had to.
+const freshFor = (key) => { const h = cache.get(key); return h ? h.exp - Date.now() : null; };
+// How old a key's value is, independent of its TTL. null when nothing is cached.
+const cacheAge = (key) => { const h = cache.get(key); return h ? Date.now() - h.at : null; };
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -438,7 +551,7 @@ async function getTrending() {
     } catch (e) {
       return indexed(await dexBoosted(), 'trending');
     }
-  });
+  }, MAX_AGE.list);
 }
 
 async function getNew() {
@@ -454,7 +567,7 @@ async function getNew() {
       const pairs = await getJson(`${DEXSCREENER}/tokens/v1/solana/${addrs.join(',')}`);
       return indexed(dedupe(bestPairsByToken(pairs).map(fromDexPair)), 'new');
     }
-  });
+  }, MAX_AGE.list);
 }
 
 // ── search ──────────────────────────────────────────────────────────────────
@@ -562,7 +675,7 @@ async function search(q) {
         || (b.t.mcap || 0) - (a.t.mcap || 0))
       .slice(0, SEARCH_RESULTS)
       .map((x) => x.t);
-  });
+  }, MAX_AGE.search);
 }
 
 // ── token detail ────────────────────────────────────────────────────────────
@@ -576,10 +689,16 @@ async function getTokenInfo(address) {
     } catch (_) {
       return { holders: null, decimals: null, image: null };
     }
-  });
+  }, MAX_AGE.info);
 }
 
-async function getToken(address) {
+/**
+ * opts.fresh — never answer from an expired entry without asking upstream first. For the one caller
+ * that must not: a trade fills at this price. It still falls back to the last known price if the
+ * upstream fails outright, because refusing the trade over a blip is worse — what it will not do is
+ * skip the round trip.
+ */
+async function getToken(address, opts = {}) {
   if (!isValidAddress(address)) throw new MemecoinDataError('Invalid Solana address', 400);
   const base = await cached(`token:${address}`, 10_000, async () => {
     const pairs = await getJson(`${DEXSCREENER}/tokens/v1/solana/${address}`);
@@ -589,9 +708,12 @@ async function getToken(address) {
     const tok = fromDexPair(best);
     indexed([tok], 'token');     // inside the loader, so a hot token is not re-indexed on every call
     return tok;
-  });
+  }, opts.fresh ? 0 : MAX_AGE.token);
   const info = await getTokenInfo(address);
-  return { ...base, holders: info.holders, decimals: info.decimals, image: base.image || info.image };
+  const token = { ...base, holders: info.holders, decimals: info.decimals, image: base.image || info.image };
+  // The merged record is new every call, so carry the price row's age onto it — that row is the
+  // part a caller would want to know the age of.
+  return stamp(token, Date.now() - (ageOf(base) ?? 0));
 }
 
 // ── OHLCV ───────────────────────────────────────────────────────────────────
@@ -611,7 +733,13 @@ function ohlcvForPool(pool, tf, cfg) {
     return list
       .map(([t, o, h, l, c, v]) => ({ time: t, open: +o, high: +h, low: +l, close: +c, volume: +v }))
       .sort((a, b) => a.time - b.time);
-  });
+  }, tf === '1m' ? MAX_AGE.ohlcv1m : MAX_AGE.ohlcv);
+}
+
+/** The cache key an OHLCV refresh would touch, or null when the pool is not known yet. */
+function ohlcvKey(address, tf) {
+  const pool = knownPool(address);
+  return pool && TF[tf] ? `ohlcv:${pool}:${tf}` : null;
 }
 
 async function getOhlcv(address, tf = '5m') {
@@ -655,11 +783,11 @@ async function getTrades(address) {
         tx: a.tx_hash || null,
       };
     });
-  });
+  }, MAX_AGE.trades);
 }
 
 // ── SOL price & quotes ──────────────────────────────────────────────────────
-async function getSolPrice() {
+async function getSolPrice(opts = {}) {
   return cached('solprice', 15_000, async () => {
     try {
       const d = await getJson(JUP_PRICE, { ids: SOL_MINT });
@@ -672,7 +800,7 @@ async function getSolPrice() {
     const p = num(best?.priceUsd);
     if (!p) throw new MemecoinDataError('SOL price unavailable', 502);
     return p;
-  });
+  }, opts.fresh ? 0 : MAX_AGE.sol);
 }
 
 // Constant-product style impact estimate from pool liquidity (liquidity_usd is both sides,
@@ -694,7 +822,10 @@ function estimateImpact(tradeUsd, liquidityUsd, side) {
 async function getQuote({ address, side, amountSol, amountTokens, slippageBps }) {
   if (side !== 'buy' && side !== 'sell') throw new MemecoinDataError("side must be 'buy' or 'sell'", 400);
   const slip = Number.isFinite(+slippageBps) ? Math.min(Math.max(Math.round(+slippageBps), 0), 5000) : 100;
-  const [token, solPrice] = await Promise.all([getToken(address), getSolPrice()]);
+  // Deliberately not stale-while-revalidate: the fill price and the SOL conversion both come from
+  // here and a paper trade is settled against them, so this one call still makes the round trip
+  // instead of answering from an entry that has expired.
+  const [token, solPrice] = await Promise.all([getToken(address, { fresh: true }), getSolPrice({ fresh: true })]);
   if (!token.price) throw new MemecoinDataError('Token has no price', 502);
 
   let usd;
@@ -760,11 +891,13 @@ async function getQuote({ address, side, amountSol, amountTokens, slippageBps })
 }
 
 module.exports = {
-  hasGeckoKey,
+  hasGeckoKey, ageOf, MAX_AGE,
   MemecoinDataError, isValidAddress, getTrending, getNew, search, getToken,
   getOhlcv, getTrades, getSolPrice, getQuote, SOL_MINT,
   sanitizeText, cleanSymbol, cleanName, cleanUrl, shortMint, fromDexPair, fromGeckoPool,
   matchTier, fromIndexRow, GECKO_DEEP_PAGES, DEEP_WARM_PER_LOAD, SEARCH_RESULTS, POOL_TTL,
+  // what the warmer needs to know about the cache without duplicating any of its key shapes
+  freshFor, cacheAge, ohlcvKey,
   // test helpers: what the long-lived address -> pool mapping currently holds
   _knownPool: knownPool,
   // test helpers: drop entries, or age them out while keeping the value cached() falls back to
@@ -773,4 +906,12 @@ module.exports = {
     inflight.clear();
   },
   _expireCache: (pred) => { for (const [k, v] of cache) if (!pred || pred(k)) v.exp = 0; },
+  // test helper: pretend an entry was fetched `ms` ago, which is the only way to reach the hard
+  // staleness ceiling without a test that sits there for minutes.
+  _ageCache: (pred, ms) => {
+    for (const [k, v] of cache) if (!pred || pred(k)) {
+      v.at -= ms; v.exp -= ms; v.nextTry = 0;
+      stamp(v.val, v.at);   // the age travels on the value, so moving the entry has to move that too
+    }
+  },
 };

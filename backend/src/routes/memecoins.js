@@ -59,6 +59,15 @@ function needAddress(req) {
   return req.params.address;
 }
 
+// Somebody is using the terminal, which is what the background warmer waits to hear: with no
+// request and no open stream it stops ticking altogether. Cheap enough to sit in front of every
+// route, and it must not be reachable from the warmer's own calls, which is why it lives here
+// rather than inside memecoinData.
+router.use((_req, _res, next) => {
+  try { require('../services/memecoinWarmer').noteDemand(); } catch (_) { /* warming is optional */ }
+  next();
+});
+
 router.get('/trending', h(async (_req, res) => res.json(await data.getTrending())));
 router.get('/new', h(async (_req, res) => res.json(await data.getNew())));
 router.get('/search', h(async (req, res) => res.json(await data.search(req.query.q))));
