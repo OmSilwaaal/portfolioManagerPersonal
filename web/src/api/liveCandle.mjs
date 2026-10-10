@@ -13,9 +13,20 @@
 // Both of those only ever move forward, so the chart cannot rewind or flicker between the
 // two sources.
 //
+// The 1s and 15s timeframes have no upstream half at all: nothing serves a candle shorter than
+// a minute, so every bucket on those charts is cut here and the series starts empty.
+//
+// A bucket is only ever opened by a tick, never by the clock. The stream suppresses a curve
+// write that moves nothing, so "no tick" means "no trade", and advancing the bucket on a timer
+// would invent a flat bar per second out of an absence of news — at 1s the 600-bar window would
+// fill with ten minutes of fabricated bars and push the real ones off the left edge within the
+// first quiet stretch. Gaps are left as gaps instead, and how long it has been since the last
+// tick is reported to the user directly (see the liveness pill in TradingTerminal) rather than
+// implied by a bar that only means the clock moved.
+//
 // Pure and dependency-free (hence .mjs) so the backend test runner can import it directly.
 
-import { bucketStart, TF_SECONDS } from './candleMerge.mjs'
+import { bucketStart, ALL_TF_SECONDS } from './candleMerge.mjs'
 
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v)
 const pos = (v) => (isNum(v) && v > 0 ? v : null)
@@ -37,8 +48,16 @@ export function createFormingCandles(opts = {}) {
   const forming = new Map()
   const keyOf = (address, tf) => `${address}|${tf}`
 
-  /** The bucket the local clock is in. Null for an unknown timeframe. */
-  const currentBucket = (tf) => bucketStart(Math.floor(now() / 1000), tf)
+  // Local clock minus the server clock, from the newest tick we folded in. Buckets are cut on
+  // the server's clock (tick.ts), so "is this bucket still the current one" has to be asked in
+  // that clock too. At 1m a browser running a few seconds fast is invisible; at 1s it is the
+  // difference between every tick landing on the chart and none of them landing at all, because
+  // the forming bucket would look expired the instant it was opened.
+  let skew = 0
+  const MAX_SKEW_MS = 5 * 60_000 // past this the tick's clock is not credible; trust our own
+
+  /** The bucket the server's clock is in, as best we can tell. Null for an unknown timeframe. */
+  const currentBucket = (tf) => bucketStart(Math.floor((now() - skew) / 1000), tf)
 
   /**
    * tick: { price, high, low, volumeUsd, ts } — high/low are the extremes seen since the last
@@ -65,6 +84,10 @@ export function createFormingCandles(opts = {}) {
       }
       forming.set(k, f)
     }
+    // Only a tick we accepted may move the clock estimate. A late or replayed tick is behind by
+    // definition, and letting it set the offset would retire the bucket it failed to reach.
+    const drift = now() - at
+    if (Math.abs(drift) < MAX_SKEW_MS) skew = drift
     f.high = Math.max(f.high, pos(Number(tick.high)) ?? price)
     f.low = Math.min(f.low, pos(Number(tick.low)) ?? price)
     f.close = price
@@ -127,7 +150,7 @@ export function createFormingCandles(opts = {}) {
 
   /** Called when the terminal stops showing a token: its buckets are no longer anyone's business. */
   function forget(address) {
-    for (const tf of Object.keys(TF_SECONDS)) forming.delete(keyOf(address, tf))
+    for (const tf of Object.keys(ALL_TF_SECONDS)) forming.delete(keyOf(address, tf))
   }
 
   return { onPrice, live, blend, forget, size: () => forming.size }

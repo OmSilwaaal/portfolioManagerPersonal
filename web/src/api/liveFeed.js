@@ -15,8 +15,8 @@
  * blocked, or the server is down, every poller keeps running at today's interval and the
  * terminal behaves exactly as it did before. */
 import { API_BASE } from './baseApi'
-import { memecoinApi, normToken, normTokens, normTrades } from './memecoinApi'
-import { mergeCandle } from './candleMerge.mjs'
+import { memecoinApi, normToken, normTokens, normTrades, liveMarketCap } from './memecoinApi'
+import { mergeCandle, isLiveOnlyTf } from './candleMerge.mjs'
 import { createFormingCandles } from './liveCandle.mjs'
 
 const SUPPORTED = typeof window !== 'undefined' && typeof window.EventSource === 'function'
@@ -34,9 +34,22 @@ const STALE_MS = 55_000
 const REOPEN_DEBOUNCE_MS = 300
 const KEEP_EVENTS = 30
 
+/* The server accepts four addresses per stream and silently drops the rest (parseAddresses in
+ * memecoinStream takes the first four it can parse and returns). The count is not the problem —
+ * the terminal only ever looks at one token at a time — the ORDER was: a cache entry outlives
+ * its subscription by RTK Query's keepUnusedDataFor (60s), so browsing five coins inside a minute
+ * left five addresses registered here, and sending them oldest-first handed the server four coins
+ * the user had already left and dropped the one they were looking at. No price ticks, no candle
+ * pushes: a chart that never propagates until a minute of idling frees a slot.
+ *
+ * So the active token leads. Capping here as well as there keeps the URL honest about what the
+ * connection actually carries. */
+const STREAM_MAX_ADDRESSES = 4
+
 const state = {
   es: null,
   refs: new Map(),      // token address -> number of cache entries interested
+  order: [],            // addresses, most recently requested FIRST — what the server is sent
   listRefs: 0,
   tfs: [],              // most recently requested timeframe last
   dispatch: null,
@@ -49,10 +62,52 @@ const state = {
   staleTimer: null,
   launches: [],
   volatility: [],
+  ticks: new Map(),     // address -> { at, seq, recent[] }: the evidence behind the liveness pill
   listeners: new Set(),
+  tickListeners: new Set(),
 }
 
 const notify = () => { for (const l of state.listeners) l() }
+
+/* ─── per-token tick recency ────────────────────────────────────────────────
+ * "Is anything happening" is a question about one token, and the only honest answer is when its
+ * last price tick arrived. isLive() below answers a different question — whether the connection
+ * is up — and the two differ in exactly the case that matters: a healthy stream watching a coin
+ * nobody is trading. One says live, the other says nothing has moved for 40s, and the user needs
+ * to be told the second one.
+ *
+ * Deliberately NOT routed through notify(): that set is read by every usePoll() in the terminal,
+ * and waking all of them four times a second to redraw a timer would cost more than the feature. */
+const TICK_WINDOW_MS = 10_000
+const TICK_KEEP = 64 // enough to measure a rate over the window; a hot token writes ~40 in it
+
+function noteTick(address, at) {
+  const t = state.ticks.get(address) || { at: 0, seq: 0, recent: [] }
+  t.at = at
+  t.seq += 1
+  t.recent.push(at)
+  if (t.recent.length > TICK_KEEP) t.recent.splice(0, t.recent.length - TICK_KEEP)
+  state.ticks.set(address, t)
+  for (const l of state.tickListeners) l()
+}
+
+export function subscribeTicks(l) { state.tickListeners.add(l); return () => state.tickListeners.delete(l) }
+
+/** Ticks seen for a token so far. A number, so it is a usable useSyncExternalStore snapshot. */
+export function tickSeq(address) { return state.ticks.get(address)?.seq ?? 0 }
+
+/** When the last price tick for a token arrived, or 0 if none ever has. */
+export function lastTickAt(address) { return state.ticks.get(address)?.at ?? 0 }
+
+/** Observed ticks per second over the last few seconds, or null without enough to measure. */
+export function tickRate(address) {
+  const recent = state.ticks.get(address)?.recent
+  if (!recent?.length) return null
+  const since = Date.now() - TICK_WINDOW_MS
+  let n = 0
+  for (let i = recent.length - 1; i >= 0 && recent[i] >= since; i -= 1) n += 1
+  return n < 2 ? null : n / (TICK_WINDOW_MS / 1000)
+}
 
 // The newest bucket of the chart, built from the price stream rather than waited for. See
 // liveCandle.mjs for the precedence rule between this and the aggregator's own candles.
@@ -128,9 +183,18 @@ const HANDLERS = {
   price(tick = {}) {
     const { address, price } = tick
     if (!address || typeof price !== 'number' || !Number.isFinite(price) || price <= 0) return
+    noteTick(address, Date.now())
     patch('getMemecoin', address, (draft) => {
       if (!draft || typeof draft !== 'object') return
       draft.price = price
+      // Market cap moves with the price and nothing else, so it has no reason to lag behind it.
+      // Only when a snapshot has pinned the supply: a coin the aggregator has never priced has
+      // no cap to compute, and guessing one would be worse than the "--" the header already shows.
+      const cap = liveMarketCap(address, price)
+      if (cap !== null) {
+        draft.marketCap = cap
+        draft.marketCapLive = true
+      }
     })
     // The same tick drives the bucket still forming on the chart, for every timeframe this tab
     // is showing. Closed buckets are left to the aggregator.
@@ -198,8 +262,13 @@ const HANDLERS = {
 /* ─── connection ──────────────────────────────────────────────────────────── */
 function queryString() {
   const p = new URLSearchParams()
-  for (const a of state.refs.keys()) p.append('address', a)
-  const tf = state.tfs[state.tfs.length - 1]
+  for (const a of state.order.slice(0, STREAM_MAX_ADDRESSES)) p.append('address', a)
+  // Only a timeframe the server can serve candles for. A sub-minute chart is built entirely from
+  // price ticks, which are addressed per token and not per timeframe, so naming 1s here would
+  // change the query string — tearing down and reopening the very stream that feeds it — to ask
+  // for a series the server would answer by falling back to 5m and fetching it from the
+  // aggregator. Switching to 1s now leaves the connection alone.
+  const tf = state.tfs.filter((x) => !isLiveOnlyTf(x)).pop()
   if (tf) p.set('tf', tf)
   if (!state.listRefs) p.set('lists', '0')
   return p.toString()
@@ -289,7 +358,11 @@ if (SUPPORTED && typeof document !== 'undefined') {
 export function attachLive({ address, tf, lists, dispatch } = {}) {
   if (!SUPPORTED) return () => {}
   if (dispatch) state.dispatch = dispatch
-  if (address) state.refs.set(address, (state.refs.get(address) || 0) + 1)
+  if (address) {
+    state.refs.set(address, (state.refs.get(address) || 0) + 1)
+    // Re-asked for, so it is the live one again even if it was registered long ago.
+    state.order = [address, ...state.order.filter((a) => a !== address)]
+  }
   if (lists) state.listRefs += 1
   if (tf) state.tfs = [...state.tfs.filter((x) => x !== tf), tf]
   scheduleOpen()
@@ -301,7 +374,12 @@ export function attachLive({ address, tf, lists, dispatch } = {}) {
     if (address) {
       const n = (state.refs.get(address) || 1) - 1
       if (n > 0) state.refs.set(address, n)
-      else { state.refs.delete(address); candles.forget(address) }
+      else {
+        state.refs.delete(address)
+        state.order = state.order.filter((a) => a !== address)
+        state.ticks.delete(address)
+        candles.forget(address)
+      }
     }
     if (lists) state.listRefs = Math.max(0, state.listRefs - 1)
     if (tf) state.tfs = state.tfs.filter((x) => x !== tf)
@@ -325,6 +403,9 @@ export function __liveState() {
   return {
     supported: SUPPORTED,
     addresses: [...state.refs.keys()],
+    sent: state.order.slice(0, STREAM_MAX_ADDRESSES),
+    tfs: [...state.tfs],
+    query: queryString(),
     listRefs: state.listRefs,
     tf: state.tfs[state.tfs.length - 1] || null,
     attempts: state.attempts,

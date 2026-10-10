@@ -6,7 +6,20 @@
 // bucket boundary first and then either replaces an existing bucket or extends the series.
 // Nothing is ever inserted in the middle.
 
+// Timeframes an aggregator will actually serve us. GeckoTerminal's smallest candle is one
+// minute, so this is also the complete list of timeframes that can have history.
 export const TF_SECONDS = { '1m': 60, '5m': 300, '15m': 900, '1h': 3600 }
+
+// Timeframes nothing upstream can answer for, so they are cut here from the live price stream.
+// Kept separate from TF_SECONDS because the distinction is load-bearing: a sub-minute series
+// must never be fetched (the backend rejects the timeframe outright) and has no history to
+// backfill — it only ever grows forwards from the moment the user opened it.
+export const LIVE_TF_SECONDS = { '1s': 1, '15s': 15 }
+
+export const ALL_TF_SECONDS = { ...LIVE_TF_SECONDS, ...TF_SECONDS }
+
+/** True for a timeframe that exists only because we build it ourselves. */
+export const isLiveOnlyTf = (tf) => Object.prototype.hasOwnProperty.call(LIVE_TF_SECONDS, tf)
 
 export const MAX_CANDLES = 600 // a long session must not grow the array without bound
 
@@ -14,7 +27,7 @@ const isNum = (v) => typeof v === 'number' && Number.isFinite(v)
 
 /** Start-of-bucket in seconds for a timestamp in seconds. Null for an unknown timeframe. */
 export function bucketStart(timeSec, tf) {
-  const step = TF_SECONDS[tf]
+  const step = ALL_TF_SECONDS[tf]
   if (!step || !isNum(timeSec)) return null
   // Math.floor, not trunc: pre-epoch times would round the wrong way, and a negative
   // bucket is still better than one that collides with its neighbour.

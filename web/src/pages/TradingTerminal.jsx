@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useMemo, useRef, useCallback, useSyncExternalStore } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { usePrivy } from '@privy-io/react-auth'
 import {
   Wallet, LogIn, LogOut, Search, Copy, Check, RefreshCw, AlertTriangle,
   ArrowUpRight, ArrowDownRight, Flame, Sparkles, Rocket, X, Loader2, Radar,
-  RotateCcw,
+  RotateCcw, ArrowLeftRight,
 } from 'lucide-react'
 import MemeChart from '../components/MemeChart'
 import { useGetPortfolioQuery } from '../api/paperTradingApi'
@@ -28,6 +28,8 @@ import {
   useRateLimited,
   rateLimitedUntil,
 } from '../api/memecoinApi'
+import { isLive, subscribeLive, subscribeTicks, tickSeq, lastTickAt, tickRate } from '../api/liveFeed'
+import { ALL_TF_SECONDS, isLiveOnlyTf, MAX_CANDLES } from '../api/candleMerge.mjs'
 import PanelWorkspace from '../components/terminal/PanelWorkspace'
 import WorkspacePanel from '../components/terminal/Panel'
 import LogoBackdrop from '../components/terminal/LogoBackdrop'
@@ -40,7 +42,10 @@ import { useCelebrate } from '../components/ProfitCelebration'
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
 const ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/
-const TIMEFRAMES = ['1m', '5m', '15m', '1h']
+// 1s and 15s are not in CHART_POLL and never will be: nothing upstream cuts a candle shorter
+// than a minute, so those two are built in the browser from the live price stream and are the one
+// pair of timeframes that must NOT be fetched (the backend 400s on them).
+const TIMEFRAMES = ['1s', '15s', '1m', '5m', '15m', '1h']
 const HISTORY_PAGE = 25
 // Poll intervals (ms). Global /api limiter is 60 req/min per IP and is shared with the rest of the app, so every
 // poller is slow, only runs while its panel is visible/needed, and is paused when the tab is hidden or on a 429
@@ -823,13 +828,68 @@ function Stat({ label, value, className = '' }) {
   )
 }
 
+/* ─── The one headline figure ────────────────────────────────────────────────
+ * Price and market cap used to sit side by side, which spent the widest, boldest slot in the
+ * terminal saying the same thing twice — they are the same number multiplied by a constant. One
+ * card now shows whichever of the two the user is thinking in, and clicking it switches. It is a
+ * real button, so Enter and Space work and aria-pressed tells a screen reader which face is up.
+ *
+ * The choice is remembered for the session and beyond, because it is a way of reading a market,
+ * not a per-coin preference: having to re-pick "market cap" on every coin would be the whole
+ * point of the control, lost. localStorage is wrapped because it throws outright in a locked-down
+ * webview, and a header must not be the thing that takes the page down. */
+const METRIC_KEY = 'tvx:terminal:headlineMetric'
+const readMetric = () => {
+  try { return localStorage.getItem(METRIC_KEY) === 'mcap' ? 'mcap' : 'price' } catch { return 'price' }
+}
+
+function HeadlineMetric({ t }) {
+  const [metric, setMetric] = useState(readMetric)
+  const showMcap = metric === 'mcap'
+  const toggle = () => setMetric(() => {
+    const next = showMcap ? 'price' : 'mcap'
+    try { localStorage.setItem(METRIC_KEY, next) } catch { /* storage disabled; the session still holds it */ }
+    return next
+  })
+  // Supply is the only thing between a live price and a live cap, and it comes from an aggregator
+  // snapshot. A coin too new to have been snapshotted has a price but no cap, and the card says so
+  // rather than showing a confident zero.
+  const cap = Number(t.marketCap)
+  const capKnown = Number.isFinite(cap) && cap > 0
+  // Supply is constant between snapshots, so the percentage move of the cap IS the move of the
+  // price. The same figure is correct on both faces.
+  const ch = t.change24h ?? t.change1h
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      aria-pressed={showMcap}
+      className="t-metric"
+      title={showMcap
+        ? 'Market cap (price x supply), recomputed from every live price tick. Click to show price.'
+        : 'Price, live off the chain. Click to show market cap.'}
+    >
+      <span className="t-label t-metric-head">
+        {showMcap ? 'Market cap' : 'Price'}
+        <ArrowLeftRight className="w-3 h-3 t-metric-swap" aria-hidden="true" />
+      </span>
+      <span className="t-price">{showMcap ? (capKnown ? fmtUsd(cap) : '--') : fmtPrice(t.price)}</span>
+      <span className={`mt-0.5 flex items-center text-sm font-bold ${pctColor(ch)}`}>
+        {ch != null && (ch >= 0 ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />)}{fmtPct(ch)}
+      </span>
+      {showMcap && !capKnown && (
+        <span className="t-metric-note">no market snapshot yet</span>
+      )}
+    </button>
+  )
+}
+
 function TokenHeader({ q }) {
   const t = q.data
   // Stale-while-revalidate: a transient poll error only blanks the header if we never had data at all.
   if (!t && q.isLoading) return <div className="p-3 grid grid-cols-3 md:grid-cols-6 gap-3">{Array.from({ length: 6 }).map((_, i) => <Skel key={i} className="h-8" />)}</div>
   if (!t && q.isError) return <ErrorBox error={q.error} onRetry={q.refetch} label="Could not load token" />
   if (!t) return null
-  const ch = t.change24h ?? t.change1h
   return (
     <div className="p-3 flex flex-wrap items-center gap-x-4 gap-y-2">
       <div className="t-copyhost min-w-0 flex items-center gap-2.5">
@@ -841,13 +901,7 @@ function TokenHeader({ q }) {
           </div>
         </div>
       </div>
-      <div>
-        <div className="t-price">{fmtPrice(t.price)}</div>
-        <div className={`mt-0.5 flex items-center text-sm font-bold ${pctColor(ch)}`}>
-          {ch != null && (ch >= 0 ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />)}{fmtPct(ch)}
-        </div>
-      </div>
-      <Stat label="MCap" value={fmtUsd(t.marketCap)} />
+      <HeadlineMetric t={t} />
       <Stat label="Liquidity" value={fmtUsd(t.liquidity)} />
       <Stat label="Volume 24h" value={fmtUsd(t.volume24h)} />
       <Stat label="Holders" value={fmtNum(t.holders)} />
@@ -877,9 +931,82 @@ function ChartNote({ children, spinner = false }) {
   )
 }
 
+/* ─── Liveness, from evidence ────────────────────────────────────────────────
+ * "it's hard for the user to see if anything is even happening" is a fair complaint about a chart
+ * whose bars are a fraction of a pixel apart, and the wrong answer is a spinner: a spinner spins
+ * just as happily over a dead socket, which makes it a lie exactly when the user most needs the
+ * truth. This reads one fact — when the last price tick for THIS token arrived — and separates the
+ * three states that look identical on screen:
+ *   live    a tick within the last few seconds; the dot flashes once per tick, so the motion IS
+ *           the data and stops when the data stops
+ *   quiet   the feed is connected and this coin simply is not trading; nothing is wrong
+ *   stalled nothing has arrived for long enough that something is wrong, or the stream is down
+ * The age is shown as a number in every state, so there is never a badge to interpret instead of
+ * a figure to read. */
+const TICK_FRESH_MS = 3_000
+const TICK_QUIET_MS = 30_000
+
+function fmtAgo(ms) {
+  const s = Math.max(0, Math.round(ms / 1000))
+  if (s < 60) return `${s}s`
+  const m = Math.floor(s / 60)
+  return m < 60 ? `${m}m ${s % 60}s` : `${Math.floor(m / 60)}h ${m % 60}m`
+}
+
+function LiveTicker({ address }) {
+  // The tick store is its own notifier: routing this through the shared liveness listeners would
+  // wake every usePoll() in the terminal four times a second to redraw one timer.
+  const seq = useSyncExternalStore(subscribeTicks, () => tickSeq(address), () => 0)
+  const streamLive = useSyncExternalStore(subscribeLive, isLive, () => false)
+  // Ageing is the whole point: with no ticks at all nothing re-renders, and "live · 0s" would sit
+  // there forever. One second is the resolution the label is written in.
+  const [, reclock] = useState(0)
+  useEffect(() => { const id = setInterval(() => reclock((n) => n + 1), 1000); return () => clearInterval(id) }, [])
+  if (!address) return null
+
+  const at = lastTickAt(address)
+  const since = at ? Date.now() - at : null
+  const rate = tickRate(address)
+  let tone = 'bad'
+  let label
+  let title
+  if (since === null) {
+    tone = streamLive ? 'warn' : 'bad'
+    label = streamLive ? 'no trades yet' : 'no live feed'
+    title = streamLive
+      ? 'Connected to the live feed. This token has not traded since you opened it, so there is nothing to draw yet.'
+      : 'The live price feed is not connected, so sub-minute candles cannot be built. Minute candles still arrive by polling.'
+  } else if (since < TICK_FRESH_MS) {
+    tone = 'ok'
+    label = rate ? `live · ${rate.toFixed(1)}/s` : 'live'
+    title = `Last trade ${fmtAgo(since)} ago${rate ? ` · ${rate.toFixed(1)} price updates a second` : ''}`
+  } else if (since < TICK_QUIET_MS && streamLive) {
+    tone = 'warn'
+    label = `quiet · ${fmtAgo(since)}`
+    title = `The feed is connected; this token last traded ${fmtAgo(since)} ago. A gap in the candles is a gap in the trading.`
+  } else {
+    tone = 'bad'
+    label = `${streamLive ? 'stalled' : 'feed down'} · ${fmtAgo(since)}`
+    title = streamLive
+      ? `No price update for ${fmtAgo(since)}. The chart is not moving because nothing is arriving.`
+      : `The live feed dropped ${fmtAgo(since)} ago and is reconnecting. Candles fall back to the poll.`
+  }
+  return (
+    <span className="t-chip t-live" data-tone={tone} title={title}>
+      {/* Keyed on the tick count so each arriving tick remounts the dot and replays its flash.
+          No tick, no remount, no motion — the animation cannot run without data behind it. */}
+      <span key={seq} className={`t-live-dot${tone === 'ok' ? ' t-live-flash' : ''}`} aria-hidden="true" />
+      {label}
+    </span>
+  )
+}
+
 function ChartPanel({ address }) {
   const [tf, setTf] = useState('1m')
-  const q = useGetMemecoinOhlcvQuery({ address, tf }, { skip: !address, pollingInterval: usePoll(CHART_POLL[tf]) })
+  // A sub-minute series has nothing to fetch, so it is never polled. CHART_POLL is untouched:
+  // these timeframes are simply not in it, and 0 is RTK Query's "no polling".
+  const liveOnly = isLiveOnlyTf(tf)
+  const q = useGetMemecoinOhlcvQuery({ address, tf }, { skip: !address, pollingInterval: usePoll(liveOnly ? 0 : CHART_POLL[tf]) })
   const candles = Array.isArray(q.data) ? q.data : []
   const hasCandles = candles.length > 0
   const noPool = chartReason(q.data) === 'no-pool'
@@ -904,6 +1031,9 @@ function ChartPanel({ address }) {
     return () => clearTimeout(t)
   }, [canRetry, hasCandles, attempt])
   const retrying = canRetry && attempt < CHART_RETRIES
+  const bucketSec = ALL_TF_SECONDS[tf] || 60
+  const retentionNote = `Keeps the last ${MAX_CANDLES} bars — about ${
+    Math.round((MAX_CANDLES * bucketSec) / 60)} minutes of trading at ${tf}; older bars are dropped.`
   const softMsg = q.error?.status === 429
     ? 'Live updates are paused for a moment. The chart picks up again by itself.'
     : 'Upstream is rate limiting us. The chart keeps retrying.'
@@ -913,10 +1043,19 @@ function ChartPanel({ address }) {
       <div className="t-rule flex items-center gap-2 px-3 py-2">
         <div role="tablist" className="flex items-center gap-1">
           {TIMEFRAMES.map((x) => (
-            <button key={x} role="tab" aria-selected={tf === x} onClick={() => setTf(x)} className="t-tab">{x}</button>
+            <button
+              key={x} role="tab" aria-selected={tf === x} onClick={() => setTf(x)} className="t-tab"
+              title={isLiveOnlyTf(x) ? `${x} candles are cut from the live price stream in your browser; no exchange publishes them, so they have no history and start when you open them` : undefined}
+            >{x}</button>
           ))}
         </div>
-        {q.isFetching && !q.isLoading && <Loader2 className="w-3 h-3 ml-1 animate-spin" style={{ color: 'var(--on-ink-text-3)' }} />}
+        {!liveOnly && q.isFetching && !q.isLoading && <Loader2 className="w-3 h-3 ml-1 animate-spin" style={{ color: 'var(--on-ink-text-3)' }} />}
+        {liveOnly && (
+          <span className="t-chip" title={retentionNote}>
+            built live{hasCandles ? ` · ${candles.length}/${MAX_CANDLES}` : ''}
+          </span>
+        )}
+        <LiveTicker address={address} />
         {isMockData(q.data) && <span className="t-chip ml-auto" data-tone="warn">mock</span>}
       </div>
       <div className="relative flex-1 min-h-0" style={{ background: 'var(--ink-950)' }}>
@@ -926,17 +1065,30 @@ function ChartPanel({ address }) {
           // Stale-while-revalidate: once we have candles, keep showing them through a transient poll
           // error instead of swapping to a full error box (that was the main source of "chart unavailable" flicker).
           <>
-            <MemeChart candles={candles} fitKey={`${address}:${tf}`} />
+            <MemeChart candles={candles} fitKey={`${address}:${tf}`} seconds={ALL_TF_SECONDS[tf] || 60} />
             {q.isError && (
               <span className="t-chip absolute top-2 right-2" data-tone="warn">reconnecting</span>
             )}
           </>
+        ) : liveOnly ? (
+          // No spinner: there is nothing in flight to wait for. The first bar is a trade away, and
+          // the pill above says whether trades are arriving at all.
+          <ChartNote>
+            {`A ${tf} candle is cut here in your browser from the live price stream — no exchange publishes one, so there is no history to load and the chart starts empty.`}
+            <br />{`The first bar appears on this token's next trade. ${retentionNote}`}
+          </ChartNote>
         ) : q.isLoading ? (
           <Skel className="absolute inset-0" />
         ) : retrying ? (
           <ChartNote spinner>{softMsg}</ChartNote>
         ) : noPool ? (
-          <ChartNote spinner>No DEX pool for this coin yet, so there is no price history to load. The chart builds itself from live trades as they land.</ChartNote>
+          <ChartNote>
+            No DEX pool for this coin yet, so no aggregator has any price history to load.
+            <br />A 1s chart does not need one: it is cut from the live price stream as trades land.
+            {/* The one coin that cannot have a minute chart is the one that can have a second
+                chart, so the dead end offers the way out instead of describing it. */}
+            <button type="button" className="t-btn mt-2 px-2 py-1" onClick={() => setTf('1s')}>Build a 1s chart from live trades</button>
+          </ChartNote>
         ) : soft ? (
           <ChartNote spinner>{softMsg}</ChartNote>
         ) : q.isError ? (

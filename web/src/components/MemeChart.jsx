@@ -42,8 +42,10 @@ function precisionFor(price) {
  * correctly positioned on pan/zoom instead of drifting like a manually-positioned overlay would.
  * candles: [{ time (unix seconds), open, high, low, close, volume }]
  * fitKey: change to re-fit the visible range and clear drawings (token / timeframe switch).
+ * seconds: bucket length in seconds, so a sub-minute chart can label its axis in seconds —
+ *   without it every bar on a 1s chart reads as the same HH:MM and the axis says nothing.
  */
-export default function MemeChart({ candles, fitKey }) {
+export default function MemeChart({ candles, fitKey, seconds = 60 }) {
   const hostRef = useRef(null)
   const apiRef = useRef({})
   const drawRef = useRef({ lines: [], priceLines: [], markers: [], pending: null })
@@ -151,7 +153,17 @@ export default function MemeChart({ candles, fitKey }) {
       candle.applyOptions({ priceFormat: { type: 'price', precision: p, minMove: Math.pow(10, -p) } })
     }
 
-    const sameSeries = prev && prev.fitKey === fitKey && prev.palette === pal && prev.first === candles[0].time
+    const sameChart = prev && prev.fitKey === fitKey && prev.palette === pal
+    const sameSeries = sameChart && prev.first === candles[0].time
+    const settle = () => {
+      const settled = candles[candles.length - 2]
+      if (!usable(settled) || !usable(last)) return false
+      candle.update(bar(settled))
+      volume.update(vol(settled))
+      candle.update(bar(last))
+      volume.update(vol(last))
+      return true
+    }
     // The newest bucket moved in place: one point, not a dataset.
     if (sameSeries && candles.length === prev.len && last.time === prev.last) {
       if (!usable(last)) return
@@ -159,12 +171,16 @@ export default function MemeChart({ candles, fitKey }) {
       volume.update(vol(last))
     // A bucket closed and a new one opened: settle the old one, then append.
     } else if (sameSeries && candles.length === prev.len + 1 && candles[candles.length - 2].time === prev.last) {
-      const settled = candles[candles.length - 2]
-      if (!usable(settled) || !usable(last)) return
-      candle.update(bar(settled))
-      volume.update(vol(settled))
-      candle.update(bar(last))
-      volume.update(vol(last))
+      if (!settle()) return
+    // The same, with the retention window full, so mergeCandle dropped the oldest bar as it
+    // appended and the length did not change. Without this case a 1s chart would fall through to
+    // a 600-bar setData on every single bucket once the first ten minutes were up — the exact
+    // cost the branches above exist to avoid, just deferred. The bar that left the array stays
+    // drawn until the next genuine rebuild, which is cheaper and more useful than re-sending the
+    // series to forget it.
+    } else if (sameChart && candles.length === prev.len && last.time > prev.last
+      && candles[candles.length - 2]?.time === prev.last) {
+      if (!settle()) return
     } else {
       // Anything else — a new token, a timeframe change, backfilled history, a
       // theme flip — is a genuine replacement, and update() cannot express it.
@@ -175,6 +191,11 @@ export default function MemeChart({ candles, fitKey }) {
     }
     appliedRef.current = { len: candles.length, first: candles[0].time, last: last.time, palette: pal, fitKey }
   }, [candles, pal, fitKey])
+
+  useEffect(() => {
+    const { chart } = apiRef.current
+    if (chart) chart.timeScale().applyOptions({ secondsVisible: seconds < 60 })
+  }, [seconds])
 
   // Switching theme restyles the live chart instead of rebuilding it.
   useEffect(() => {

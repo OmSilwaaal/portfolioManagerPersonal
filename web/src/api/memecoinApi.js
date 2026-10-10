@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react'
 import { baseApi } from './baseApi'
 import { paperTradingApi } from './paperTradingApi'
 import { liveUpdates, isLive, subscribeLive, applyLiveCandles } from './liveFeed'
+import { isLiveOnlyTf } from './candleMerge.mjs'
 import {
   mockTrending, mockNew, mockSearch, mockTokenDetail, mockOhlcv, mockTrades, mockQuote,
 } from './memecoinMock'
@@ -35,9 +36,43 @@ const unwrap = (d, key) => (Array.isArray(d) ? d : d?.[key] ?? d?.data ?? d)
  * (and the dev mocks) use camelCase. Normalisers are idempotent: fields already in UI shape win. */
 const pick = (...v) => v.find((x) => x !== undefined && x !== null) ?? null
 
+/* ─── Market cap at the price stream's cadence ───────────────────────────────
+ * Market cap is price x supply, and supply is the half that barely moves: a mint's supply
+ * changes when someone mints or burns, which for a memecoin is approximately never, while the
+ * price changes four times a second. So the supply implied by the aggregator's own (mcap, price)
+ * pair is remembered, and every live price tick recomputes the cap from it — instead of the
+ * header's MCap sitting still for 10-30s waiting for the next snapshot while the price above it
+ * moves. Only a pair that came from upstream is ever used to derive it, so the ratio can never
+ * drift by being recomputed from a figure we ourselves computed.
+ *
+ * Bounded: a list render normalises every row, and an unbounded map here would quietly hold
+ * every token the session ever scrolled past. */
+const SUPPLY_MAX = 200
+const supplies = new Map()
+
+function noteSupply(address, marketCap, price) {
+  if (!address) return
+  const cap = Number(marketCap)
+  const p = Number(price)
+  if (!Number.isFinite(cap) || !Number.isFinite(p) || cap <= 0 || p <= 0) return
+  if (!supplies.has(address) && supplies.size >= SUPPLY_MAX) {
+    supplies.delete(supplies.keys().next().value) // insertion order: the oldest is the stalest
+  }
+  supplies.set(address, cap / p)
+}
+
+/** Market cap for a live price, or null when no upstream snapshot has pinned the supply yet. */
+export function liveMarketCap(address, price) {
+  const supply = supplies.get(address)
+  const p = Number(price)
+  if (!supply || !Number.isFinite(p) || p <= 0) return null
+  return supply * p
+}
+
 export function normToken(t) {
   if (!t || typeof t !== 'object') return t
   const created = t.pair?.created_at
+  noteSupply(t.address, pick(t.marketCap, t.mcap, t.fdv), t.price)
   return {
     ...t,
     marketCap: pick(t.marketCap, t.mcap, t.fdv),
@@ -174,17 +209,28 @@ function plain(request, transform, { retry = false } = {}) {
  * not a fresh [], is what stops each poll from wiping the live buckets that have formed since. */
 const isNoPool = (err) => err?.status === 404
 
+/** Whatever the cache already holds for this series, or []. */
+const heldSeries = (arg, api) => {
+  const held = memecoinApi.endpoints.getMemecoinOhlcv.select(arg)(api.getState())?.data
+  return Array.isArray(held) ? held : []
+}
+
 // No attempt() here on purpose: the chart panel retries this one itself, so that the user can see
 // it happening, and two retry layers would multiply into a dozen requests for one click.
 function ohlcvQueryFn(arg, api, _extra, baseQuery) {
+  // 1s and 15s are ours alone. Asking for them would be a request we know the answer to: the
+  // backend rejects any timeframe shorter than a minute with a 400, because no aggregator cuts
+  // one. So the request is not made — the cache entry exists purely as the place the live
+  // buckets land, and the series is returned as-is so a remount keeps what has accumulated.
+  if (isLiveOnlyTf(arg.tf)) {
+    return Promise.resolve({ data: tagReason(applyLiveCandles(arg, heldSeries(arg, api)), 'live-only') })
+  }
   const url = `/memecoins/${arg.address}/ohlcv?tf=${arg.tf}`
   return baseQuery(url).then((res) => {
     noteRateLimit(res)
     if (!res.error) return { data: applyLiveCandles(arg, unwrap(res.data, 'candles')) }
     if (isNoPool(res.error)) {
-      const held = memecoinApi.endpoints.getMemecoinOhlcv.select(arg)(api.getState())?.data
-      const series = Array.isArray(held) ? held : []
-      return { data: tagReason(applyLiveCandles(arg, series), 'no-pool') }
+      return { data: tagReason(applyLiveCandles(arg, heldSeries(arg, api)), 'no-pool') }
     }
     if (USE_MOCK_ON_FAIL && res.error.status !== 429) return { data: tagMock(mockOhlcv(arg.address, arg.tf)) }
     return { error: res.error }
