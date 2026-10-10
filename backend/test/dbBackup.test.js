@@ -16,7 +16,7 @@ process.env.DB_BACKUP_DIR = path.join(ROOT, 'backups');
 const test = require('node:test');
 const assert = require('node:assert');
 const Database = require('better-sqlite3');
-const { backupOnce, listBackups, backupDir } = require('../src/db/backup');
+const { backupOnce, listBackups, backupDir, reclaimSpaceIfTight } = require('../src/db/backup');
 const { tableRowCounts } = require('../src/db/stats');
 
 const open = (file) => { const d = new Database(file); d.pragma('journal_mode = WAL'); return d };
@@ -141,4 +141,41 @@ test('the newest backup is never deleted, even alone over budget', async () => {
   db.close();
   assert.ok(r.file)
   assert.strictEqual(listBackups(dir).length, 1, 'a volume too small for one backup is a sizing problem, not a reason to keep none');
+})
+
+// The smallest Railway volume is 0.5GB and cannot be resized without a paid plan, so when it
+// fills, recovery may mean a shell the operator does not have. Reclaiming at boot turns that
+// into "redeploy". It may only ever delete backups, and never the newest one.
+test('a nearly-full volume is relieved by dropping old backups, newest kept', async () => {
+  const dir = path.join(ROOT, 'reclaim');
+  const db = open(path.join(ROOT, 'reclaim-src.sqlite'));
+  db.exec('CREATE TABLE t (a)');
+  const ins = db.prepare('INSERT INTO t VALUES (?)');
+  for (let i = 0; i < 300; i++) ins.run('z'.repeat(200));
+  const made = [];
+  for (let i = 0; i < 4; i++) {
+    const r = await backupOnce({ db, dir, keep: 10 });
+    assert.ok(r.file, JSON.stringify(r));
+    made.push(path.basename(r.file));
+    await new Promise((res) => setTimeout(res, 5));
+  }
+  db.close();
+  assert.strictEqual(listBackups(dir).length, 4, 'precondition: four copies on disk');
+
+  // minFree above anything the real filesystem reports, so the "tight" branch always runs.
+  const out = reclaimSpaceIfTight(dir, { minFree: Number.MAX_SAFE_INTEGER });
+  const left = listBackups(dir);
+  assert.ok(out.removed >= 1, 'something was freed');
+  assert.strictEqual(left.length, 1, 'it stops at the newest rather than deleting everything');
+  assert.strictEqual(left[0].name, made[made.length - 1], 'and the newest is the one kept');
+})
+
+test('a volume with room is left completely alone', () => {
+  const dir = path.join(ROOT, 'roomy');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, `${'market_intelligence-'}2020-01-01T00-00-00-000.sqlite`), 'x');
+  const before = listBackups(dir).length;
+  const out = reclaimSpaceIfTight(dir, { minFree: 1 }); // 1 byte: there is always more than this
+  assert.strictEqual(out.removed, 0);
+  assert.strictEqual(listBackups(dir).length, before, 'nothing deleted when there is space');
 })

@@ -136,9 +136,46 @@ async function backupOnce({ db, dir = backupDir(), keep = Number(process.env.DB_
  * Back up at startup and on an interval. DB_BACKUP=off disables; the interval
  * can be tuned with DB_BACKUP_EVERY_MS and the depth with DB_BACKUP_KEEP.
  */
+/**
+ * Give back disk when the volume is nearly full, at boot, before anything tries to write.
+ *
+ * Written after a production outage where the volume filled and every write failed with
+ * "database or disk is full". The smallest Railway volume is 0.5GB and cannot be resized
+ * without a paid plan, so the recovery was a shell the operator may not have — which makes
+ * self-recovery on deploy the difference between a redeploy and being stuck.
+ *
+ * Only backups are ever deleted, and never the newest one. A backup is by definition a copy;
+ * the live database and radar's data are not, so neither is touched here.
+ */
+function reclaimSpaceIfTight(dir = backupDir(), { minFree = MIN_FREE_BYTES } = {}) {
+  if (!dir || !fs.existsSync(dir)) return { freed: 0, removed: 0 };
+  const before = freeBytes(dir);
+  if (before === null || before >= minFree) return { freed: 0, removed: 0, free: before };
+
+  const all = listBackups(dir);
+  let freed = 0;
+  let removed = 0;
+  // Oldest first, stopping as soon as there is room again — a panic is not a reason to throw
+  // away every copy, only the ones standing between us and a working service.
+  for (const b of all.slice(1).reverse()) {
+    if ((freeBytes(dir) ?? 0) >= minFree) break;
+    try { fs.rmSync(b.file, { force: true }); freed += b.size; removed += 1 } catch { /* keep going */ }
+  }
+  const after = freeBytes(dir);
+  console.warn(`[db] low disk: ${(before / 1048576).toFixed(0)}MB free, removed ${removed} backup(s) to recover ${(freed / 1048576).toFixed(0)}MB — now ${((after ?? 0) / 1048576).toFixed(0)}MB free`);
+  if ((after ?? 0) < minFree) {
+    console.warn('[db] STILL LOW. Backups are not what is filling this volume — check radar.sqlite with `npm run db:space`. Deleting radar.sqlite is safe: it holds collected market data, no user data.');
+  }
+  return { freed, removed, free: after };
+}
+
 function startBackups(db, { dir = backupDir(), everyMs = Number(process.env.DB_BACKUP_EVERY_MS) || DEFAULT_EVERY_MS } = {}) {
   if (process.env.DB_BACKUP === 'off') { console.log('[db] backups disabled (DB_BACKUP=off)'); return null; }
   if (!dir) { console.log('[db] backups off — set DB_BACKUP_DIR to enable them locally'); return null; }
+
+  // Before anything else: if the volume is nearly full the service cannot write at all, and
+  // the cheapest thing we own is an old backup.
+  reclaimSpaceIfTight(dir);
 
   const run = async (why) => {
     const r = await backupOnce({ db, dir });
@@ -154,4 +191,4 @@ function startBackups(db, { dir = backupDir(), everyMs = Number(process.env.DB_B
   return timer;
 }
 
-module.exports = { startBackups, backupOnce, listBackups, backupDir, PREFIX, SUFFIX };
+module.exports = { startBackups, backupOnce, listBackups, backupDir, reclaimSpaceIfTight, MIN_FREE_BYTES, PREFIX, SUFFIX };
