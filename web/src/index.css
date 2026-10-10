@@ -12,18 +12,18 @@
      ochre and moss all sit between 37 and 84 degrees — a neutral #0b0b0b behind
      warm glyphs made them read as grubby rather than drawn. Every step keeps at
      least 13:1 against --paper, so nothing lost contrast in the move. */
-  --ink-950:  #070704;  /* deepest recess: inputs, chart wells */
-  --ink-900:  #13120c;  /* page background */
-  --ink-800:  #1f1d14;  /* raised panel — 1.11 on the page, so it lifts without a border */
-  --ink-700:  #2b2819;  /* hover / selected row */
-  --ink-600:  #39351f;  /* pressed / strong neutral fill */
+  --ink-950:  #000000;  /* true black: chart wells, inputs, the deepest recess */
+  --ink-900:  #070707;  /* page background */
+  --ink-800:  #141414;  /* raised panel — 1.22 on the page, so it lifts without needing a border */
+  --ink-700:  #222222;  /* hover / selected row */
+  --ink-600:  #303030;  /* pressed / strong neutral fill */
 
   /* Terminal surfaces. The canvas is darker than the page so floating panels
      read as above it, and the texture is the ASCII backdrop's glyph colour:
      1.13 against the canvas, which is present as grain and nothing more. */
-  --terminal-canvas:  #0d0c08;
-  --terminal-texture: #1d1b12;
-  --paper:    #f0ebe0;
+  --terminal-canvas:  #000000;
+  --terminal-texture: #171717;
+  --paper:    #ffffff;
   --paper-warm: #ece5d5;
   --paper-cool: #f6f3eb;
 
@@ -64,15 +64,15 @@
   /* Price deltas */
   /* Lifted from #7ea968 / #d35c4a: on the raised panel those sat at 6.2 and
      4.3, and the red missed AA for body text. These read 7.4 and 5.0. */
-  --positive: #8cb874;
-  --negative: #dd6a56;
+  --positive: #4ade80;
+  --negative: #f87171;
 
   /* Buy/sell action fills. Saturated enough to find without reading, with the
      label in ink rather than paper — ink on these clears 7.8 and 4.8. */
-  --buy:      #6cb24f;
-  --buy-ink:  #070704;
-  --sell:     #d44e38;
-  --sell-ink: #070704;
+  --buy:      #22c55e;
+  --buy-ink:  #000000;
+  --sell:     #ef4444;
+  --sell-ink: #000000;
 
   /* Party (gov trades) */
   --party-dem: #5b7fbb;
@@ -80,14 +80,14 @@
   --party-ind: var(--stone-200);
 
   /* On-ink state layers */
-  --on-ink-1:      rgba(240,235,224,0.04);
-  --on-ink-2:      rgba(240,235,224,0.08);
-  --on-ink-3:      rgba(240,235,224,0.12);
-  --on-ink-border: rgba(240,235,224,0.09);
-  --on-ink-text-1: #f0ebe0;
-  --on-ink-text-2: rgba(240,235,224,0.74);
-  --on-ink-text-3: rgba(240,235,224,0.52);
-  --on-ink-text-4: rgba(240,235,224,0.34);
+  --on-ink-1:      rgba(255,255,255,0.045);
+  --on-ink-2:      rgba(255,255,255,0.09);
+  --on-ink-3:      rgba(255,255,255,0.16);
+  --on-ink-border: rgba(255,255,255,0.13);
+  --on-ink-text-1: #ffffff;
+  --on-ink-text-2: rgba(255,255,255,0.76);
+  --on-ink-text-3: rgba(255,255,255,0.56);
+  --on-ink-text-4: rgba(255,255,255,0.38);
 
   /* On-paper state layers */
   --on-paper-1:      rgba(11,11,11,0.04);
