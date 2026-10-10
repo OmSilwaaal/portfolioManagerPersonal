@@ -70,6 +70,18 @@ router.use((_req, _res, next) => {
 
 router.get('/trending', h(async (_req, res) => res.json(await data.getTrending())));
 router.get('/new', h(async (_req, res) => res.json(await data.getNew())));
+// Tokens trading on a pump.fun curve right now, straight from our own index. No aggregator in
+// this path at all, so it is not subject to the rate limit that caps the other two lists and
+// cannot make anyone wait on an upstream. Empty when the indexer is off, which is the honest
+// answer rather than quietly serving a different list.
+router.get('/live', h(async (req, res) => {
+  const n = parseInt(req.query.limit, 10);
+  const age = parseInt(req.query.maxAgeS, 10);
+  res.json(data.getLivePump({
+    limit: Number.isFinite(n) ? n : undefined,
+    maxAgeS: Number.isFinite(age) ? age : undefined,
+  }));
+}));
 router.get('/search', h(async (req, res) => res.json(await data.search(req.query.q))));
 
 async function ensurePortfolio(userId) {

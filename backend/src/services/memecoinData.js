@@ -633,6 +633,60 @@ function fromIndexRow(r) {
   };
 }
 
+/**
+ * A pump.fun bonding-curve row, as a list token.
+ *
+ * Unlike fromIndexRow this one DOES carry a price and a market cap, because a curve is not a
+ * remembered figure — it is the chain's own current state, read off the account seconds ago and
+ * typically well ahead of what an aggregator is reporting. Everything a curve genuinely cannot
+ * tell us stays null rather than zero: there is no DEX pair, so no volume, no interval changes
+ * and no holder count, and liquidity is deliberately omitted because a curve's virtual reserves
+ * are not pool liquidity and quoting them as such would mislead the low-liquidity warning.
+ */
+function fromCurveRow(r) {
+  const symbol = cleanSymbol(r.symbol, r.address);
+  return {
+    address: r.address,
+    symbol,
+    name: cleanName(r.name, r.address, symbol),
+    price: num(r.price_usd),
+    price_sol: num(r.price_sol),
+    mcap: num(r.mcap),
+    fdv: num(r.mcap),
+    liquidity_usd: null,
+    volume_5m: null, volume_1h: null, volume_6h: null, volume_24h: null,
+    change_5m: null, change_1h: null, change_6h: null, change_24h: null,
+    buy_count: null, sell_count: null, buys_5m: null, sells_5m: null, holders: null,
+    pair: null,
+    image: null,
+    source: 'curve',
+    // Pre-migration by construction: liveCurves excludes completed curves.
+    curve_progress: num(r.progress),
+    last_seen: r.updated_ts ? r.updated_ts * 1000 : null,
+  };
+}
+
+const LIVE_MAX_AGE_S = 300;
+const LIVE_LIMIT = 60;
+
+/**
+ * Tokens trading on a pump.fun curve right now, newest trade first, served entirely from our own
+ * index. No aggregator call, so no rate limit and none of the 20-rows-per-page ceiling that caps
+ * the other lists — and nothing here can make a user wait on an upstream, because there is no
+ * upstream in this path. Empty when the indexer is off, which is the honest answer rather than
+ * quietly falling back to a different list.
+ */
+function getLivePump({ limit = LIVE_LIMIT, maxAgeS = LIVE_MAX_AGE_S, minMcap = 0 } = {}) {
+  // Required lazily, like every other tokenIndex call here, so a store problem degrades this one
+  // list to empty instead of taking the module down with it.
+  try {
+    return require('./tokenIndex').liveCurves({ limit, maxAgeS, minMcap }).map(fromCurveRow);
+  } catch (err) {
+    console.error('[tokenIndex]', err.message);
+    return [];
+  }
+}
+
 function searchIndex(query, limit) {
   try { return require('./tokenIndex').searchIndex(query, limit); } catch (err) { console.error('[tokenIndex]', err.message); return []; }
 }
@@ -895,7 +949,7 @@ module.exports = {
   MemecoinDataError, isValidAddress, getTrending, getNew, search, getToken,
   getOhlcv, getTrades, getSolPrice, getQuote, SOL_MINT,
   sanitizeText, cleanSymbol, cleanName, cleanUrl, shortMint, fromDexPair, fromGeckoPool,
-  matchTier, fromIndexRow, GECKO_DEEP_PAGES, DEEP_WARM_PER_LOAD, SEARCH_RESULTS, POOL_TTL,
+  matchTier, fromIndexRow, fromCurveRow, getLivePump, LIVE_MAX_AGE_S, LIVE_LIMIT, GECKO_DEEP_PAGES, DEEP_WARM_PER_LOAD, SEARCH_RESULTS, POOL_TTL,
   // what the warmer needs to know about the cache without duplicating any of its key shapes
   freshFor, cacheAge, ohlcvKey,
   // test helpers: what the long-lived address -> pool mapping currently holds
