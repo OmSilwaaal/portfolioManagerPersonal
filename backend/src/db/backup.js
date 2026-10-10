@@ -136,6 +136,42 @@ async function backupOnce({ db, dir = backupDir(), keep = Number(process.env.DB_
  * Back up at startup and on an interval. DB_BACKUP=off disables; the interval
  * can be tuned with DB_BACKUP_EVERY_MS and the depth with DB_BACKUP_KEEP.
  */
+/** What is on the volume and how big, newest-useful-first. Never throws, never writes. */
+function volumeBreakdown(dir) {
+  const out = [];
+  const mb = (n) => `${(n / 1048576).toFixed(1)}MB`;
+  try {
+    const root = path.dirname(dir); // backups live beside the databases
+    for (const name of fs.readdirSync(root)) {
+      const full = path.join(root, name);
+      let st;
+      try { st = fs.statSync(full) } catch { continue }
+      if (st.isDirectory()) {
+        let total = 0;
+        try { for (const f of fs.readdirSync(full)) total += fs.statSync(path.join(full, f)).size } catch { /* partial is fine */ }
+        out.push(`${name}/  ${mb(total)}`);
+      } else out.push(`${name}  ${mb(st.size)}`);
+    }
+    // For each database, the tables actually holding the rows — the question after "which
+    // file is big" is always "which table", and deleting a whole file is rarely the answer.
+    for (const name of fs.readdirSync(root).filter((f) => f.endsWith('.sqlite'))) {
+      const full = path.join(root, name);
+      try {
+        const Database = require('better-sqlite3');
+        const d = new Database(full, { readonly: true });
+        const rows = d.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all()
+          .map((r) => { try { return { name: r.name, n: d.prepare(`SELECT COUNT(*) AS n FROM "${r.name.replace(/"/g, '""')}"`).get().n } } catch { return { name: r.name, n: 0 } } })
+          .filter((r) => r.n > 0).sort((a, b) => b.n - a.n).slice(0, 5);
+        const free = d.pragma('freelist_count', { simple: true }) * d.pragma('page_size', { simple: true });
+        d.close();
+        if (rows.length) out.push(`${name} biggest tables: ${rows.map((r) => `${r.name}=${r.n}`).join(' ')}`);
+        if (free > 0) out.push(`${name} would release ${mb(free)} if VACUUMed (needs free space to run)`);
+      } catch { /* a database we cannot read tells us nothing, and must not stop the boot */ }
+    }
+  } catch { /* the breakdown is a courtesy; never let it break startup */ }
+  return out;
+}
+
 /**
  * Give back disk when the volume is nearly full, at boot, before anything tries to write.
  *
@@ -164,7 +200,11 @@ function reclaimSpaceIfTight(dir = backupDir(), { minFree = MIN_FREE_BYTES } = {
   const after = freeBytes(dir);
   console.warn(`[db] low disk: ${(before / 1048576).toFixed(0)}MB free, removed ${removed} backup(s) to recover ${(freed / 1048576).toFixed(0)}MB — now ${((after ?? 0) / 1048576).toFixed(0)}MB free`);
   if ((after ?? 0) < minFree) {
-    console.warn('[db] STILL LOW. Backups are not what is filling this volume — check radar.sqlite with `npm run db:space`. Deleting radar.sqlite is safe: it holds collected market data, no user data.');
+    console.warn('[db] STILL LOW — backups were not what filled this volume.');
+    // Print the breakdown rather than telling someone to go and find it. On the smallest
+    // volumes there may be no shell to run a diagnostic from, so the deploy log has to be
+    // enough to decide what to delete. Read-only: reads succeed on a full disk, writes do not.
+    for (const line of volumeBreakdown(dir)) console.warn(`[db]   ${line}`);
   }
   return { freed, removed, free: after };
 }
@@ -191,4 +231,4 @@ function startBackups(db, { dir = backupDir(), everyMs = Number(process.env.DB_B
   return timer;
 }
 
-module.exports = { startBackups, backupOnce, listBackups, backupDir, reclaimSpaceIfTight, MIN_FREE_BYTES, PREFIX, SUFFIX };
+module.exports = { startBackups, backupOnce, listBackups, backupDir, reclaimSpaceIfTight, volumeBreakdown, MIN_FREE_BYTES, PREFIX, SUFFIX };

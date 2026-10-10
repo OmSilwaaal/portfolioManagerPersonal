@@ -41,8 +41,15 @@ const memecoinsRouter = require('./routes/memecoins');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const { sessionMiddleware, requireAuth } = require('./middleware/auth');
 
-// Initialize DB on startup, then keep rotating backups of it beside it on the volume
-require('./db/backup').startBackups(require('./db/schema').getDb());
+// Give the disk room BEFORE opening the database. On a full volume `initSchema` throws
+// SQLITE_FULL and the process dies during boot, so anything that recovers space has to run
+// ahead of it — written as separate statements because `startBackups(getDb())` evaluates the
+// argument first, which put the open before the recovery and made the recovery unreachable
+// in exactly the case it exists for.
+require('./db/backup').reclaimSpaceIfTight();
+const appDb = require('./db/schema').getDb();
+// Then keep rotating backups of it beside it on the volume.
+require('./db/backup').startBackups(appDb);
 const { warmCoinList } = require('./services/search');
 warmCoinList();
 const { startAlertPoller } = require('./services/alertPoller');
@@ -78,6 +85,12 @@ require('./radar').startRadar();
 // Enable the optional smart-money / social radar feature groups when their collectors are on (RADAR_EXTRA_FEATURES=off disables)
 try { require('./radar').configureExtraFeatures(); } catch (err) { console.error('[radar] extra features not configured:', err.message); }
 require('./services/snapshotCollector').startSnapshotCollector();
+
+// Refreshes the trending/new lists and the watched tokens' rows and bars just before their cache
+// entries expire, so an arriving request finds a fresh value rather than a stale one. Strictly
+// inside the opportunistic half of the GeckoTerminal budget, and it stops ticking when nothing is
+// watched and nothing has been asked for — see services/memecoinWarmer.
+require('./services/memecoinWarmer').startMemecoinWarmer();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -134,7 +147,12 @@ app.use(sessionMiddleware);
 // the public-ish REST routes return), so it needs no session, and it enforces its own
 // per-IP connection cap instead — see services/memecoinStream.
 const memecoinStream = require('./services/memecoinStream');
-app.get('/api/memecoins/stream', memecoinStream.handler);
+app.get('/api/memecoins/stream', (req, res) => {
+  // A connect is the strongest demand signal there is; the hub's own client count keeps the warmer
+  // awake from here on, but something has to wake it if it had gone idle.
+  try { require('./services/memecoinWarmer').noteDemand(); } catch (_) { /* warming is optional */ }
+  return memecoinStream.handler(req, res);
+});
 
 // ── RATE LIMITERS ─────────────────────────────────────────────────────────────
 function makeLimiter(windowMs, max, message) {
