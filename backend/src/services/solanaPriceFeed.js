@@ -24,12 +24,11 @@
 // request/socket URL, is never logged (see heliusLaunches' redact) and never appears in
 // anything emitted to a client — the frames carry an address, a price and a source string.
 
-const WebSocket = require('ws');
 const { PublicKey } = require('@solana/web3.js');
 const { redact, PUMP_FUN_PROGRAM } = require('./heliusLaunches');
+const { createHeliusSocket } = require('./heliusSocket');
 const data = require('./memecoinData');
 
-const HELIUS_WS = 'wss://mainnet.helius-rpc.com';
 const HELIUS_RPC = 'https://mainnet.helius-rpc.com';
 
 // The curve account is a PDA of the mint, so there is no registry to look up: seed + mint +
@@ -64,13 +63,8 @@ const MAX_TOKENS = 20;
 // chain, which is the part we cannot do anything about.
 const MIN_EMIT_INTERVAL_MS = 100;
 
-// Same shape as the client's reconnect in web/src/api/liveFeed.js.
-const BACKOFF_MIN = 1_000;
-const BACKOFF_MAX = 60_000;
-// Helius closes an idle socket without notice, and a half-open TCP connection looks fine from
-// here forever. Ping on a timer, and treat silence past STALE_MS as dead.
-const PING_MS = 30_000;
-const STALE_MS = 90_000;
+// Reconnect, keepalive and staleness all live in heliusSocket now — see there for why each
+// one exists. Only the cadences this module owns are left here.
 // memecoinData caches SOL/USD for 15s; refreshing on the same cadence means the notification
 // handler never has to await anything, so emits stay in slot order.
 const SOL_REFRESH_MS = 15_000;
@@ -193,7 +187,6 @@ function createFeed(env = process.env, opts = {}) {
   const setTimer = opts.setTimer || setTimeout;
   const clearTimer = opts.clearTimer || clearTimeout;
   const fetchImpl = opts.fetchImpl || globalThis.fetch;
-  const createSocket = opts.createSocket || ((url) => new WebSocket(url));
   const log = opts.log || console;
   const onPrice = opts.onPrice || ((p) => {
     // Lazy so neither module has to be loaded before the other, and so a hub that syncs its
@@ -204,15 +197,39 @@ function createFeed(env = process.env, opts = {}) {
   const subs = new Map();     // mint -> { curve, subId, reqId, decimals, migrated }
   const bySubId = new Map();  // subscription id -> mint
   const pendingReq = new Map(); // json-rpc id -> mint
-  let ws = null;
   let nextId = 1;
-  let attempts = 0;
-  let retryTimer = null;
-  let pingTimer = null;
   let solTimer = null;
-  let lastMsgAt = 0;
   let solUsd = null;
   let stopped = false;
+
+  // One socket for this feed, with reconnect, keepalive and teardown handled there. `onOpen` is
+  // the whole reconnect story: the server kept no subscriptions for us, so everything watched
+  // has to be re-asked for.
+  const sock = createHeliusSocket({
+    key,
+    tag: 'solana-price',
+    now,
+    setTimer,
+    clearTimer,
+    log,
+    createSocket: opts.createSocket,
+    shouldConnect: () => subs.size > 0,
+    onMessage,
+    onOpen: () => {
+      for (const [mint, s] of subs) {
+        s.subId = null;
+        s.reqId = null;
+        if (!s.migrated) subscribe(mint);
+      }
+      startSolTimer();
+    },
+    onDrop: () => {
+      stopSolTimer();
+      bySubId.clear();
+      pendingReq.clear();
+      for (const s of subs.values()) { s.subId = null; s.reqId = null; }
+    },
+  });
 
   const coalescer = createCoalescer({
     minIntervalMs: opts.minIntervalMs ?? MIN_EMIT_INTERVAL_MS,
@@ -299,10 +316,7 @@ function createFeed(env = process.env, opts = {}) {
   }
 
   // ── subscriptions ─────────────────────────────────────────────────────────
-  function send(msg) {
-    if (!ws || ws.readyState !== 1) return false;
-    try { ws.send(JSON.stringify(msg)); return true; } catch (_) { return false; }
-  }
+  const send = (msg) => sock.send(msg);
 
   function subscribe(mint) {
     const s = subs.get(mint);
@@ -355,7 +369,7 @@ function createFeed(env = process.env, opts = {}) {
 
     // Nothing to watch: hold no socket at all rather than an idle one.
     if (!subs.size) { teardown(); return; }
-    connect();
+    sock.connect();
   }
 
   // ── notifications ─────────────────────────────────────────────────────────
@@ -393,7 +407,6 @@ function createFeed(env = process.env, opts = {}) {
   }
 
   function onMessage(raw) {
-    lastMsgAt = now();
     let msg;
     try { msg = JSON.parse(typeof raw === 'string' ? raw : raw.toString()); } catch (_) { return; }
 
@@ -420,66 +433,9 @@ function createFeed(env = process.env, opts = {}) {
     bySubId.set(msg.result, mint);
   }
 
-  // ── socket lifecycle ──────────────────────────────────────────────────────
-  function connect() {
-    if (stopped || ws || !subs.size) return;
-    clearTimer(retryTimer);
-    retryTimer = null;
-    let socket;
-    try {
-      socket = createSocket(`${HELIUS_WS}/?api-key=${key}`);
-    } catch (err) {
-      log.error('[solana-price] socket:', redact(err.message));
-      scheduleReconnect();
-      return;
-    }
-    ws = socket;
-    lastMsgAt = now();
-
-    socket.on('open', () => {
-      if (ws !== socket) { try { socket.close(); } catch (_) { /* already gone */ } return; }
-      attempts = 0;
-      lastMsgAt = now();
-      // A reconnect starts with no server-side state: everything watched has to be re-asked for.
-      for (const [mint, s] of subs) {
-        s.subId = null;
-        s.reqId = null;
-        if (!s.migrated) subscribe(mint);
-      }
-      startTimers();
-    });
-    socket.on('message', (raw) => { if (ws === socket) onMessage(raw); });
-    socket.on('pong', () => { if (ws === socket) lastMsgAt = now(); });
-    socket.on('error', (err) => {
-      if (ws !== socket) return;
-      log.error('[solana-price] socket:', redact(err?.message || 'error'));
-    });
-    socket.on('close', () => {
-      if (ws !== socket) return;
-      dropSocket();
-      scheduleReconnect();
-    });
-  }
-
-  function startTimers() {
-    stopTimers();
-    pingTimer = setTimer(function tick() {
-      if (!ws) return;
-      if (now() - lastMsgAt > STALE_MS) {
-        // Silent for longer than any healthy socket goes: assume half-open and start over.
-        log.error('[solana-price] socket silent, reconnecting');
-        const dead = ws;
-        dropSocket();
-        try { (dead.terminate || dead.close).call(dead); } catch (_) { /* already gone */ }
-        scheduleReconnect();
-        return;
-      }
-      try { ws.ping?.(); } catch (_) { /* a failed ping shows up as a close */ }
-      pingTimer = setTimer(tick, PING_MS);
-      if (pingTimer?.unref) pingTimer.unref();
-    }, PING_MS);
-    if (pingTimer?.unref) pingTimer.unref();
-
+  // ── the one timer this module still owns ──────────────────────────────────
+  function startSolTimer() {
+    stopSolTimer();
     refreshSolUsd();
     solTimer = setTimer(function tick() {
       refreshSolUsd();
@@ -489,53 +445,29 @@ function createFeed(env = process.env, opts = {}) {
     if (solTimer?.unref) solTimer.unref();
   }
 
-  function stopTimers() {
-    clearTimer(pingTimer);
+  function stopSolTimer() {
     clearTimer(solTimer);
-    pingTimer = null;
     solTimer = null;
-  }
-
-  /** Forget the socket and every subscription id it owned; the watched set itself survives. */
-  function dropSocket() {
-    const dead = ws;
-    ws = null;
-    stopTimers();
-    bySubId.clear();
-    pendingReq.clear();
-    for (const s of subs.values()) { s.subId = null; s.reqId = null; }
-    if (dead) { try { dead.close(); } catch (_) { /* already gone */ } }
-  }
-
-  function scheduleReconnect() {
-    if (stopped || retryTimer || !subs.size) return;
-    attempts = Math.min(attempts + 1, 16);
-    const capped = Math.min(BACKOFF_MAX, BACKOFF_MIN * 2 ** (attempts - 1));
-    // Jitter so a Helius blip does not have every container coming back in lockstep.
-    const wait = capped * (0.5 + Math.random() * 0.5);
-    retryTimer = setTimer(() => { retryTimer = null; connect(); }, wait);
-    if (retryTimer?.unref) retryTimer.unref();
   }
 
   /** Give up the socket but stay usable: the next non-empty watched set reconnects. */
   function teardown() {
-    clearTimer(retryTimer);
-    retryTimer = null;
-    dropSocket();
+    sock.teardown();
     coalescer.stop();
   }
 
   function stop() {
     stopped = true;
-    teardown();
+    sock.stop();
+    coalescer.stop();
     subs.clear();
   }
 
   function stats() {
     return {
       enabled: true,
-      connected: Boolean(ws) && ws.readyState === 1,
-      attempts,
+      connected: sock.connected(),
+      attempts: sock.attempts(),
       watched: [...subs.keys()],
       subscribed: [...subs.values()].filter((s) => s.subId !== null).length,
       migrated: [...subs.values()].filter((s) => s.migrated).length,

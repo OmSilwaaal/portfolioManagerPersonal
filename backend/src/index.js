@@ -80,6 +80,13 @@ require('./services/heliusLaunches').startHeliusLaunches({
 // opens while the hub is actually watching something.
 require('./services/solanaPriceFeed').startPriceFeed();
 
+// Every pump.fun bonding curve on the network, off ONE Helius WebSocket, so lists and lookups
+// can come from SQLite instead of GeckoTerminal's measured 6-8 calls/min. Opt-in via
+// ENABLE_PUMP_CURVE_INDEX=true AND a key; without both it is inert and nothing changes.
+// Placed after getDb() because boot seeds its reverse index from SQLite, and after the launch
+// watcher so newly launched mints are already there to absorb.
+require('./services/pumpCurveIndex').startPumpCurveIndex();
+
 // Memecoin radar collector (Solana new pools → snapshots). Opt-in via ENABLE_RADAR=true.
 require('./radar').startRadar();
 // Enable the optional smart-money / social radar feature groups when their collectors are on (RADAR_EXTRA_FEATURES=off disables)

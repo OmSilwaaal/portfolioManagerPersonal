@@ -44,18 +44,26 @@ const TRADES_PUSHED = 40;
 
 const clientIp = (req) => req.ip || req.socket?.remoteAddress || 'unknown';
 
+/**
+ * The addresses a client asked for, capped. Returns the dropped count as well as the list,
+ * because dropping silently is how a client ends up watching the wrong coin: it used to send
+ * oldest-first, so the cap threw away the token actually on screen and nothing said so. The
+ * client side of that is fixed; `hello` now reports the cap so it cannot happen quietly again.
+ */
 function parseAddresses(q) {
   const raw = Array.isArray(q) ? q : [q];
   const out = [];
+  let dropped = 0;
   for (const entry of raw) {
     if (typeof entry !== 'string') continue;
     for (const a of entry.split(',')) {
       const addr = a.trim();
-      if (data.isValidAddress(addr) && !out.includes(addr)) out.push(addr);
-      if (out.length >= MAX_ADDRESSES_PER_CLIENT) return out;
+      if (!data.isValidAddress(addr) || out.includes(addr)) continue;
+      if (out.length >= MAX_ADDRESSES_PER_CLIENT) { dropped += 1; continue; }
+      out.push(addr);
     }
   }
-  return out;
+  return { addresses: out, dropped };
 }
 
 /**
@@ -74,6 +82,12 @@ function createHub(deps = {}) {
   const lastSent = new Map();  // dedupe key -> serialised payload
   const samples = new Map();   // address -> { price, ts, volume_5m } (previous observation)
   const volLast = new Map();   // address -> ts of the last volatility broadcast
+  // What is on somebody's screen right now, which is not the same as what the hub polls:
+  // `focused` is every address some client opened, `listed` is every row in the lists last
+  // broadcast. The market-wide curve index produces updates for thousands of tokens nobody is
+  // looking at, and these two sets are how it knows which handful to turn into frames.
+  const focused = new Set();
+  let listed = new Set();
   let running = false;
 
   // ── framing ───────────────────────────────────────────────────────────────
@@ -125,11 +139,26 @@ function createHub(deps = {}) {
   let watchedKey = '';
 
   function syncWatched() {
+    // Rebuilt before the early return below: the on-chain feed only cares about the capped
+    // top-20, but every address a client opened is still being rendered.
+    focused.clear();
+    for (const c of clients) for (const a of c.addresses) focused.add(a);
+
     const list = watched();
     const key = list.join(',');
     if (key === watchedKey) return;
     watchedKey = key;
     onWatched(list);
+  }
+
+  /**
+   * Is this token on somebody's screen? Asked by the market-wide curve index before it builds a
+   * frame, so a push covering the whole of pump.fun costs only what is actually displayed.
+   * Deliberately a set lookup: it is called once per token per flush, and recomputing the
+   * watched set there would be O(clients) per token.
+   */
+  function isDisplayed(address) {
+    return focused.has(address) || listed.has(address);
   }
 
   // ── ticks ─────────────────────────────────────────────────────────────────
@@ -144,9 +173,16 @@ function createHub(deps = {}) {
 
   async function tickCandles() {
     const byTf = new Map();
-    for (const c of clients) for (const a of c.addresses) {
-      if (!byTf.has(c.tf)) byTf.set(c.tf, new Set());
-      byTf.get(c.tf).add(a);
+    // A client that is not showing a chart is not worth a series. This is the most expensive
+    // tick the hub has — one getOhlcv per address per timeframe — and GeckoTerminal's keyless
+    // ~6-8 calls/min is the scarcest resource in the product, so a list-only tab should not
+    // spend any of it. Opt out with `candles=0`, the same shape as `lists=0`.
+    for (const c of clients) {
+      if (!c.candles) continue;
+      for (const a of c.addresses) {
+        if (!byTf.has(c.tf)) byTf.set(c.tf, new Set());
+        byTf.get(c.tf).add(a);
+      }
     }
     const allowed = new Set(watched());
     for (const [tf, addrs] of byTf) {
@@ -157,7 +193,7 @@ function createHub(deps = {}) {
         // Only the newest bucket moves; sending the whole series every 10s would defeat the point.
         const candle = candles[candles.length - 1];
         if (!changed(`ohlcv:${address}:${tf}:${candle.time}`, candle)) continue;
-        broadcast('candle', { address, tf, candle }, (c) => c.tf === tf && c.addresses.has(address));
+        broadcast('candle', { address, tf, candle }, (c) => c.candles && c.tf === tf && c.addresses.has(address));
       }
     }
   }
@@ -184,14 +220,19 @@ function createHub(deps = {}) {
   }
 
   async function tickLists() {
+    const next = [];
     for (const [list, load] of [['trending', () => d.getTrending()], ['new', () => d.getNew()]]) {
       const tokens = await load().catch(() => null);
       if (!Array.isArray(tokens) || !tokens.length) continue;
       for (const t of tokens) observe(t);
+      next.push(...tokens.map((t) => t.address));
       if (changed(`list:${list}`, tokens.map((t) => [t.address, t.price, t.liquidity_usd, t.volume_5m]))) {
         broadcast('list', { list, tokens }, (c) => c.lists);
       }
     }
+    // Replaced wholesale rather than added to, so a token that drops out of both lists stops
+    // being pushed instead of staying live forever.
+    if (next.length) listed = new Set(next);
   }
 
   // ── volatility ────────────────────────────────────────────────────────────
@@ -242,6 +283,10 @@ function createHub(deps = {}) {
     const frame = {
       address: p.address,
       price: p.price,
+      // Market cap moves with price, so a list row that updated one and not the other would
+      // contradict itself. Only sent when the producer computed it.
+      ...(Number.isFinite(p.mcap) && p.mcap > 0 ? { mcap: p.mcap } : {}),
+      ...(Number.isFinite(p.progress) ? { progress: p.progress } : {}),
       // Extremes and traded size since the previous frame, which is what the client needs to
       // build the forming candle: the price alone would lose a spike between two frames.
       high: num(p.high, p.price),
@@ -251,8 +296,10 @@ function createHub(deps = {}) {
       ts: p.ts ?? now(),
     };
     // A curve write that moves nothing (a trade too small to shift the price) is not news.
-    if (!changed(`price:${p.address}`, [frame.price, frame.high, frame.low, frame.volumeUsd])) return;
-    broadcast('price', frame, wants(p.address));
+    if (!changed(`price:${p.address}`, [frame.price, frame.high, frame.low, frame.volumeUsd, frame.mcap])) return;
+    // Anyone who opened this token, plus anyone showing a list it appears in: a live price on
+    // the focused chart and a dead one in the row above it is the same data twice.
+    broadcast('price', frame, (c) => c.addresses.has(p.address) || (c.lists && listed.has(p.address)));
   }
 
   /** New launches arrive from outside (Helius) rather than from a tick. */
@@ -307,6 +354,8 @@ function createHub(deps = {}) {
     lastSent.clear();
     samples.clear();
     volLast.clear();
+    focused.clear();
+    listed = new Set();
   }
 
   function drop(client) {
@@ -330,12 +379,14 @@ function createHub(deps = {}) {
     }
 
     const tf = TFS.has(req.query.tf) ? req.query.tf : '5m';
+    const asked = parseAddresses(req.query.address);
     const client = {
       res,
       ip,
       tf,
-      addresses: new Set(parseAddresses(req.query.address)),
+      addresses: new Set(asked.addresses),
       lists: req.query.lists !== '0',
+      candles: req.query.candles !== '0',
       closed: false,
     };
 
@@ -357,6 +408,12 @@ function createHub(deps = {}) {
     send(client, 'hello', {
       addresses: [...client.addresses],
       tf: client.tf,
+      candles: client.candles,
+      // The cap, and whether it bit. `addresses` above is authoritative either way, but saying
+      // so explicitly means a client cannot lose a token to the cap without being told.
+      maxAddresses: MAX_ADDRESSES_PER_CLIENT,
+      truncated: asked.dropped > 0,
+      dropped: asked.dropped,
       heartbeatMs: HEARTBEAT_MS,
       // Whether launches can arrive at all, so the UI need not wait for one to find out.
       // Deliberately a boolean: nothing about the upstream credential crosses this line.
@@ -377,10 +434,19 @@ function createHub(deps = {}) {
   }
 
   function stats() {
-    return { clients: clients.size, ips: byIp.size, watched: watched(), running, samples: samples.size };
+    return {
+      clients: clients.size, ips: byIp.size, watched: watched(), running, samples: samples.size,
+      displayed: focused.size + listed.size,
+      charting: [...clients].filter((c) => c.candles).length,
+    };
   }
 
-  return { handler, pushLaunch, pushPrice, stats, broadcast, stop, __clients: clients };
+  return {
+    handler, pushLaunch, pushPrice, isDisplayed, stats, broadcast, stop,
+    // Test seams: the two ticks whose cost and reach these changes are about, run on demand
+    // rather than on a timer.
+    __clients: clients, __tickLists: tickLists, __tickCandles: tickCandles,
+  };
 }
 
 function launchesEnabled() {
@@ -394,9 +460,11 @@ module.exports = {
   handler: hub.handler,
   pushLaunch: hub.pushLaunch,
   pushPrice: hub.pushPrice,
+  isDisplayed: hub.isDisplayed,
   stats: hub.stats,
   MAX_PER_IP,
   MAX_WATCHED,
+  MAX_ADDRESSES_PER_CLIENT,
   HEARTBEAT_MS,
   TICK,
 };
