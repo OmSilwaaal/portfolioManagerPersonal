@@ -13,6 +13,7 @@
     "test": "DB_PATH=\"${TMPDIR:-/tmp}/travauxus-test-$$.sqlite\" node --test test/*.test.js",
     "postinstall": "rm -rf node_modules/rpc-websockets/node_modules/uuid || true",
     "db:check": "node scripts/db-check.js",
+    "db:space": "node scripts/db-space.js",
     "db:migrate": "node scripts/db-check.js --migrate",
     "db:backup": "node scripts/db-backup.js",
     "db:restore": "node scripts/db-restore.js",

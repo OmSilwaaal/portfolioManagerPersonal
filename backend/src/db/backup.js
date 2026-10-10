@@ -27,6 +27,23 @@ const PREFIX = 'market_intelligence-';
 const SUFFIX = '.sqlite';
 const DEFAULT_KEEP = 7;
 const DEFAULT_EVERY_MS = 12 * 60 * 60 * 1000;
+// Keeping N copies by count says nothing about how much disk that is. Seven copies of a
+// database that has grown to a few hundred MB will fill a small volume, and a full volume
+// stops the app writing at all — "database or disk is full" takes the whole service down,
+// which is a far worse outcome than having one fewer backup.
+const DEFAULT_MAX_BYTES = 512 * 1024 * 1024;
+// Never consume the last of the disk. A backup is worthless if making it is what broke the app.
+const MIN_FREE_BYTES = 256 * 1024 * 1024;
+
+const maxBytes = () => Number(process.env.DB_BACKUP_MAX_BYTES) || DEFAULT_MAX_BYTES;
+
+/** Free bytes on the filesystem holding `dir`, or null when it cannot be determined. */
+function freeBytes(dir) {
+  try {
+    const st = fs.statfsSync(dir);
+    return st.bavail * st.bsize;
+  } catch { return null }
+}
 
 /** Where backups go, or null when backups are off (the local default). */
 function backupDir() {
@@ -50,11 +67,25 @@ function listBackups(dir = backupDir()) {
     .sort((a, b) => b.at - a.at);
 }
 
-/** Drop the oldest backups beyond `keep`. Only ever called after a successful write. */
-function prune(dir, keep) {
-  const extra = listBackups(dir).slice(Math.max(keep, 1));
-  for (const b of extra) { try { fs.rmSync(b.file, { force: true }) } catch { /* a backup we cannot delete is harmless */ } }
-  return extra.length;
+/**
+ * Drop the oldest backups beyond `keep`, and then beyond the byte budget. Newest first, so
+ * the copy most likely to be wanted is the last one standing.
+ */
+function prune(dir, keep, budget = maxBytes()) {
+  const all = listBackups(dir);
+  const doomed = all.slice(Math.max(keep, 1));
+  let total = 0;
+  for (const b of all.slice(0, Math.max(keep, 1))) {
+    total += b.size;
+    // Always keep at least the newest, however big it is: a volume too small for one backup
+    // is a sizing problem, and deleting everything would not fix it.
+    if (total > budget && b !== all[0]) doomed.push(b);
+  }
+  let freed = 0;
+  for (const b of new Set(doomed)) {
+    try { fs.rmSync(b.file, { force: true }); freed += b.size } catch { /* a backup we cannot delete is harmless */ }
+  }
+  return { count: new Set(doomed).size, freed };
 }
 
 /**
@@ -72,6 +103,24 @@ async function backupOnce({ db, dir = backupDir(), keep = Number(process.env.DB_
   const dest = path.join(dir, `${PREFIX}${stamp()}${SUFFIX}`);
   try {
     fs.mkdirSync(dir, { recursive: true });
+  } catch (err) {
+    return { failed: `could not create ${dir}: ${err.message}` };
+  }
+
+  // Prune BEFORE writing, not after: pruning afterwards means the peak usage is always
+  // keep+1 copies, and the peak is what fills the disk.
+  prune(dir, Number(process.env.DB_BACKUP_KEEP) || DEFAULT_KEEP);
+
+  // A backup is roughly the size of the live database. If taking one would leave the volume
+  // near empty, skip it — a missing backup is recoverable, a full volume stops every write
+  // and takes the service down with "database or disk is full".
+  const needed = (() => { try { return fs.statSync(DB_PATH).size } catch { return 0 } })();
+  const free = freeBytes(dir);
+  if (free !== null && free < needed + MIN_FREE_BYTES) {
+    return { skipped: `only ${(free / 1048576).toFixed(0)}MB free; a backup needs about ${(needed / 1048576).toFixed(0)}MB plus headroom` };
+  }
+
+  try {
     await db.backup(dest);
   } catch (err) {
     try { fs.rmSync(dest, { force: true }) } catch { /* nothing to clean up */ }
@@ -80,7 +129,7 @@ async function backupOnce({ db, dir = backupDir(), keep = Number(process.env.DB_
 
   const pruned = prune(dir, keep);
   const size = (() => { try { return fs.statSync(dest).size } catch { return 0 } })();
-  return { file: dest, size, pruned, counts, summary: summarise(counts) };
+  return { file: dest, size, pruned: pruned.count, freed: pruned.freed, counts, summary: summarise(counts) };
 }
 
 /**

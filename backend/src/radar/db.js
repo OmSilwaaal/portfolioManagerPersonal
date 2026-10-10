@@ -14,6 +14,10 @@ function getRadarDb() {
     db = new Database(DB_PATH);
     db.pragma('journal_mode = WAL');
     db.pragma('synchronous = NORMAL');
+    // A WAL grows until a checkpoint and is never truncated on its own. Two unbounded WALs on
+    // a small Railway volume are enough to fill it, and a full volume means every write fails
+    // with "database or disk is full" — the whole service, not just the write that filled it.
+    db.pragma('journal_size_limit = 67108864'); // 64MB
     migrate();
   }
   return db;

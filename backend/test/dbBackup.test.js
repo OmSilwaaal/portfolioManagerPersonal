@@ -97,3 +97,48 @@ test('row counts are what distinguish a fresh database from a lost one', () => {
   assert.strictEqual(tableRowCounts(db).total, 1);
   db.close();
 });
+
+// A full volume stops every write — "database or disk is full" takes the whole service down,
+// which is far worse than having one fewer backup. So retention is bounded by bytes as well
+// as by count, and a backup that would leave the disk near empty is not taken at all.
+test('retention is bounded by bytes, not just by count', async (t) => {
+  // Set here rather than relied on from the runner: a test that only passes with a particular
+  // environment variable set outside it is a test that fails for the next person.
+  const BUDGET = 120_000;
+  const prevBudget = process.env.DB_BACKUP_MAX_BYTES;
+  process.env.DB_BACKUP_MAX_BYTES = String(BUDGET);
+  t.after(() => { if (prevBudget === undefined) delete process.env.DB_BACKUP_MAX_BYTES; else process.env.DB_BACKUP_MAX_BYTES = prevBudget });
+  const dir = path.join(ROOT, 'budget');
+  const db = open(path.join(ROOT, 'budget-src.sqlite'));
+  db.exec('CREATE TABLE t (a)');
+  const ins = db.prepare('INSERT INTO t VALUES (?)');
+  for (let i = 0; i < 400; i++) ins.run('x'.repeat(200)); // a few pages, so size is measurable
+
+  let last;
+  for (let i = 0; i < 5; i++) {
+    last = await backupOnce({ db, dir, keep: 10 }); // count would allow all five
+    assert.ok(last.file, JSON.stringify(last));
+    await new Promise((r) => setTimeout(r, 5));
+  }
+  db.close();
+
+  const kept = listBackups(dir);
+  const total = kept.reduce((n, b) => n + b.size, 0);
+  assert.ok(kept.length >= 1, 'never deletes everything');
+  assert.ok(kept.length < 5, `the byte budget should have dropped some: kept ${kept.length}`);
+  assert.ok(total <= BUDGET, `kept ${total} bytes, budget ${BUDGET}`);
+  // The newest is the one worth keeping.
+  assert.strictEqual(kept[0].name, path.basename(last.file));
+})
+
+test('the newest backup is never deleted, even alone over budget', async () => {
+  const dir = path.join(ROOT, 'single');
+  const db = open(path.join(ROOT, 'single-src.sqlite'));
+  db.exec('CREATE TABLE t (a)');
+  const ins = db.prepare('INSERT INTO t VALUES (?)');
+  for (let i = 0; i < 400; i++) ins.run('y'.repeat(200));
+  const r = await backupOnce({ db, dir, keep: 3 });
+  db.close();
+  assert.ok(r.file)
+  assert.strictEqual(listBackups(dir).length, 1, 'a volume too small for one backup is a sizing problem, not a reason to keep none');
+})
