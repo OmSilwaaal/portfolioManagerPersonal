@@ -12,17 +12,23 @@
      ochre and moss all sit between 37 and 84 degrees — a neutral #0b0b0b behind
      warm glyphs made them read as grubby rather than drawn. Every step keeps at
      least 13:1 against --paper, so nothing lost contrast in the move. */
-  --ink-950:  #000000;  /* true black: chart wells, inputs, the deepest recess */
-  --ink-900:  #070707;  /* page background */
-  --ink-800:  #141414;  /* raised panel — 1.22 on the page, so it lifts without needing a border */
-  --ink-700:  #222222;  /* hover / selected row */
-  --ink-600:  #303030;  /* pressed / strong neutral fill */
+  /* Near-black with a slight blue cast, not pure #000. Taken from pump.fun's own shipped
+     tokens, and the reason is physical: on OLED, pure black next to fast-updating numerals
+     smears, which is precisely what a one-second candle feed is. A few points off zero also
+     leaves room for elevation to read.
+     Surfaces separate by fill value in small steps (~1.06 each) rather than by contrast — the
+     work of legibility is done by text emphasis, not by making panels lighter. */
+  --ink-950:  #07070a;  /* deepest recess: chart wells, inputs */
+  --ink-900:  #0b0b0e;  /* page background */
+  --ink-800:  #131316;  /* raised panel */
+  --ink-700:  #1b1b1f;  /* hover / selected row */
+  --ink-600:  #242429;  /* pressed / strong neutral fill */
 
   /* Terminal surfaces. The canvas is darker than the page so floating panels
      read as above it, and the texture is the ASCII backdrop's glyph colour:
      1.13 against the canvas, which is present as grain and nothing more. */
-  --terminal-canvas:  #000000;
-  --terminal-texture: #171717;
+  --terminal-canvas:  #0a0a10;  /* the pro-terminal ground: a shade under the page */
+  --terminal-texture: #1b1b22;
   --paper:    #ffffff;
   --paper-warm: #ece5d5;
   --paper-cool: #f6f3eb;
@@ -66,6 +72,15 @@
      4.3, and the red missed AA for body text. These read 7.4 and 5.0. */
   --positive: #4ade80;
   --negative: #f87171;
+  /* Three reds, deliberately not collapsed into one. Price-down, danger and hot/trending mean
+     different things, and a trader who has learnt that red-means-down should not have to
+     re-read a label to find out this red means something else. */
+  --danger:   #f34c68;
+  --hot:      #ff3d6e;
+  /* Channel triplets so a row wash can be derived at low alpha — rgb(var(--positive-rgb)/0.12) —
+     instead of hand-mixing a second hex that drifts from its parent. */
+  --positive-rgb: 74 222 128;
+  --negative-rgb: 248 113 113;
 
   /* Buy/sell action fills. Saturated enough to find without reading, with the
      label in ink rather than paper — ink on these clears 7.8 and 4.8. */
